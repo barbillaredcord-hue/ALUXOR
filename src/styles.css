@@ -3184,16 +3184,27 @@ textarea {
 .field-help {
   border-left: 3px solid rgba(34, 116, 95, 0.28);
   color: #526159;
-  display: grid;
-  gap: 4px;
   font-size: 0.82rem;
   line-height: 1.35;
   margin-top: 7px;
   padding-left: 10px;
 }
 
+.field-help summary {
+  color: #173d34;
+  cursor: pointer;
+  font-weight: 900;
+  list-style-position: inside;
+}
+
+.field-help[open] {
+  display: grid;
+  gap: 4px;
+}
+
 .field-help-item {
   display: block;
+  margin-top: 4px;
 }
 
 .field-help-title {
