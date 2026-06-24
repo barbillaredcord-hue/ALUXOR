@@ -3,8 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta http-equiv="refresh" content="1; url=https://anunciapro.vercel.app/?v=20260539" />
     <title>ALUXOR Movil</title>
+    <script>
+      window.addEventListener("DOMContentLoaded", () => {
+        const targetUrl = "https://anunciapro.vercel.app/?v=20260539";
+        const redirectLink = document.querySelector("[data-redirect-link]");
+
+        if (redirectLink) {
+          redirectLink.href = targetUrl;
+        }
+
+        window.setTimeout(() => {
+          window.location.href = targetUrl;
+        }, 1200);
+      });
+    </script>
     <style>
       body {
         margin: 0;
@@ -62,16 +75,16 @@
   </head>
   <body>
     <main>
-      <h1>ALUXOR en movil</h1>
-      <p>Ahora ALUXOR esta publicado en internet. Puedes abrirlo desde cualquier lugar con datos celulares o Wi-Fi.</p>
-      <p>Desde el celular, abre esta direccion:</p>
+      <h1>ALUXOR en móvil</h1>
+      <p>Ahora ALUXOR está publicado en internet. Puedes abrirlo desde cualquier lugar con datos celulares o Wi-Fi.</p>
+      <p>Desde el celular, abre esta dirección:</p>
       <code>https://anunciapro.vercel.app/</code>
-      <a href="https://anunciapro.vercel.app/?v=20260539">Abrir ALUXOR actualizado</a>
+      <a data-redirect-link href="https://anunciapro.vercel.app/?v=20260539">Abrir ALUXOR actualizado</a>
       <ol>
         <li>En iPhone: abre Safari, toca Compartir y elige Agregar a pantalla de inicio.</li>
-        <li>En Android: abre Chrome, toca el menu y elige Instalar app o Agregar a pantalla principal.</li>
+        <li>En Android: abre Chrome, toca el menú y elige Instalar app o Agregar a pantalla principal.</li>
       </ol>
-      <p>Si quieres instalarla, abre el enlace desde Safari o Chrome y agregala a pantalla de inicio.</p>
+      <p>Si quieres instalarla, abre el enlace desde Safari o Chrome y agrégala a pantalla de inicio.</p>
     </main>
   </body>
 </html>

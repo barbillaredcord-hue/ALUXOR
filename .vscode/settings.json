@@ -1,15 +1,44 @@
 {
-  "editor.formatOnSave": true,
-  "editor.codeActionsOnSave": {
-    "source.fixAll.eslint": "explicit"
-  },
+  "cSpell.enabled": true,
   "cSpell.language": "en,es",
-  "todo-tree.general.tags": ["TODO", "FIXME", "BUG", "HACK", "ALUXOR"],
   "todo-tree.ripgrep": "/opt/homebrew/bin/rg",
-  "[json]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
-  },
-  "[jsonc]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
-  }
+  "cSpell.words": [
+    "ALUXOR",
+    "AnunciaPro",
+    "topbar",
+    "vercel",
+    "anunciapro",
+    "nohup",
+    "carpinteria",
+    "vidrieria",
+    "cotizacion",
+    "Cotizacion",
+    "Telefono",
+    "whatsapp",
+    "promocion",
+    "jaladera",
+    "jaladeras",
+    "triplay",
+    "clóset",
+    "Clóset",
+    "buró",
+    "Buró",
+    "tornillería",
+    "Silicón",
+    "categoria",
+    "descripcion",
+    "bano",
+    "buro",
+    "economico",
+    "pzas",
+    "Vidrieria",
+    "Carpinteria",
+    "zoclo",
+    "metalness"
+  ],
+  "python.testing.pytestArgs": [
+    "launcher"
+  ],
+  "python.testing.unittestEnabled": false,
+  "python.testing.pytestEnabled": true
 }

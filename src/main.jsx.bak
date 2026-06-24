@@ -12,7 +12,6 @@ import {
   ClipboardList,
   Copy,
   DoorOpen,
-  Download,
   Eraser,
   FileText,
   Hammer,
@@ -26,7 +25,6 @@ import {
   Sparkles,
   Store,
   TableProperties,
-  Upload,
 } from 'lucide-react';
 import './styles.css';
 import { registerServiceWorker } from './pwa';
@@ -86,11 +84,6 @@ const defaults = {
   anticipo: 50,
   vigencia: 7,
   condiciones: 'Anticipo para iniciar. Saldo contra entrega o instalación. Precio sujeto a verificación de medidas finales.',
-  folioManual: '',
-  estadoCotizacion: 'Pendiente',
-  formaPago: 'Anticipo y saldo contra entrega',
-  notasCliente: '',
-  notasInternas: '',
   materialItems: [
     {
       id: 'mat-principal',
@@ -1214,202 +1207,6 @@ function countScore(data) {
   return fields.reduce((score, field) => score + (clean(data[field]).length > 0 ? 1 : 0), 0);
 }
 
-const fieldGuides = {
-  clienteNombre: {
-    help: 'Qué dato va: nombre del cliente o referencia del proyecto.',
-    why: 'Para qué sirve: permite identificar la cotización en historial, PDF y seguimiento.',
-    how: 'Cómo llenarlo: escribe nombre completo, negocio o referencia como Casa San Pedro.',
-  },
-  clienteTelefono: {
-    help: 'Qué dato va: teléfono del cliente.',
-    why: 'Para qué sirve: facilita seguimiento, envío por WhatsApp y búsqueda en historial.',
-    how: 'Cómo llenarlo: agrega 10 dígitos o número con lada.',
-  },
-  whatsapp: {
-    help: 'Qué dato va: WhatsApp de contacto para el anuncio.',
-    why: 'Para qué sirve: aparece en textos comerciales y mensajes para cliente.',
-    how: 'Cómo llenarlo: usa el número donde quieres recibir mensajes.',
-  },
-  producto: {
-    help: 'Qué dato va: nombre del producto o trabajo.',
-    why: 'Para qué sirve: aparece en anuncio, cotización, historial y PDF.',
-    how: 'Cómo llenarlo: ejemplo Clóset a medida, Cancel de baño, Cocina integral.',
-  },
-  tipoTrabajo: {
-    help: 'Qué dato va: categoría específica del trabajo.',
-    why: 'Para qué sirve: ajusta textos, clasificación y plantillas.',
-    how: 'Cómo llenarlo: elige el tipo más cercano al proyecto real.',
-  },
-  materialCotizacion: {
-    help: 'Qué dato va: material principal que se va a cobrar.',
-    why: 'Para qué sirve: identifica el material base del cálculo.',
-    how: 'Cómo llenarlo: ejemplo Melamina, MDF, Aluminio y vidrio, Vidrio templado.',
-  },
-  material: {
-    help: 'Qué dato va: descripción comercial del material.',
-    why: 'Para qué sirve: se usa para explicar al cliente qué recibirá.',
-    how: 'Cómo llenarlo: escribe material, color, acabado o especificación importante.',
-  },
-  medidas: {
-    help: 'Qué dato va: resumen de medidas del proyecto.',
-    why: 'Para qué sirve: aparece en anuncio, PDF y mensajes.',
-    how: 'Cómo llenarlo: se puede generar con ancho, alto, fondo y piezas.',
-  },
-  ancho: {
-    help: 'Qué dato va: ancho en centímetros.',
-    why: 'Para qué sirve: calcula área, material, lineales y precio.',
-    how: 'Cómo llenarlo: mide de izquierda a derecha el espacio útil.',
-  },
-  alto: {
-    help: 'Qué dato va: alto en centímetros.',
-    why: 'Para qué sirve: calcula área, material y proporción del plano.',
-    how: 'Cómo llenarlo: mide desde piso/base hasta la altura final.',
-  },
-  fondo: {
-    help: 'Qué dato va: profundidad en centímetros.',
-    why: 'Para qué sirve: ayuda a instalación, plano 3D, fabricación y revisión de espacio.',
-    how: 'Cómo llenarlo: mide desde frente hacia atrás.',
-  },
-  grosorMaterial: {
-    help: 'Qué dato va: grosor del material en milímetros.',
-    why: 'Para qué sirve: ayuda a fabricación, plano y selección de material.',
-    how: 'Cómo llenarlo: ejemplo 16 mm para melamina, 6 mm para vidrio.',
-  },
-  cantidad: {
-    help: 'Qué dato va: número de piezas o módulos.',
-    why: 'Para qué sirve: multiplica áreas, materiales y cantidades.',
-    how: 'Cómo llenarlo: usa 1 si es una sola pieza o módulo principal.',
-  },
-  precioM2: {
-    help: 'Qué dato va: precio de venta por metro cuadrado.',
-    why: 'Para qué sirve: determina cuánto se cobra al cliente por material.',
-    how: 'Cómo llenarlo: usa precio de venta, no costo interno.',
-  },
-  costoMaterialM2: {
-    help: 'Qué dato va: costo interno por metro cuadrado.',
-    why: 'Para qué sirve: calcula utilidad y total interno ALUXOR.',
-    how: 'Cómo llenarlo: usa el costo real del proveedor.',
-  },
-  merma: {
-    help: 'Qué dato va: porcentaje extra por desperdicio o cortes.',
-    why: 'Para qué sirve: evita perder dinero por sobrantes, cortes o errores normales.',
-    how: 'Cómo llenarlo: usa 5 a 10% normalmente; ajusta según complejidad.',
-  },
-  margenMaterial: {
-    help: 'Qué dato va: margen deseado sobre material.',
-    why: 'Para qué sirve: ayuda a sugerir precio rentable.',
-    how: 'Cómo llenarlo: ejemplo 30 a 40 según tipo de trabajo.',
-  },
-  herrajes: {
-    help: 'Qué dato va: accesorios principales del proyecto.',
-    why: 'Para qué sirve: aparece en cotización y análisis de proveedor.',
-    how: 'Cómo llenarlo: ejemplo bisagras, correderas, jaladeras, carretillas.',
-  },
-  costoHerrajes: {
-    help: 'Qué dato va: costo interno de herrajes.',
-    why: 'Para qué sirve: calcula total interno y utilidad.',
-    how: 'Cómo llenarlo: suma lo que realmente cuesta comprarlos.',
-  },
-  precioHerrajes: {
-    help: 'Qué dato va: precio de venta de herrajes al cliente.',
-    why: 'Para qué sirve: calcula total cliente.',
-    how: 'Cómo llenarlo: incluye margen y manejo.',
-  },
-  manoObra: {
-    help: 'Qué dato va: cobro por fabricación, instalación o servicio.',
-    why: 'Para qué sirve: impacta el total cliente y utilidad del negocio.',
-    how: 'Cómo llenarlo: incluye tiempo, dificultad, traslado y ajuste.',
-  },
-  extras: {
-    help: 'Qué dato va: cargos adicionales.',
-    why: 'Para qué sirve: cubre flete, selladores, tornillería, estacionamiento u otros.',
-    how: 'Cómo llenarlo: usa 0 si no aplica.',
-  },
-  descuento: {
-    help: 'Qué dato va: porcentaje de descuento al cliente.',
-    why: 'Para qué sirve: reduce el total final.',
-    how: 'Cómo llenarlo: usa 0 si no hay descuento.',
-  },
-  anticipo: {
-    help: 'Qué dato va: porcentaje de anticipo.',
-    why: 'Para qué sirve: calcula cuánto pedir para iniciar.',
-    how: 'Cómo llenarlo: comúnmente 50%.',
-  },
-  vigencia: {
-    help: 'Qué dato va: días que dura válida la cotización.',
-    why: 'Para qué sirve: protege contra cambios de precio.',
-    how: 'Cómo llenarlo: usa 7, 15 o 30 días.',
-  },
-  condiciones: {
-    help: 'Qué dato va: términos comerciales.',
-    why: 'Para qué sirve: aclara anticipo, saldo, instalación y cambios.',
-    how: 'Cómo llenarlo: especifica cuándo se paga y qué puede cambiar.',
-  },
-  folioManual: {
-    help: 'Qué dato va: folio personalizado opcional.',
-    why: 'Para qué sirve: permite usar un número propio si no quieres folio automático.',
-    how: 'Cómo llenarlo: déjalo vacío para generar folio automático.',
-  },
-  estadoCotizacion: {
-    help: 'Qué dato va: etapa actual de la cotización.',
-    why: 'Para qué sirve: facilita seguimiento en historial.',
-    how: 'Cómo llenarlo: Pendiente, Enviada, Aceptada, En fabricación, Instalación, Terminada o Cancelada.',
-  },
-  formaPago: {
-    help: 'Qué dato va: forma o condiciones de pago.',
-    why: 'Para qué sirve: aparece en PDF y evita malentendidos.',
-    how: 'Cómo llenarlo: ejemplo 50% anticipo y saldo contra entrega.',
-  },
-  notasCliente: {
-    help: 'Qué dato va: nota visible para el cliente.',
-    why: 'Para qué sirve: aparece en PDF cliente.',
-    how: 'Cómo llenarlo: agrega aclaraciones comerciales o recomendaciones.',
-  },
-  notasInternas: {
-    help: 'Qué dato va: nota privada para ALUXOR.',
-    why: 'Para qué sirve: ayuda al taller, proveedor o instalador.',
-    how: 'Cómo llenarlo: no aparece en PDF cliente; solo hoja interna.',
-  },
-};
-
-function guideFor(field) {
-  return fieldGuides[field] || {};
-}
-
-function quoteDataHealth(data, quote) {
-  const required = [
-    { label: 'Cliente', value: data.clienteNombre },
-    { label: 'Teléfono', value: data.clienteTelefono || data.whatsapp },
-    { label: 'Producto', value: data.producto },
-    { label: 'Tipo de trabajo', value: data.tipoTrabajo },
-    { label: 'Material', value: data.materialCotizacion || data.material },
-    { label: 'Medidas', value: data.medidas },
-    { label: 'Ancho', value: data.ancho },
-    { label: 'Alto', value: data.alto },
-    { label: 'Precio por m²', value: data.precioM2 },
-    { label: 'Mano de obra', value: data.manoObra },
-  ];
-
-  const present = required.filter((item) => item.value !== '' && item.value !== null && item.value !== undefined && Number(item.value) !== 0);
-  const missing = required.filter((item) => !present.includes(item));
-  const warnings = [];
-
-  if (quote.total <= 0) warnings.push('El total cliente está en cero.');
-  if (quote.profit < 0) warnings.push('La utilidad estimada es negativa.');
-  if (!data.clienteNombre) warnings.push('Falta nombre del cliente.');
-  if (!data.clienteTelefono && !data.whatsapp) warnings.push('Falta teléfono o WhatsApp.');
-  if (quote.areaTotal <= 0) warnings.push('El área total está en cero.');
-  if (quote.material <= 0) warnings.push('El material no está generando precio.');
-  if (quote.manoObra <= 0) warnings.push('La mano de obra está en cero.');
-
-  return {
-    present,
-    missing,
-    warnings,
-    score: Math.round((present.length / required.length) * 100),
-  };
-}
-
 function generateMaterials(data, quote) {
   const materialRows = (quote.materialRows || []).map((item) => ({
     name: item.nombre,
@@ -1467,104 +1264,6 @@ function workRoleCards(data, quote) {
         `Fondo/profundidad principal: ${quote.fondo} cm`,
         `Grosor principal: ${quote.grosorMaterial} mm`,
         `Condiciones: ${clean(data.condiciones, 'Por confirmar')}`,
-      ],
-    },
-  ];
-}
-
-function marginAmountFromSaleAndCost(saleTotal, costTotal) {
-  return numberValue(saleTotal) - numberValue(costTotal);
-}
-
-function marginPercentFromSaleAndCost(saleTotal, costTotal) {
-  const sale = numberValue(saleTotal);
-  const cost = numberValue(costTotal);
-  if (sale <= 0) return 0;
-  return ((sale - cost) / sale) * 100;
-}
-
-function operationLine(label, operation, result) {
-  return {
-    label,
-    operation,
-    result,
-  };
-}
-
-function quoteProfessionalAnalysis(data, quote) {
-  const installReview = data.giro === 'Vidriería'
-    ? 'Revisar plomo, nivel, claros, sellado, sentido de apertura y holguras.'
-    : 'Revisar muros, nivel, escuadra, anclajes, zoclo y ajustes.';
-  const clientOps = [
-    operationLine('Subtotal', `${money(quote.material)} + ${money(quote.hardwareSale)} + ${money(quote.manoObra)} + ${money(quote.extras)}`, money(quote.subtotal)),
-    operationLine('Total', `${money(quote.subtotal)} - ${money(quote.discountAmount)}`, money(quote.total)),
-    operationLine('Anticipo', `${money(quote.total)} x ${decimal(quote.anticipo, 1)}%`, money(quote.deposit)),
-    operationLine('Saldo', `${money(quote.total)} - ${money(quote.deposit)}`, money(quote.rest)),
-  ];
-  const internalOps = [
-    operationLine('Costo material interno', `${money(quote.materialBaseCost)} + ${money(quote.wasteCost)}`, money(quote.internalMaterialCost)),
-    operationLine('Total interno', `${money(quote.internalMaterialCost)} + ${money(quote.hardwareCost)} + ${money(quote.extras)}`, money(quote.internalTotal)),
-    operationLine('Utilidad', `${money(quote.total)} - ${money(quote.internalTotal)}`, money(quote.profit)),
-    operationLine('Utilidad %', `${money(quote.profit)} / ${money(quote.total)} x 100`, `${decimal(quote.profitPercent, 1)}%`),
-  ];
-
-  return [
-    {
-      role: 'Cotizador',
-      title: 'Precio para cliente',
-      total: money(quote.total),
-      why: 'Este total sale de materiales, herrajes, mano de obra, extras y descuento.',
-      how: [
-        `Materiales al cliente: ${money(quote.material)}`,
-        `Herrajes/accesorios al cliente: ${money(quote.hardwareSale)}`,
-        `Mano de obra/instalación: ${money(quote.manoObra)}`,
-        `Extras: ${money(quote.extras)}`,
-        `Subtotal: ${money(quote.subtotal)}`,
-        `Descuento: -${money(quote.discountAmount)}`,
-        `Total cliente: ${money(quote.total)}`,
-        `Anticipo: ${money(quote.deposit)}`,
-        `Saldo/resto: ${money(quote.rest)}`,
-        ...clientOps.map((item) => `${item.label}: ${item.operation} = ${item.result}`),
-        `Vigencia: ${data.vigencia} días`,
-        `Condiciones: ${clean(data.condiciones, 'Por confirmar')}`,
-      ],
-    },
-    {
-      role: 'Instalador',
-      title: 'Trabajo de instalación',
-      total: money(quote.manoObra),
-      why: 'La instalación cubre preparación, armado, nivelación, ajustes, fijación y entrega del trabajo.',
-      how: [
-        `Medidas: ${formatDimensions(data)}`,
-        `Área total: ${decimal(quote.areaTotal)} m²`,
-        `Metro lineal aproximado: ${decimal(quote.linearTotal)} m`,
-        `Cantidad de piezas/medidas: ${quote.measureRows.length}`,
-        `Fondo principal: ${quote.fondo} cm`,
-        `Grosor principal: ${quote.grosorMaterial} mm`,
-        installReview,
-        `Mano de obra considerada: ${money(quote.manoObra)}`,
-        'Operación área: Ancho x Alto x Cantidad = Área por partidas',
-        'Operación lineal: Perímetro x Cantidad = Metro lineal aproximado',
-      ],
-    },
-    {
-      role: 'Proveedor / Interno',
-      title: 'Costo interno estimado',
-      total: money(quote.internalTotal),
-      why: 'Este monto representa lo que ALUXOR debe considerar para materiales, merma, herrajes y extras antes de utilidad.',
-      how: [
-        `Costo material base: ${money(quote.materialBaseCost)}`,
-        `Merma: ${money(quote.wasteCost)}`,
-        `Costo interno material: ${money(quote.internalMaterialCost)}`,
-        `Costo de herrajes: ${money(quote.hardwareCost)}`,
-        `Extras: ${money(quote.extras)}`,
-        `Total interno: ${money(quote.internalTotal)}`,
-        `Total cliente: ${money(quote.total)}`,
-        `Utilidad estimada: ${money(quote.profit)} (${decimal(quote.profitPercent, 1)}%)`,
-        `Margen material: ${decimal(quote.margenMaterial, 1)}%`,
-        `Precio sugerido por m²: ${money(quote.suggestedPriceM2)}`,
-        `Total margen estimado: ${money(quote.profit)}`,
-        ...internalOps.map((item) => `${item.label}: ${item.operation} = ${item.result}`),
       ],
     },
   ];
@@ -1727,10 +1426,6 @@ async function requestHistory(options = {}) {
 function quotePrintHtml(data, quote, materials, mode = 'client') {
   const isBusiness = mode === 'business';
   const today = new Date().toLocaleDateString('es-MX');
-  const folio = clean(data.folio || data.folioManual, 'Por asignar');
-  const formaPago = clean(data.formaPago, 'Anticipo y saldo contra entrega');
-  const notasCliente = clean(data.notasCliente);
-  const notasInternas = clean(data.notasInternas);
   const internalRows = materials.map((item) => `
     <tr><td>${item.name}</td><td>${item.detail}</td><td>${money(item.cost)}</td></tr>
   `).join('');
@@ -1775,12 +1470,12 @@ function quotePrintHtml(data, quote, materials, mode = 'client') {
     <header><div><div class="brand">${BRAND_NAME}</div><h1>${isBusiness ? 'Hoja interna del negocio' : 'Cotización'}</h1><p>${today}</p></div><div><div>Total</div><div class="total">${money(quote.total)}</div></div></header>
     ${isBusiness ? '<div class="internal"><strong>Uso interno ALUXOR.</strong> Esta hoja incluye costos, utilidad y datos de operación. No entregar al cliente.</div>' : ''}
     <section class="grid"><div class="box"><strong>Cliente</strong><p>${clean(data.clienteNombre, 'Cliente')}${data.clienteTelefono ? `<br>${data.clienteTelefono}` : ''}</p></div><div class="box"><strong>Proyecto</strong><p>${data.producto}<br>${data.tipoTrabajo}<br>${data.medidas}</p></div></section>
-    <section class="grid"><div class="box"><strong>Folio</strong><p>${folio}</p></div><div class="box"><strong>Forma de pago</strong><p>${formaPago}</p></div></section>
     <h2>Descripción</h2><p>Material: ${data.material}. Acabado: ${data.acabado}. Incluye: ${data.incluye}.</p>
     <h2>Medidas</h2><table><thead><tr><th>Partida</th><th>Medida</th><th>Cantidad</th><th>Área total</th><th>Metro lineal</th></tr></thead><tbody>${measureRows}</tbody></table>
     <h2>${isBusiness ? 'Lista interna de materiales y costos' : 'Conceptos de la cotización'}</h2><table><thead><tr><th>Concepto</th><th>Detalle</th><th>${isBusiness ? 'Importe interno' : 'Importe'}</th></tr></thead><tbody>${isBusiness ? internalRows : clientRows}</tbody></table>
     <h2>Resumen</h2><table><tbody>
       <tr><td>Material al cliente</td><td>${money(quote.material)}</td></tr>
+      <tr><td>Margen material usado</td><td>${quote.margenMaterial}%</td></tr>
       <tr><td>Herrajes</td><td>${money(quote.hardwareSale)}</td></tr>
       <tr><td>Mano de obra</td><td>${money(quote.manoObra)}</td></tr>
       <tr><td>Extras</td><td>${money(quote.extras)}</td></tr>
@@ -1788,7 +1483,6 @@ function quotePrintHtml(data, quote, materials, mode = 'client') {
       <tr><th>Total</th><th>${money(quote.total)}</th></tr>
       <tr><td>Anticipo sugerido</td><td>${money(quote.deposit)}</td></tr>
       <tr><td>Resto al entregar</td><td>${money(quote.rest)}</td></tr>
-      ${isBusiness ? `<tr><td>Margen material usado</td><td>${quote.margenMaterial}%</td></tr>` : ''}
     </tbody></table>
     ${isBusiness ? `<h2>Resumen interno ALUXOR</h2><table><tbody>
       <tr><td>Costo material base</td><td>${money(quote.materialBaseCost)}</td></tr>
@@ -1798,49 +1492,16 @@ function quotePrintHtml(data, quote, materials, mode = 'client') {
       <tr><td>Costo total interno sin mano de obra</td><td>${money(quote.internalTotal)}</td></tr>
       <tr><td>Utilidad estimada</td><td>${money(quote.profit)} (${quote.profitPercent.toFixed(1)}%)</td></tr>
     </tbody></table><h2>Desglose del cálculo</h2><table><thead><tr><th>Área</th><th>Concepto</th><th>Por qué sale ese resultado</th><th>Resultado</th></tr></thead><tbody>${breakdownRows}</tbody></table>` : ''}
-    ${isBusiness ? `<h2>Desglose interno ALUXOR</h2><p>Esta información es interna de ALUXOR y no debe compartirse con el cliente.</p><table><tbody>
-      <tr><td>Total cliente</td><td>${money(quote.total)}</td></tr>
-      <tr><td>Subtotal cliente</td><td>${money(quote.subtotal)}</td></tr>
-      <tr><td>Descuento</td><td>-${money(quote.discountAmount)}</td></tr>
-      <tr><td>Anticipo</td><td>${money(quote.deposit)}</td></tr>
-      <tr><td>Saldo</td><td>${money(quote.rest)}</td></tr>
-      <tr><td>Costo material base</td><td>${money(quote.materialBaseCost)}</td></tr>
-      <tr><td>Merma</td><td>${money(quote.wasteCost)}</td></tr>
-      <tr><td>Costo material interno</td><td>${money(quote.internalMaterialCost)}</td></tr>
-      <tr><td>Costo herrajes</td><td>${money(quote.hardwareCost)}</td></tr>
-      <tr><td>Extras</td><td>${money(quote.extras)}</td></tr>
-      <tr><td>Total interno</td><td>${money(quote.internalTotal)}</td></tr>
-      <tr><td>Mano de obra como ingreso/utilidad</td><td>${money(quote.laborProfit)}</td></tr>
-      <tr><td>Utilidad estimada</td><td>${money(quote.profit)} (${quote.profitPercent.toFixed(1)}%)</td></tr>
-      <tr><td>Porcentaje utilidad</td><td>${quote.profitPercent.toFixed(1)}%</td></tr>
-      <tr><td>Margen material</td><td>${quote.margenMaterial}%</td></tr>
-      <tr><td>Precio sugerido por m²</td><td>${money(quote.suggestedPriceM2)}</td></tr>
-      <tr><td>Margen materiales</td><td>${money(marginAmountFromSaleAndCost(quote.material, quote.internalMaterialCost))}</td></tr>
-      <tr><td>Margen accesorios</td><td>${money(marginAmountFromSaleAndCost(quote.hardwareSale, quote.hardwareCost))}</td></tr>
-      <tr><td>Margen total estimado</td><td>${money(quote.profit)}</td></tr>
-      ${notasInternas ? `<tr><td>Notas internas</td><td>${notasInternas}</td></tr>` : ''}
-      <tr><td>Por qué se cobra así</td><td>Se calcula con materiales, herrajes, mano de obra, extras, descuento, merma y costo interno ya estimado por ALUXOR.</td></tr>
-    </tbody></table>` : ''}
     <h2>Condiciones</h2><p>Vigencia: ${data.vigencia} días. ${data.condiciones}</p>
-    ${notasCliente ? `<h2>Notas para cliente</h2><p>${notasCliente}</p>` : ''}
-    ${isBusiness && notasInternas ? `<h2>Notas internas</h2><p>${notasInternas}</p>` : ''}
     <button onclick="window.print()">Imprimir o guardar PDF</button>
   </body></html>`;
 }
 
-function Field({ id, label, children, help, why, how }) {
+function Field({ id, label, children }) {
   return (
     <label htmlFor={id}>
       {label}
       {children}
-      {(help || why || how) && (
-        <details className="field-help">
-          <summary>Guía de uso</summary>
-          {help && <span className="field-help-item"><span className="field-help-title">Qué dato va: </span>{help.replace('Qué dato va: ', '')}</span>}
-          {why && <span className="field-help-item"><span className="field-help-title">Para qué sirve: </span>{why.replace('Para qué sirve: ', '')}</span>}
-          {how && <span className="field-help-item"><span className="field-help-title">Cómo llenarlo: </span>{how.replace('Cómo llenarlo: ', '')}</span>}
-        </details>
-      )}
     </label>
   );
 }
@@ -2015,11 +1676,9 @@ function App() {
   const [appLogo, setAppLogo] = useState(loadAppLogo);
 
   const quote = useMemo(() => calculateQuote(form), [form]);
-  const dataHealth = useMemo(() => quoteDataHealth(form, quote), [form, quote]);
   const materials = useMemo(() => generateMaterials(form, quote), [form, quote]);
   const outputs = useMemo(() => generateOutputs(form, quote), [form, quote]);
   const roleCards = useMemo(() => workRoleCards(form, quote), [form, quote]);
-  const professionalAnalysis = useMemo(() => quoteProfessionalAnalysis(form, quote), [form, quote]);
   const score = countScore(form);
   const mainOutput = outputs[0];
   const quoteOutput = outputs[1];
@@ -2500,17 +2159,6 @@ function App() {
     setActiveSection('cotizador');
   }
 
-  function generateQuoteFolio(historyItems = []) {
-    const today = new Date();
-    const y = today.getFullYear();
-    const m = String(today.getMonth() + 1).padStart(2, '0');
-    const d = String(today.getDate()).padStart(2, '0');
-    const prefix = `ALX-${y}${m}${d}`;
-    const count = normalizeHistory(historyItems).filter((item) => String(item.folio || '').startsWith(prefix)).length + 1;
-
-    return `${prefix}-${String(count).padStart(3, '0')}`;
-  }
-
   function saveToHistory() {
     const now = Date.now();
     const item = {
@@ -2518,11 +2166,6 @@ function App() {
       createdAt: now,
       updatedAt: now,
       status: 'Pendiente',
-      folio: clean(form.folioManual, generateQuoteFolio(history)),
-      estadoCotizacion: clean(form.estadoCotizacion, 'Pendiente'),
-      formaPago: clean(form.formaPago, 'Anticipo y saldo contra entrega'),
-      notasCliente: clean(form.notasCliente),
-      notasInternas: clean(form.notasInternas),
       clienteNombre: clean(form.clienteNombre, 'Cliente'),
       clienteTelefono: clean(form.clienteTelefono),
       producto: clean(form.producto, 'Proyecto a medida'),
@@ -2551,51 +2194,6 @@ function App() {
     const nextHistory = normalizeHistory(history.filter((item) => item.id !== id));
     setHistory(nextHistory);
     saveHistoryRemote(nextHistory);
-  }
-
-  function exportHistoryBackup() {
-    const exportedAt = new Date().toISOString();
-    const backup = {
-      app: BRAND_NAME,
-      type: 'history-backup',
-      version: APP_VERSION,
-      exportedAt,
-      history,
-    };
-    const url = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' }));
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `aluxor-historial-${exportedAt.slice(0, 10)}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-    setSyncStatus('Respaldo de historial exportado');
-  }
-
-  function importHistoryBackup(event) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const parsed = JSON.parse(reader.result);
-        const importedHistory = Array.isArray(parsed) ? parsed : parsed?.history;
-        if (!Array.isArray(importedHistory)) throw new Error('Formato de respaldo inválido');
-        const nextHistory = mergeHistoryItems(importedHistory, history);
-        setHistory(nextHistory);
-        saveHistoryRemote(nextHistory);
-        setSyncStatus('Respaldo de historial importado');
-      } catch (error) {
-        setSyncStatus(`No se pudo importar respaldo: ${error.message}`);
-      } finally {
-        event.target.value = '';
-      }
-    };
-    reader.onerror = () => {
-      setSyncStatus('No se pudo leer el respaldo');
-      event.target.value = '';
-    };
-    reader.readAsText(file);
   }
 
   function updateHistoryStatus(id, status) {
@@ -2766,16 +2364,16 @@ function App() {
                     <option>Vidriería</option>
                   </select>
                 </Field>
-                <Field id="tipoTrabajo" label="Tipo de trabajo" {...guideFor('tipoTrabajo')}>
+                <Field id="tipoTrabajo" label="Tipo de trabajo">
                   <select id="tipoTrabajo" value={form.tipoTrabajo} onChange={(event) => update('tipoTrabajo', event.target.value)}>
                     {currentTypeOptions.map((item) => <option key={item}>{item}</option>)}
                   </select>
                 </Field>
-                <Field id="producto" label="Producto" {...guideFor('producto')}>{input('producto')}</Field>
-                <Field id="material" label="Material" {...guideFor('material')}>{input('material')}</Field>
+                <Field id="producto" label="Producto">{input('producto')}</Field>
+                <Field id="material" label="Material">{input('material')}</Field>
                 <Field id="acabado" label="Acabado">{input('acabado')}</Field>
                 <Field id="ciudad" label="Ciudad">{input('ciudad')}</Field>
-                <Field id="whatsapp" label="WhatsApp" {...guideFor('whatsapp')}>{input('whatsapp')}</Field>
+                <Field id="whatsapp" label="WhatsApp">{input('whatsapp')}</Field>
                 <Field id="beneficio" label="Beneficio">{textareaInput('beneficio')}</Field>
                 <Field id="incluye" label="Incluye">{textareaInput('incluye')}</Field>
                 <Field id="promocion" label="Promoción">{input('promocion')}</Field>
@@ -2801,20 +2399,6 @@ function App() {
         {activeSection === 'cotizador' && (
           <section className="panel-grid two-cols">
             <article className="panel">
-              <div className="live-quote-summary" aria-label="Resumen vivo de la cotización" aria-live="polite">
-                <h3>Resumen vivo</h3>
-                <div className="live-summary-grid">
-                  <div className="live-summary-item live-summary-total"><span>Total cliente</span><strong>{money(quote.total)}</strong></div>
-                  <div className="live-summary-item"><span>Total interno</span><strong>{money(quote.internalTotal)}</strong></div>
-                  <div className="live-summary-item"><span>Utilidad</span><strong>{money(quote.profit)}</strong></div>
-                  <div className="live-summary-item"><span>Anticipo</span><strong>{money(quote.deposit)}</strong></div>
-                  <div className="live-summary-item"><span>Saldo</span><strong>{money(quote.rest)}</strong></div>
-                  <div className="live-summary-item"><span>Estado de datos</span><strong>{dataHealth.score}%</strong></div>
-                </div>
-                {dataHealth.warnings.length > 0 && (
-                  <p className="live-summary-warning" role="status" aria-live="polite">{dataHealth.warnings[0]}</p>
-                )}
-              </div>
               <h2>Cotizador profesional</h2>
               <div className="actions compact">
                 {Object.keys(quoteProfiles).map((key) => (
@@ -2825,246 +2409,19 @@ function App() {
               </div>
 
               <div className="form-grid">
-                <Field id="clienteNombre" label="Cliente" {...guideFor('clienteNombre')}>{input('clienteNombre')}</Field>
-                <Field id="clienteTelefono" label="Teléfono" {...guideFor('clienteTelefono')}>{input('clienteTelefono')}</Field>
-                <Field id="materialCotizacion" label="Material cotización" {...guideFor('materialCotizacion')}>{input('materialCotizacion')}</Field>
-                <Field id="precioM2" label="Precio m²" {...guideFor('precioM2')}>{input('precioM2', 'number')}</Field>
-                <Field id="costoMaterialM2" label="Costo m²" {...guideFor('costoMaterialM2')}>{input('costoMaterialM2', 'number')}</Field>
-                <Field id="merma" label="Merma %" {...guideFor('merma')}>{input('merma', 'number')}</Field>
-                <Field id="margenMaterial" label="Margen %" {...guideFor('margenMaterial')}>{input('margenMaterial', 'number')}</Field>
-                <Field id="manoObra" label="Mano de obra" {...guideFor('manoObra')}>{input('manoObra', 'number')}</Field>
-                <Field id="extras" label="Extras" {...guideFor('extras')}>{input('extras', 'number')}</Field>
-                <Field id="descuento" label="Descuento %" {...guideFor('descuento')}>{input('descuento', 'number')}</Field>
-                <Field id="anticipo" label="Anticipo %" {...guideFor('anticipo')}>{input('anticipo', 'number')}</Field>
-                <Field id="vigencia" label="Vigencia días" {...guideFor('vigencia')}>{input('vigencia', 'number')}</Field>
-                <Field id="condiciones" label="Condiciones" {...guideFor('condiciones')}>{textareaInput('condiciones')}</Field>
-              </div>
-
-              <div className="advanced-quote-panel">
-                <h3>Cotización avanzada</h3>
-                <div className="advanced-grid">
-                  <Field id="folioManual" label="Folio manual opcional" {...guideFor('folioManual')}>{input('folioManual')}</Field>
-                  <Field id="estadoCotizacion" label="Estado de cotización" {...guideFor('estadoCotizacion')}>
-                    <select id="estadoCotizacion" value={form.estadoCotizacion} onChange={(event) => update('estadoCotizacion', event.target.value)}>
-                      <option>Pendiente</option>
-                      <option>Enviada</option>
-                      <option>Aceptada</option>
-                      <option>En fabricación</option>
-                      <option>Instalación</option>
-                      <option>Terminada</option>
-                      <option>Cancelada</option>
-                    </select>
-                  </Field>
-                  <Field id="formaPago" label="Forma de pago" {...guideFor('formaPago')}>{input('formaPago')}</Field>
-                  <Field id="notasCliente" label="Notas para cliente" {...guideFor('notasCliente')}>{textareaInput('notasCliente')}</Field>
-                  <Field id="notasInternas" label="Notas internas" {...guideFor('notasInternas')}>{textareaInput('notasInternas')}</Field>
-                </div>
-                <p className="advanced-note">Estos datos no modifican el cálculo de la cotización.</p>
-              </div>
-
-              <div className="professional-analysis">
-                <div>
-                  <h3>Análisis profesional</h3>
-                  <p>Vista rápida para cotizar, instalar y comprar materiales.</p>
-                </div>
-                {professionalAnalysis.map((item) => (
-                  <article key={item.role} className="professional-card">
-                    <span>{item.role}</span>
-                    <h4>{item.title}</h4>
-                    <p className="professional-total">{item.total}</p>
-                    <p>{item.why}</p>
-                    <ul className="professional-how">
-                      {item.how.map((line) => <li key={line}>{line}</li>)}
-                    </ul>
-                  </article>
-                ))}
-                <div className="professional-breakdown">
-                  <h3>Desglose completo</h3>
-                  <div className="professional-breakdown-grid">
-                    <article className="professional-card">
-                      <h4>Total cliente</h4>
-                      <div className="professional-row"><span>Materiales</span><strong>{money(quote.material)}</strong></div>
-                      <div className="professional-row"><span>Herrajes/accesorios</span><strong>{money(quote.hardwareSale)}</strong></div>
-                      <div className="professional-row"><span>Mano de obra</span><strong>{money(quote.manoObra)}</strong></div>
-                      <div className="professional-row"><span>Extras</span><strong>{money(quote.extras)}</strong></div>
-                      <div className="professional-row"><span>Subtotal</span><strong>{money(quote.subtotal)}</strong></div>
-                      <div className="professional-row"><span>Descuento</span><strong>-{money(quote.discountAmount)}</strong></div>
-                      <div className="professional-row professional-row-total"><span>Total</span><strong>{money(quote.total)}</strong></div>
-                      <div className="professional-row"><span>Anticipo</span><strong>{money(quote.deposit)}</strong></div>
-                      <div className="professional-row"><span>Saldo</span><strong>{money(quote.rest)}</strong></div>
-                    </article>
-                    <article className="professional-card internal-only">
-                      <h4>Total interno ALUXOR</h4>
-                      <div className="professional-row"><span>Costo material base</span><strong>{money(quote.materialBaseCost)}</strong></div>
-                      <div className="professional-row"><span>Merma</span><strong>{money(quote.wasteCost)}</strong></div>
-                      <div className="professional-row"><span>Costo material interno</span><strong>{money(quote.internalMaterialCost)}</strong></div>
-                      <div className="professional-row"><span>Costo herrajes</span><strong>{money(quote.hardwareCost)}</strong></div>
-                      <div className="professional-row"><span>Extras</span><strong>{money(quote.extras)}</strong></div>
-                      <div className="professional-row professional-row-total"><span>Total interno</span><strong>{money(quote.internalTotal)}</strong></div>
-                      <div className="professional-row"><span>Utilidad estimada</span><strong>{money(quote.profit)}</strong></div>
-                      <div className="professional-row"><span>Margen/utilidad %</span><strong>{decimal(quote.profitPercent, 1)}%</strong></div>
-                    </article>
-                  </div>
-                </div>
-                <div className="calculation-detail-panel">
-                  <section className="calculation-section calculation-client">
-                    <h3>Medidas</h3>
-                    <div className="calculation-table calculation-table-grid calculation-grid-measures">
-                      <div className="calculation-table-header"><strong>Nombre</strong><span className="calculation-cell-help">Qué se mide</span></div>
-                      <div className="calculation-table-header"><strong>Ancho cm</strong><span className="calculation-cell-help">De izquierda a derecha</span></div>
-                      <div className="calculation-table-header"><strong>Alto cm</strong><span className="calculation-cell-help">De abajo hacia arriba</span></div>
-                      <div className="calculation-table-header"><strong>Fondo cm</strong><span className="calculation-cell-help">Profundidad</span></div>
-                      <div className="calculation-table-header"><strong>Cantidad</strong><span className="calculation-cell-help">Piezas iguales</span></div>
-                      <div className="calculation-table-header"><strong>Área m²</strong><span className="calculation-cell-help">Material calculado</span></div>
-                      <div className="calculation-table-header"><strong>Metro lineal</strong><span className="calculation-cell-help">Cantos/perímetro</span></div>
-                      {quote.measureRows.map((item) => (
-                        <div key={item.id} className="calculation-row calculation-table-grid calculation-grid-measures">
-                          <span>{item.nombre}</span>
-                          <span>{item.ancho}</span>
-                          <span>{item.alto}</span>
-                          <span>{item.fondo}</span>
-                          <span>{item.cantidad}</span>
-                          <span>{decimal(item.areaTotal)} m²</span>
-                          <span>{decimal(item.linearTotal)} m</span>
-                          <span className="calculation-operation">({item.ancho} / 100) x ({item.alto} / 100) x {item.cantidad} = {decimal(item.areaTotal)} m²</span>
-                        </div>
-                      ))}
-                      <div className="calculation-section-total">
-                        <span>Total m² de todas las medidas: <strong>{decimal(quote.areaTotal)} m²</strong></span>
-                        <span>Total metro lineal: <strong>{decimal(quote.linearTotal)} m</strong></span>
-                        <span>Total precio material cliente: <strong>{money(quote.material)}</strong></span>
-                      </div>
-                    </div>
-                  </section>
-
-                  <section className="calculation-section calculation-internal">
-                    <h3>Materiales</h3>
-                    <div className="calculation-table calculation-table-grid calculation-grid-materials">
-                      <div className="calculation-table-header"><strong>Material</strong><span className="calculation-cell-help">Qué se compra</span></div>
-                      <div className="calculation-table-header"><strong>Cantidad</strong><span className="calculation-cell-help">Cuánto se usa</span></div>
-                      <div className="calculation-table-header"><strong>Unidad</strong><span className="calculation-cell-help">m², metro o pieza</span></div>
-                      <div className="calculation-table-header"><strong>Costo unitario</strong><span className="calculation-cell-help">Costo proveedor</span></div>
-                      <div className="calculation-table-header"><strong>Precio cliente</strong><span className="calculation-cell-help">Precio venta</span></div>
-                      <div className="calculation-table-header"><strong>Merma</strong><span className="calculation-cell-help">Desperdicio</span></div>
-                      <div className="calculation-table-header"><strong>Margen</strong><span className="calculation-cell-help">Ganancia</span></div>
-                      <div className="calculation-table-header"><strong>Total cliente</strong><span className="calculation-cell-help">Importe cobrado</span></div>
-                      {quote.materialRows.map((item) => {
-                        const internalCost = numberValue(item.baseCost) + numberValue(item.wasteCost);
-                        const marginAmount = marginAmountFromSaleAndCost(item.saleTotal, internalCost);
-                        const marginPercent = marginPercentFromSaleAndCost(item.saleTotal, internalCost);
-                        return (
-                          <div key={item.id} className="calculation-row calculation-table-grid calculation-grid-materials">
-                            <span>{item.nombre}</span>
-                            <span>{decimal(item.rowQuantity)}</span>
-                            <span>{item.unidad}</span>
-                            <span>{money(item.costoUnitario)}</span>
-                            <span>{money(item.precioUnitario)}</span>
-                            <span>{decimal(item.merma, 1)}%</span>
-                            <span>{money(marginAmount)} ({decimal(marginPercent, 1)}%)</span>
-                            <strong>{money(item.saleTotal)}</strong>
-                            <span className="calculation-operation">
-                              {decimal(item.rowQuantity)} x {money(item.costoUnitario)} = {money(item.baseCost)}; {money(item.baseCost)} + {money(item.wasteCost)} = {money(internalCost)}; {decimal(item.rowQuantity)} x {money(item.precioUnitario)} = {money(item.saleTotal)}; {money(item.saleTotal)} - {money(internalCost)} = {money(marginAmount)}
-                            </span>
-                          </div>
-                        );
-                      })}
-                      <div className="calculation-section-total">
-                        <span>Total m²: {decimal(quote.areaTotal)} m²</span>
-                        <span>Total materiales cliente: {money(quote.material)}</span>
-                        <span>Total costo interno materiales: {money(quote.internalMaterialCost)}</span>
-                        <strong>Total margen materiales: {money(marginAmountFromSaleAndCost(quote.material, quote.internalMaterialCost))}</strong>
-                      </div>
-                    </div>
-                  </section>
-
-                  <section className="calculation-section calculation-internal">
-                    <h3>Accesorios / Herrajes</h3>
-                    <div className="calculation-table calculation-table-grid calculation-grid-accessories">
-                      <div className="calculation-table-header"><strong>Accesorio</strong><span className="calculation-cell-help">Herraje o pieza</span></div>
-                      <div className="calculation-table-header"><strong>Cantidad</strong><span className="calculation-cell-help">Cuántos</span></div>
-                      <div className="calculation-table-header"><strong>Costo unitario</strong><span className="calculation-cell-help">Costo proveedor</span></div>
-                      <div className="calculation-table-header"><strong>Precio cliente</strong><span className="calculation-cell-help">Precio venta</span></div>
-                      <div className="calculation-table-header"><strong>Costo interno</strong><span className="calculation-cell-help">Cantidad x costo</span></div>
-                      <div className="calculation-table-header"><strong>Total cliente</strong><span className="calculation-cell-help">Cantidad x precio</span></div>
-                      <div className="calculation-table-header"><strong>Margen</strong><span className="calculation-cell-help">Ganancia</span></div>
-                      <div className="calculation-table-header"><strong>Margen %</strong><span className="calculation-cell-help">Rentabilidad</span></div>
-                      {quote.accessoryRows.map((item) => {
-                        const marginAmount = marginAmountFromSaleAndCost(item.saleTotal, item.costTotal);
-                        const marginPercent = marginPercentFromSaleAndCost(item.saleTotal, item.costTotal);
-                        return (
-                          <div key={item.id} className="calculation-row calculation-table-grid calculation-grid-accessories">
-                            <span>{item.nombre}</span>
-                            <span>{decimal(item.rowQuantity, 0)}</span>
-                            <span>{money(item.costoUnitario)}</span>
-                            <span>{money(item.precioUnitario)}</span>
-                            <span>{money(item.costTotal)}</span>
-                            <strong>{money(item.saleTotal)}</strong>
-                            <span>{money(marginAmount)}</span>
-                            <span>{decimal(marginPercent, 1)}%</span>
-                            <span className="calculation-operation">
-                              {decimal(item.rowQuantity, 0)} x {money(item.costoUnitario)} = {money(item.costTotal)}; {decimal(item.rowQuantity, 0)} x {money(item.precioUnitario)} = {money(item.saleTotal)}; {money(item.saleTotal)} - {money(item.costTotal)} = {money(marginAmount)}
-                            </span>
-                          </div>
-                        );
-                      })}
-                      <div className="calculation-section-total">
-                        <span>Total accesorios cliente: {money(quote.hardwareSale)}</span>
-                        <span>Total costo interno accesorios: {money(quote.hardwareCost)}</span>
-                        <strong>Total margen accesorios: {money(marginAmountFromSaleAndCost(quote.hardwareSale, quote.hardwareCost))}</strong>
-                      </div>
-                    </div>
-                  </section>
-
-                  <section className="calculation-section">
-                    <h3>Resumen de totales</h3>
-                    <div className="professional-breakdown-grid">
-                      <article className="calculation-section calculation-client">
-                        <h4>Cliente</h4>
-                        <div className="professional-row"><span>Materiales</span><strong>{money(quote.material)}</strong></div>
-                        <div className="professional-row"><span>Accesorios</span><strong>{money(quote.hardwareSale)}</strong></div>
-                        <div className="professional-row"><span>Mano de obra</span><strong>{money(quote.manoObra)}</strong></div>
-                        <div className="professional-row"><span>Extras</span><strong>{money(quote.extras)}</strong></div>
-                        <div className="professional-row"><span>Subtotal</span><strong>{money(quote.subtotal)}</strong></div>
-                        <div className="professional-row"><span>Descuento</span><strong>-{money(quote.discountAmount)}</strong></div>
-                        <div className="professional-row professional-row-total"><span>Total cliente</span><strong>{money(quote.total)}</strong></div>
-                        <div className="professional-row"><span>Anticipo</span><strong>{money(quote.deposit)}</strong></div>
-                        <div className="professional-row"><span>Saldo</span><strong>{money(quote.rest)}</strong></div>
-                      </article>
-                      <article className="calculation-section calculation-internal">
-                        <h4>Interno</h4>
-                        <div className="professional-row"><span>Costo material interno</span><strong>{money(quote.internalMaterialCost)}</strong></div>
-                        <div className="professional-row"><span>Costo accesorios interno</span><strong>{money(quote.hardwareCost)}</strong></div>
-                        <div className="professional-row"><span>Extras</span><strong>{money(quote.extras)}</strong></div>
-                        <div className="professional-row professional-row-total"><span>Total interno</span><strong>{money(quote.internalTotal)}</strong></div>
-                        <div className="professional-row"><span>Utilidad estimada</span><strong>{money(quote.profit)}</strong></div>
-                        <div className="professional-row"><span>Utilidad %</span><strong>{decimal(quote.profitPercent, 1)}%</strong></div>
-                        <div className="professional-row"><span>Total margen materiales</span><strong>{money(marginAmountFromSaleAndCost(quote.material, quote.internalMaterialCost))}</strong></div>
-                        <div className="professional-row"><span>Total margen accesorios</span><strong>{money(marginAmountFromSaleAndCost(quote.hardwareSale, quote.hardwareCost))}</strong></div>
-                        <div className="professional-row"><span>Margen total estimado</span><strong>{money(quote.profit)}</strong></div>
-                      </article>
-                    </div>
-                  </section>
-                </div>
-              </div>
-
-              <div className="data-health-panel">
-                <h3>Datos de la cotización</h3>
-                <h4>Datos completos</h4>
-                <div className="data-health-list">
-                  {dataHealth.present.map((item) => <span key={item.label} className="data-health-ok">{item.label}</span>)}
-                </div>
-                <h4>Datos faltantes</h4>
-                <div className="data-health-list">
-                  {dataHealth.missing.map((item) => <span key={item.label} className="data-health-missing">{item.label}</span>)}
-                </div>
-                {dataHealth.warnings.length > 0 && (
-                  <>
-                    <h4>Advertencias</h4>
-                    <div className="data-health-list" role="status" aria-live="polite">
-                      {dataHealth.warnings.map((warning) => <span key={warning} className="data-health-warning">{warning}</span>)}
-                    </div>
-                  </>
-                )}
+                <Field id="clienteNombre" label="Cliente">{input('clienteNombre')}</Field>
+                <Field id="clienteTelefono" label="Teléfono">{input('clienteTelefono')}</Field>
+                <Field id="materialCotizacion" label="Material cotización">{input('materialCotizacion')}</Field>
+                <Field id="precioM2" label="Precio m²">{input('precioM2', 'number')}</Field>
+                <Field id="costoMaterialM2" label="Costo m²">{input('costoMaterialM2', 'number')}</Field>
+                <Field id="merma" label="Merma %">{input('merma', 'number')}</Field>
+                <Field id="margenMaterial" label="Margen %">{input('margenMaterial', 'number')}</Field>
+                <Field id="manoObra" label="Mano de obra">{input('manoObra', 'number')}</Field>
+                <Field id="extras" label="Extras">{input('extras', 'number')}</Field>
+                <Field id="descuento" label="Descuento %">{input('descuento', 'number')}</Field>
+                <Field id="anticipo" label="Anticipo %">{input('anticipo', 'number')}</Field>
+                <Field id="vigencia" label="Vigencia días">{input('vigencia', 'number')}</Field>
+                <Field id="condiciones" label="Condiciones">{textareaInput('condiciones')}</Field>
               </div>
 
               <h3>Medidas</h3>
@@ -3163,13 +2520,6 @@ function App() {
             <div className="section-head">
               <div>
                 <h2>Historial de cotizaciones</h2>
-                <div className="history-backup-actions">
-                  <button type="button" className="ghost" onClick={exportHistoryBackup}><Download size={16} /> Exportar respaldo</button>
-                  <label className="ghost file-button">
-                    <Upload size={16} /> Importar respaldo
-                    <input type="file" accept="application/json" onChange={importHistoryBackup} />
-                  </label>
-                </div>
                 <p>{syncStatus}{lastSyncAt ? ` · ${lastSyncAt}` : ''}{legacyRecoveredCount > 0 ? ` · Recuperadas ${legacyRecoveredCount} cotizaciones antiguas` : ''}</p>
               </div>
               <button type="button" className="ghost" onClick={() => syncHistory(true)}><RefreshCw size={18} /> Sincronizar</button>
@@ -3180,7 +2530,6 @@ function App() {
                 <article key={item.id} className="history-row">
                   <div>
                     <strong>{item.producto}</strong>
-                    {item.folio && <span>Folio: {item.folio}</span>}
                     <span>{item.clienteNombre} · {money(item.total)} · {new Date(item.createdAt).toLocaleDateString('es-MX')}</span>
                   </div>
                   <select value={item.status || 'Pendiente'} onChange={(event) => updateHistoryStatus(item.id, event.target.value)}>

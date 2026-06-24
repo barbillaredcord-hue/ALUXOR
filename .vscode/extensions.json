@@ -14,6 +14,9 @@
     "wayou.vscode-todo-highlight",
     "bradlc.vscode-tailwindcss",
     "github.copilot",
-    "github.copilot-chat"
+    "github.copilot-chat",
+    "dsznajder.es7-react-js-snippets",
+    "ms-vscode.vscode-typescript-next",
+    "ms-vscode.live-server"
   ]
 }
