@@ -3049,3 +3049,38 @@ textarea {
 .professional-how li {
   margin-bottom: 5px;
 }
+
+.professional-breakdown {
+  margin-top: 16px;
+}
+
+.professional-breakdown-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.professional-row {
+  align-items: center;
+  border-bottom: 1px solid rgba(23, 32, 27, 0.08);
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+}
+
+.professional-row-total {
+  border-top: 2px solid rgba(34, 116, 95, 0.25);
+  border-bottom: 0;
+  color: #22745f;
+  font-weight: 900;
+  margin-top: 8px;
+  padding-top: 10px;
+}
+
+.internal-only {
+  background: rgba(255, 247, 223, 0.72);
+  border: 1px solid rgba(207, 160, 48, 0.28);
+  border-radius: 14px;
+  padding: 14px;
+}

@@ -1277,6 +1277,10 @@ function workRoleCards(data, quote) {
 }
 
 function quoteProfessionalAnalysis(data, quote) {
+  const installReview = data.giro === 'Vidriería'
+    ? 'Revisar plomo, nivel, claros, sellado, sentido de apertura y holguras.'
+    : 'Revisar muros, nivel, escuadra, anclajes, zoclo y ajustes.';
+
   return [
     {
       role: 'Cotizador',
@@ -1285,11 +1289,16 @@ function quoteProfessionalAnalysis(data, quote) {
       why: 'Este total sale de materiales, herrajes, mano de obra, extras y descuento.',
       how: [
         `Materiales al cliente: ${money(quote.material)}`,
-        `Herrajes/accesorios: ${money(quote.hardwareSale)}`,
+        `Herrajes/accesorios al cliente: ${money(quote.hardwareSale)}`,
         `Mano de obra/instalación: ${money(quote.manoObra)}`,
         `Extras: ${money(quote.extras)}`,
+        `Subtotal: ${money(quote.subtotal)}`,
         `Descuento: -${money(quote.discountAmount)}`,
-        `Total: ${money(quote.total)}`,
+        `Total cliente: ${money(quote.total)}`,
+        `Anticipo: ${money(quote.deposit)}`,
+        `Saldo/resto: ${money(quote.rest)}`,
+        `Vigencia: ${data.vigencia} días`,
+        `Condiciones: ${clean(data.condiciones, 'Por confirmar')}`,
       ],
     },
     {
@@ -1302,21 +1311,28 @@ function quoteProfessionalAnalysis(data, quote) {
         `Área total: ${decimal(quote.areaTotal)} m²`,
         `Metro lineal aproximado: ${decimal(quote.linearTotal)} m`,
         `Cantidad de piezas/medidas: ${quote.measureRows.length}`,
+        `Fondo principal: ${quote.fondo} cm`,
+        `Grosor principal: ${quote.grosorMaterial} mm`,
+        installReview,
         `Mano de obra considerada: ${money(quote.manoObra)}`,
       ],
     },
     {
-      role: 'Proveedor',
+      role: 'Proveedor / Interno',
       title: 'Costo interno estimado',
       total: money(quote.internalTotal),
       why: 'Este monto representa lo que ALUXOR debe considerar para materiales, merma, herrajes y extras antes de utilidad.',
       how: [
         `Costo material base: ${money(quote.materialBaseCost)}`,
         `Merma: ${money(quote.wasteCost)}`,
+        `Costo interno material: ${money(quote.internalMaterialCost)}`,
         `Costo de herrajes: ${money(quote.hardwareCost)}`,
         `Extras: ${money(quote.extras)}`,
-        `Costo interno total: ${money(quote.internalTotal)}`,
+        `Total interno: ${money(quote.internalTotal)}`,
+        `Total cliente: ${money(quote.total)}`,
         `Utilidad estimada: ${money(quote.profit)} (${decimal(quote.profitPercent, 1)}%)`,
+        `Margen material: ${decimal(quote.margenMaterial, 1)}%`,
+        `Precio sugerido por m²: ${money(quote.suggestedPriceM2)}`,
       ],
     },
   ];
@@ -1533,7 +1549,6 @@ function quotePrintHtml(data, quote, materials, mode = 'client') {
     <h2>${isBusiness ? 'Lista interna de materiales y costos' : 'Conceptos de la cotización'}</h2><table><thead><tr><th>Concepto</th><th>Detalle</th><th>${isBusiness ? 'Importe interno' : 'Importe'}</th></tr></thead><tbody>${isBusiness ? internalRows : clientRows}</tbody></table>
     <h2>Resumen</h2><table><tbody>
       <tr><td>Material al cliente</td><td>${money(quote.material)}</td></tr>
-      <tr><td>Margen material usado</td><td>${quote.margenMaterial}%</td></tr>
       <tr><td>Herrajes</td><td>${money(quote.hardwareSale)}</td></tr>
       <tr><td>Mano de obra</td><td>${money(quote.manoObra)}</td></tr>
       <tr><td>Extras</td><td>${money(quote.extras)}</td></tr>
@@ -1541,6 +1556,7 @@ function quotePrintHtml(data, quote, materials, mode = 'client') {
       <tr><th>Total</th><th>${money(quote.total)}</th></tr>
       <tr><td>Anticipo sugerido</td><td>${money(quote.deposit)}</td></tr>
       <tr><td>Resto al entregar</td><td>${money(quote.rest)}</td></tr>
+      ${isBusiness ? `<tr><td>Margen material usado</td><td>${quote.margenMaterial}%</td></tr>` : ''}
     </tbody></table>
     ${isBusiness ? `<h2>Resumen interno ALUXOR</h2><table><tbody>
       <tr><td>Costo material base</td><td>${money(quote.materialBaseCost)}</td></tr>
@@ -1550,11 +1566,24 @@ function quotePrintHtml(data, quote, materials, mode = 'client') {
       <tr><td>Costo total interno sin mano de obra</td><td>${money(quote.internalTotal)}</td></tr>
       <tr><td>Utilidad estimada</td><td>${money(quote.profit)} (${quote.profitPercent.toFixed(1)}%)</td></tr>
     </tbody></table><h2>Desglose del cálculo</h2><table><thead><tr><th>Área</th><th>Concepto</th><th>Por qué sale ese resultado</th><th>Resultado</th></tr></thead><tbody>${breakdownRows}</tbody></table>` : ''}
-    ${isBusiness ? `<h2>Análisis profesional ALUXOR</h2><table><tbody>
+    ${isBusiness ? `<h2>Desglose interno ALUXOR</h2><p>Esta información es interna de ALUXOR y no debe compartirse con el cliente.</p><table><tbody>
       <tr><td>Total cliente</td><td>${money(quote.total)}</td></tr>
-      <tr><td>Costo interno</td><td>${money(quote.internalTotal)}</td></tr>
-      <tr><td>Mano de obra</td><td>${money(quote.manoObra)}</td></tr>
+      <tr><td>Subtotal cliente</td><td>${money(quote.subtotal)}</td></tr>
+      <tr><td>Descuento</td><td>-${money(quote.discountAmount)}</td></tr>
+      <tr><td>Anticipo</td><td>${money(quote.deposit)}</td></tr>
+      <tr><td>Saldo</td><td>${money(quote.rest)}</td></tr>
+      <tr><td>Costo material base</td><td>${money(quote.materialBaseCost)}</td></tr>
+      <tr><td>Merma</td><td>${money(quote.wasteCost)}</td></tr>
+      <tr><td>Costo material interno</td><td>${money(quote.internalMaterialCost)}</td></tr>
+      <tr><td>Costo herrajes</td><td>${money(quote.hardwareCost)}</td></tr>
+      <tr><td>Extras</td><td>${money(quote.extras)}</td></tr>
+      <tr><td>Total interno</td><td>${money(quote.internalTotal)}</td></tr>
+      <tr><td>Mano de obra como ingreso/utilidad</td><td>${money(quote.laborProfit)}</td></tr>
       <tr><td>Utilidad estimada</td><td>${money(quote.profit)} (${quote.profitPercent.toFixed(1)}%)</td></tr>
+      <tr><td>Porcentaje utilidad</td><td>${quote.profitPercent.toFixed(1)}%</td></tr>
+      <tr><td>Margen material</td><td>${quote.margenMaterial}%</td></tr>
+      <tr><td>Precio sugerido por m²</td><td>${money(quote.suggestedPriceM2)}</td></tr>
+      ${notasInternas ? `<tr><td>Notas internas</td><td>${notasInternas}</td></tr>` : ''}
       <tr><td>Por qué se cobra así</td><td>Se calcula con materiales, herrajes, mano de obra, extras, descuento, merma y costo interno ya estimado por ALUXOR.</td></tr>
     </tbody></table>` : ''}
     <h2>Condiciones</h2><p>Vigencia: ${data.vigencia} días. ${data.condiciones}</p>
@@ -2591,6 +2620,34 @@ function App() {
                     </ul>
                   </article>
                 ))}
+                <div className="professional-breakdown">
+                  <h3>Desglose completo</h3>
+                  <div className="professional-breakdown-grid">
+                    <article className="professional-card">
+                      <h4>Total cliente</h4>
+                      <div className="professional-row"><span>Materiales</span><strong>{money(quote.material)}</strong></div>
+                      <div className="professional-row"><span>Herrajes/accesorios</span><strong>{money(quote.hardwareSale)}</strong></div>
+                      <div className="professional-row"><span>Mano de obra</span><strong>{money(quote.manoObra)}</strong></div>
+                      <div className="professional-row"><span>Extras</span><strong>{money(quote.extras)}</strong></div>
+                      <div className="professional-row"><span>Subtotal</span><strong>{money(quote.subtotal)}</strong></div>
+                      <div className="professional-row"><span>Descuento</span><strong>-{money(quote.discountAmount)}</strong></div>
+                      <div className="professional-row professional-row-total"><span>Total</span><strong>{money(quote.total)}</strong></div>
+                      <div className="professional-row"><span>Anticipo</span><strong>{money(quote.deposit)}</strong></div>
+                      <div className="professional-row"><span>Saldo</span><strong>{money(quote.rest)}</strong></div>
+                    </article>
+                    <article className="professional-card internal-only">
+                      <h4>Total interno ALUXOR</h4>
+                      <div className="professional-row"><span>Costo material base</span><strong>{money(quote.materialBaseCost)}</strong></div>
+                      <div className="professional-row"><span>Merma</span><strong>{money(quote.wasteCost)}</strong></div>
+                      <div className="professional-row"><span>Costo material interno</span><strong>{money(quote.internalMaterialCost)}</strong></div>
+                      <div className="professional-row"><span>Costo herrajes</span><strong>{money(quote.hardwareCost)}</strong></div>
+                      <div className="professional-row"><span>Extras</span><strong>{money(quote.extras)}</strong></div>
+                      <div className="professional-row professional-row-total"><span>Total interno</span><strong>{money(quote.internalTotal)}</strong></div>
+                      <div className="professional-row"><span>Utilidad estimada</span><strong>{money(quote.profit)}</strong></div>
+                      <div className="professional-row"><span>Margen/utilidad %</span><strong>{decimal(quote.profitPercent, 1)}%</strong></div>
+                    </article>
+                  </div>
+                </div>
               </div>
 
               <h3>Medidas</h3>
