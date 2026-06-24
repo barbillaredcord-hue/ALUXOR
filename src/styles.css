@@ -3016,3 +3016,36 @@ textarea {
   font-size: 0.9rem;
   margin-top: 8px;
 }
+
+.professional-analysis {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.professional-card {
+  border: 1px solid rgba(23, 32, 27, 0.12);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.62);
+  padding: 16px;
+}
+
+.professional-card h4 {
+  margin: 0 0 6px;
+}
+
+.professional-total {
+  color: #22745f;
+  font-size: 1.35rem;
+  font-weight: 900;
+  margin: 8px 0;
+}
+
+.professional-how {
+  margin: 10px 0 0;
+  padding-left: 18px;
+}
+
+.professional-how li {
+  margin-bottom: 5px;
+}

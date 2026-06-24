@@ -1276,6 +1276,52 @@ function workRoleCards(data, quote) {
   ];
 }
 
+function quoteProfessionalAnalysis(data, quote) {
+  return [
+    {
+      role: 'Cotizador',
+      title: 'Precio para cliente',
+      total: money(quote.total),
+      why: 'Este total sale de materiales, herrajes, mano de obra, extras y descuento.',
+      how: [
+        `Materiales al cliente: ${money(quote.material)}`,
+        `Herrajes/accesorios: ${money(quote.hardwareSale)}`,
+        `Mano de obra/instalación: ${money(quote.manoObra)}`,
+        `Extras: ${money(quote.extras)}`,
+        `Descuento: -${money(quote.discountAmount)}`,
+        `Total: ${money(quote.total)}`,
+      ],
+    },
+    {
+      role: 'Instalador',
+      title: 'Trabajo de instalación',
+      total: money(quote.manoObra),
+      why: 'La instalación cubre preparación, armado, nivelación, ajustes, fijación y entrega del trabajo.',
+      how: [
+        `Medidas: ${formatDimensions(data)}`,
+        `Área total: ${decimal(quote.areaTotal)} m²`,
+        `Metro lineal aproximado: ${decimal(quote.linearTotal)} m`,
+        `Cantidad de piezas/medidas: ${quote.measureRows.length}`,
+        `Mano de obra considerada: ${money(quote.manoObra)}`,
+      ],
+    },
+    {
+      role: 'Proveedor',
+      title: 'Costo interno estimado',
+      total: money(quote.internalTotal),
+      why: 'Este monto representa lo que ALUXOR debe considerar para materiales, merma, herrajes y extras antes de utilidad.',
+      how: [
+        `Costo material base: ${money(quote.materialBaseCost)}`,
+        `Merma: ${money(quote.wasteCost)}`,
+        `Costo de herrajes: ${money(quote.hardwareCost)}`,
+        `Extras: ${money(quote.extras)}`,
+        `Costo interno total: ${money(quote.internalTotal)}`,
+        `Utilidad estimada: ${money(quote.profit)} (${decimal(quote.profitPercent, 1)}%)`,
+      ],
+    },
+  ];
+}
+
 function normalizeCatalogItem(item) {
   return {
     materialCotizacion: 'Material',
@@ -1504,6 +1550,13 @@ function quotePrintHtml(data, quote, materials, mode = 'client') {
       <tr><td>Costo total interno sin mano de obra</td><td>${money(quote.internalTotal)}</td></tr>
       <tr><td>Utilidad estimada</td><td>${money(quote.profit)} (${quote.profitPercent.toFixed(1)}%)</td></tr>
     </tbody></table><h2>Desglose del cálculo</h2><table><thead><tr><th>Área</th><th>Concepto</th><th>Por qué sale ese resultado</th><th>Resultado</th></tr></thead><tbody>${breakdownRows}</tbody></table>` : ''}
+    ${isBusiness ? `<h2>Análisis profesional ALUXOR</h2><table><tbody>
+      <tr><td>Total cliente</td><td>${money(quote.total)}</td></tr>
+      <tr><td>Costo interno</td><td>${money(quote.internalTotal)}</td></tr>
+      <tr><td>Mano de obra</td><td>${money(quote.manoObra)}</td></tr>
+      <tr><td>Utilidad estimada</td><td>${money(quote.profit)} (${quote.profitPercent.toFixed(1)}%)</td></tr>
+      <tr><td>Por qué se cobra así</td><td>Se calcula con materiales, herrajes, mano de obra, extras, descuento, merma y costo interno ya estimado por ALUXOR.</td></tr>
+    </tbody></table>` : ''}
     <h2>Condiciones</h2><p>Vigencia: ${data.vigencia} días. ${data.condiciones}</p>
     ${notasCliente ? `<h2>Notas para cliente</h2><p>${notasCliente}</p>` : ''}
     ${isBusiness && notasInternas ? `<h2>Notas internas</h2><p>${notasInternas}</p>` : ''}
@@ -1693,6 +1746,7 @@ function App() {
   const materials = useMemo(() => generateMaterials(form, quote), [form, quote]);
   const outputs = useMemo(() => generateOutputs(form, quote), [form, quote]);
   const roleCards = useMemo(() => workRoleCards(form, quote), [form, quote]);
+  const professionalAnalysis = useMemo(() => quoteProfessionalAnalysis(form, quote), [form, quote]);
   const score = countScore(form);
   const mainOutput = outputs[0];
   const quoteOutput = outputs[1];
@@ -2519,6 +2573,24 @@ function App() {
                   <Field id="notasInternas" label="Notas internas">{textareaInput('notasInternas')}</Field>
                 </div>
                 <p className="advanced-note">Estos datos no modifican el cálculo de la cotización.</p>
+              </div>
+
+              <div className="professional-analysis">
+                <div>
+                  <h3>Análisis profesional</h3>
+                  <p>Vista rápida para cotizar, instalar y comprar materiales.</p>
+                </div>
+                {professionalAnalysis.map((item) => (
+                  <article key={item.role} className="professional-card">
+                    <span>{item.role}</span>
+                    <h4>{item.title}</h4>
+                    <p className="professional-total">{item.total}</p>
+                    <p>{item.why}</p>
+                    <ul className="professional-how">
+                      {item.how.map((line) => <li key={line}>{line}</li>)}
+                    </ul>
+                  </article>
+                ))}
               </div>
 
               <h3>Medidas</h3>
