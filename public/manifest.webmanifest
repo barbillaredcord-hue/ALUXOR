@@ -1,0 +1,21 @@
+{
+  "name": "ALUXOR - Anuncios y Cotizaciones",
+  "short_name": "ALUXOR",
+  "description": "App para crear anuncios y cotizaciones de carpinteria y vidrieria.",
+  "lang": "es-MX",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#eef1ed",
+  "theme_color": "#18231d",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity", "utilities"]
+}

@@ -1,0 +1,15 @@
+{
+  "scripts": {
+    "build": "vite build",
+    "start": "vite --host 127.0.0.1"
+  },
+  "dependencies": {
+    "@vercel/blob": "^2.4.0",
+    "@vitejs/plugin-react": "latest",
+    "lucide-react": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "three": "^0.184.0",
+    "vite": "^8.1.0"
+  }
+}
