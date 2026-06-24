@@ -1214,6 +1214,40 @@ function countScore(data) {
   return fields.reduce((score, field) => score + (clean(data[field]).length > 0 ? 1 : 0), 0);
 }
 
+function quoteDataHealth(data, quote) {
+  const required = [
+    { label: 'Cliente', value: data.clienteNombre },
+    { label: 'Teléfono', value: data.clienteTelefono || data.whatsapp },
+    { label: 'Producto', value: data.producto },
+    { label: 'Tipo de trabajo', value: data.tipoTrabajo },
+    { label: 'Material', value: data.materialCotizacion || data.material },
+    { label: 'Medidas', value: data.medidas },
+    { label: 'Ancho', value: data.ancho },
+    { label: 'Alto', value: data.alto },
+    { label: 'Precio por m²', value: data.precioM2 },
+    { label: 'Mano de obra', value: data.manoObra },
+  ];
+
+  const present = required.filter((item) => item.value !== '' && item.value !== null && item.value !== undefined && Number(item.value) !== 0);
+  const missing = required.filter((item) => !present.includes(item));
+  const warnings = [];
+
+  if (quote.total <= 0) warnings.push('El total cliente está en cero.');
+  if (quote.profit < 0) warnings.push('La utilidad estimada es negativa.');
+  if (!data.clienteNombre) warnings.push('Falta nombre del cliente.');
+  if (!data.clienteTelefono && !data.whatsapp) warnings.push('Falta teléfono o WhatsApp.');
+  if (quote.areaTotal <= 0) warnings.push('El área total está en cero.');
+  if (quote.material <= 0) warnings.push('El material no está generando precio.');
+  if (quote.manoObra <= 0) warnings.push('La mano de obra está en cero.');
+
+  return {
+    present,
+    missing,
+    warnings,
+    score: Math.round((present.length / required.length) * 100),
+  };
+}
+
 function generateMaterials(data, quote) {
   const materialRows = (quote.materialRows || []).map((item) => ({
     name: item.nombre,
@@ -1772,6 +1806,7 @@ function App() {
   const [appLogo, setAppLogo] = useState(loadAppLogo);
 
   const quote = useMemo(() => calculateQuote(form), [form]);
+  const dataHealth = useMemo(() => quoteDataHealth(form, quote), [form, quote]);
   const materials = useMemo(() => generateMaterials(form, quote), [form, quote]);
   const outputs = useMemo(() => generateOutputs(form, quote), [form, quote]);
   const roleCards = useMemo(() => workRoleCards(form, quote), [form, quote]);
@@ -2557,6 +2592,20 @@ function App() {
         {activeSection === 'cotizador' && (
           <section className="panel-grid two-cols">
             <article className="panel">
+              <div className="live-quote-summary" aria-label="Resumen vivo de la cotización" aria-live="polite">
+                <h3>Resumen vivo</h3>
+                <div className="live-summary-grid">
+                  <div className="live-summary-item live-summary-total"><span>Total cliente</span><strong>{money(quote.total)}</strong></div>
+                  <div className="live-summary-item"><span>Total interno</span><strong>{money(quote.internalTotal)}</strong></div>
+                  <div className="live-summary-item"><span>Utilidad</span><strong>{money(quote.profit)}</strong></div>
+                  <div className="live-summary-item"><span>Anticipo</span><strong>{money(quote.deposit)}</strong></div>
+                  <div className="live-summary-item"><span>Saldo</span><strong>{money(quote.rest)}</strong></div>
+                  <div className="live-summary-item"><span>Estado de datos</span><strong>{dataHealth.score}%</strong></div>
+                </div>
+                {dataHealth.warnings.length > 0 && (
+                  <p className="live-summary-warning" role="status" aria-live="polite">{dataHealth.warnings[0]}</p>
+                )}
+              </div>
               <h2>Cotizador profesional</h2>
               <div className="actions compact">
                 {Object.keys(quoteProfiles).map((key) => (
@@ -2648,6 +2697,26 @@ function App() {
                     </article>
                   </div>
                 </div>
+              </div>
+
+              <div className="data-health-panel">
+                <h3>Datos de la cotización</h3>
+                <h4>Datos completos</h4>
+                <div className="data-health-list">
+                  {dataHealth.present.map((item) => <span key={item.label} className="data-health-ok">{item.label}</span>)}
+                </div>
+                <h4>Datos faltantes</h4>
+                <div className="data-health-list">
+                  {dataHealth.missing.map((item) => <span key={item.label} className="data-health-missing">{item.label}</span>)}
+                </div>
+                {dataHealth.warnings.length > 0 && (
+                  <>
+                    <h4>Advertencias</h4>
+                    <div className="data-health-list" role="status" aria-live="polite">
+                      {dataHealth.warnings.map((warning) => <span key={warning} className="data-health-warning">{warning}</span>)}
+                    </div>
+                  </>
+                )}
               </div>
 
               <h3>Medidas</h3>
