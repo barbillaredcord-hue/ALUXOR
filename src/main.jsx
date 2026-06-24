@@ -86,6 +86,11 @@ const defaults = {
   anticipo: 50,
   vigencia: 7,
   condiciones: 'Anticipo para iniciar. Saldo contra entrega o instalación. Precio sujeto a verificación de medidas finales.',
+  folioManual: '',
+  estadoCotizacion: 'Pendiente',
+  formaPago: 'Anticipo y saldo contra entrega',
+  notasCliente: '',
+  notasInternas: '',
   materialItems: [
     {
       id: 'mat-principal',
@@ -1428,6 +1433,10 @@ async function requestHistory(options = {}) {
 function quotePrintHtml(data, quote, materials, mode = 'client') {
   const isBusiness = mode === 'business';
   const today = new Date().toLocaleDateString('es-MX');
+  const folio = clean(data.folio || data.folioManual, 'Por asignar');
+  const formaPago = clean(data.formaPago, 'Anticipo y saldo contra entrega');
+  const notasCliente = clean(data.notasCliente);
+  const notasInternas = clean(data.notasInternas);
   const internalRows = materials.map((item) => `
     <tr><td>${item.name}</td><td>${item.detail}</td><td>${money(item.cost)}</td></tr>
   `).join('');
@@ -1472,6 +1481,7 @@ function quotePrintHtml(data, quote, materials, mode = 'client') {
     <header><div><div class="brand">${BRAND_NAME}</div><h1>${isBusiness ? 'Hoja interna del negocio' : 'Cotización'}</h1><p>${today}</p></div><div><div>Total</div><div class="total">${money(quote.total)}</div></div></header>
     ${isBusiness ? '<div class="internal"><strong>Uso interno ALUXOR.</strong> Esta hoja incluye costos, utilidad y datos de operación. No entregar al cliente.</div>' : ''}
     <section class="grid"><div class="box"><strong>Cliente</strong><p>${clean(data.clienteNombre, 'Cliente')}${data.clienteTelefono ? `<br>${data.clienteTelefono}` : ''}</p></div><div class="box"><strong>Proyecto</strong><p>${data.producto}<br>${data.tipoTrabajo}<br>${data.medidas}</p></div></section>
+    <section class="grid"><div class="box"><strong>Folio</strong><p>${folio}</p></div><div class="box"><strong>Forma de pago</strong><p>${formaPago}</p></div></section>
     <h2>Descripción</h2><p>Material: ${data.material}. Acabado: ${data.acabado}. Incluye: ${data.incluye}.</p>
     <h2>Medidas</h2><table><thead><tr><th>Partida</th><th>Medida</th><th>Cantidad</th><th>Área total</th><th>Metro lineal</th></tr></thead><tbody>${measureRows}</tbody></table>
     <h2>${isBusiness ? 'Lista interna de materiales y costos' : 'Conceptos de la cotización'}</h2><table><thead><tr><th>Concepto</th><th>Detalle</th><th>${isBusiness ? 'Importe interno' : 'Importe'}</th></tr></thead><tbody>${isBusiness ? internalRows : clientRows}</tbody></table>
@@ -1495,6 +1505,8 @@ function quotePrintHtml(data, quote, materials, mode = 'client') {
       <tr><td>Utilidad estimada</td><td>${money(quote.profit)} (${quote.profitPercent.toFixed(1)}%)</td></tr>
     </tbody></table><h2>Desglose del cálculo</h2><table><thead><tr><th>Área</th><th>Concepto</th><th>Por qué sale ese resultado</th><th>Resultado</th></tr></thead><tbody>${breakdownRows}</tbody></table>` : ''}
     <h2>Condiciones</h2><p>Vigencia: ${data.vigencia} días. ${data.condiciones}</p>
+    ${notasCliente ? `<h2>Notas para cliente</h2><p>${notasCliente}</p>` : ''}
+    ${isBusiness && notasInternas ? `<h2>Notas internas</h2><p>${notasInternas}</p>` : ''}
     <button onclick="window.print()">Imprimir o guardar PDF</button>
   </body></html>`;
 }
@@ -2161,6 +2173,17 @@ function App() {
     setActiveSection('cotizador');
   }
 
+  function generateQuoteFolio(historyItems = []) {
+    const today = new Date();
+    const y = today.getFullYear();
+    const m = String(today.getMonth() + 1).padStart(2, '0');
+    const d = String(today.getDate()).padStart(2, '0');
+    const prefix = `ALX-${y}${m}${d}`;
+    const count = normalizeHistory(historyItems).filter((item) => String(item.folio || '').startsWith(prefix)).length + 1;
+
+    return `${prefix}-${String(count).padStart(3, '0')}`;
+  }
+
   function saveToHistory() {
     const now = Date.now();
     const item = {
@@ -2168,6 +2191,11 @@ function App() {
       createdAt: now,
       updatedAt: now,
       status: 'Pendiente',
+      folio: clean(form.folioManual, generateQuoteFolio(history)),
+      estadoCotizacion: clean(form.estadoCotizacion, 'Pendiente'),
+      formaPago: clean(form.formaPago, 'Anticipo y saldo contra entrega'),
+      notasCliente: clean(form.notasCliente),
+      notasInternas: clean(form.notasInternas),
       clienteNombre: clean(form.clienteNombre, 'Cliente'),
       clienteTelefono: clean(form.clienteTelefono),
       producto: clean(form.producto, 'Proyecto a medida'),
@@ -2471,6 +2499,28 @@ function App() {
                 <Field id="condiciones" label="Condiciones">{textareaInput('condiciones')}</Field>
               </div>
 
+              <div className="advanced-quote-panel">
+                <h3>Cotización avanzada</h3>
+                <div className="advanced-grid">
+                  <Field id="folioManual" label="Folio manual opcional">{input('folioManual')}</Field>
+                  <Field id="estadoCotizacion" label="Estado de cotización">
+                    <select id="estadoCotizacion" value={form.estadoCotizacion} onChange={(event) => update('estadoCotizacion', event.target.value)}>
+                      <option>Pendiente</option>
+                      <option>Enviada</option>
+                      <option>Aceptada</option>
+                      <option>En fabricación</option>
+                      <option>Instalación</option>
+                      <option>Terminada</option>
+                      <option>Cancelada</option>
+                    </select>
+                  </Field>
+                  <Field id="formaPago" label="Forma de pago">{input('formaPago')}</Field>
+                  <Field id="notasCliente" label="Notas para cliente">{textareaInput('notasCliente')}</Field>
+                  <Field id="notasInternas" label="Notas internas">{textareaInput('notasInternas')}</Field>
+                </div>
+                <p className="advanced-note">Estos datos no modifican el cálculo de la cotización.</p>
+              </div>
+
               <h3>Medidas</h3>
               {measurementItemsFromForm(form).map((item) => (
                 <div key={item.id} className="row-card">
@@ -2584,6 +2634,7 @@ function App() {
                 <article key={item.id} className="history-row">
                   <div>
                     <strong>{item.producto}</strong>
+                    {item.folio && <span>Folio: {item.folio}</span>}
                     <span>{item.clienteNombre} · {money(item.total)} · {new Date(item.createdAt).toLocaleDateString('es-MX')}</span>
                   </div>
                   <select value={item.status || 'Pendiente'} onChange={(event) => updateHistoryStatus(item.id, event.target.value)}>

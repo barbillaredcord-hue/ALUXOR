@@ -2997,3 +2997,22 @@ textarea {
 .file-button input {
   display: none;
 }
+
+.advanced-quote-panel {
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid rgba(23, 32, 27, 0.12);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.advanced-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.advanced-note {
+  color: #526159;
+  font-size: 0.9rem;
+  margin-top: 8px;
+}
