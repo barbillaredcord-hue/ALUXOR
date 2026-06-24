@@ -3217,3 +3217,66 @@ textarea {
     font-size: 0.8rem;
   }
 }
+
+.calculation-detail-panel {
+  display: grid;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.calculation-section {
+  border: 1px solid rgba(23, 32, 27, 0.12);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.64);
+  padding: 16px;
+}
+
+.calculation-table {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.calculation-row {
+  border-bottom: 1px solid rgba(23, 32, 27, 0.08);
+  display: grid;
+  gap: 6px;
+  padding: 10px 0;
+}
+
+.calculation-row-total {
+  border-top: 2px solid rgba(34, 116, 95, 0.25);
+  border-bottom: 0;
+  color: #22745f;
+  font-weight: 900;
+  margin-top: 8px;
+  padding-top: 12px;
+}
+
+.calculation-operation {
+  color: #526159;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.calculation-muted {
+  color: #526159;
+  font-size: 0.86rem;
+}
+
+.calculation-internal {
+  background: rgba(255, 247, 223, 0.72);
+  border-color: rgba(207, 160, 48, 0.3);
+}
+
+.calculation-client {
+  background: rgba(237, 245, 241, 0.72);
+}
+
+@media (min-width: 900px) {
+  .calculation-row {
+    grid-template-columns: 1.2fr repeat(3, minmax(90px, 1fr));
+    align-items: start;
+  }
+}

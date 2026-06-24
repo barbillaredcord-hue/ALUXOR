@@ -1472,10 +1472,41 @@ function workRoleCards(data, quote) {
   ];
 }
 
+function marginAmountFromSaleAndCost(saleTotal, costTotal) {
+  return numberValue(saleTotal) - numberValue(costTotal);
+}
+
+function marginPercentFromSaleAndCost(saleTotal, costTotal) {
+  const sale = numberValue(saleTotal);
+  const cost = numberValue(costTotal);
+  if (sale <= 0) return 0;
+  return ((sale - cost) / sale) * 100;
+}
+
+function operationLine(label, operation, result) {
+  return {
+    label,
+    operation,
+    result,
+  };
+}
+
 function quoteProfessionalAnalysis(data, quote) {
   const installReview = data.giro === 'Vidriería'
     ? 'Revisar plomo, nivel, claros, sellado, sentido de apertura y holguras.'
     : 'Revisar muros, nivel, escuadra, anclajes, zoclo y ajustes.';
+  const clientOps = [
+    operationLine('Subtotal', `${money(quote.material)} + ${money(quote.hardwareSale)} + ${money(quote.manoObra)} + ${money(quote.extras)}`, money(quote.subtotal)),
+    operationLine('Total', `${money(quote.subtotal)} - ${money(quote.discountAmount)}`, money(quote.total)),
+    operationLine('Anticipo', `${money(quote.total)} x ${decimal(quote.anticipo, 1)}%`, money(quote.deposit)),
+    operationLine('Saldo', `${money(quote.total)} - ${money(quote.deposit)}`, money(quote.rest)),
+  ];
+  const internalOps = [
+    operationLine('Costo material interno', `${money(quote.materialBaseCost)} + ${money(quote.wasteCost)}`, money(quote.internalMaterialCost)),
+    operationLine('Total interno', `${money(quote.internalMaterialCost)} + ${money(quote.hardwareCost)} + ${money(quote.extras)}`, money(quote.internalTotal)),
+    operationLine('Utilidad', `${money(quote.total)} - ${money(quote.internalTotal)}`, money(quote.profit)),
+    operationLine('Utilidad %', `${money(quote.profit)} / ${money(quote.total)} x 100`, `${decimal(quote.profitPercent, 1)}%`),
+  ];
 
   return [
     {
@@ -1493,6 +1524,7 @@ function quoteProfessionalAnalysis(data, quote) {
         `Total cliente: ${money(quote.total)}`,
         `Anticipo: ${money(quote.deposit)}`,
         `Saldo/resto: ${money(quote.rest)}`,
+        ...clientOps.map((item) => `${item.label}: ${item.operation} = ${item.result}`),
         `Vigencia: ${data.vigencia} días`,
         `Condiciones: ${clean(data.condiciones, 'Por confirmar')}`,
       ],
@@ -1511,6 +1543,8 @@ function quoteProfessionalAnalysis(data, quote) {
         `Grosor principal: ${quote.grosorMaterial} mm`,
         installReview,
         `Mano de obra considerada: ${money(quote.manoObra)}`,
+        'Operación área: Ancho x Alto x Cantidad = Área por partidas',
+        'Operación lineal: Perímetro x Cantidad = Metro lineal aproximado',
       ],
     },
     {
@@ -1529,6 +1563,8 @@ function quoteProfessionalAnalysis(data, quote) {
         `Utilidad estimada: ${money(quote.profit)} (${decimal(quote.profitPercent, 1)}%)`,
         `Margen material: ${decimal(quote.margenMaterial, 1)}%`,
         `Precio sugerido por m²: ${money(quote.suggestedPriceM2)}`,
+        `Total margen estimado: ${money(quote.profit)}`,
+        ...internalOps.map((item) => `${item.label}: ${item.operation} = ${item.result}`),
       ],
     },
   ];
@@ -1779,6 +1815,9 @@ function quotePrintHtml(data, quote, materials, mode = 'client') {
       <tr><td>Porcentaje utilidad</td><td>${quote.profitPercent.toFixed(1)}%</td></tr>
       <tr><td>Margen material</td><td>${quote.margenMaterial}%</td></tr>
       <tr><td>Precio sugerido por m²</td><td>${money(quote.suggestedPriceM2)}</td></tr>
+      <tr><td>Margen materiales</td><td>${money(marginAmountFromSaleAndCost(quote.material, quote.internalMaterialCost))}</td></tr>
+      <tr><td>Margen accesorios</td><td>${money(marginAmountFromSaleAndCost(quote.hardwareSale, quote.hardwareCost))}</td></tr>
+      <tr><td>Margen total estimado</td><td>${money(quote.profit)}</td></tr>
       ${notasInternas ? `<tr><td>Notas internas</td><td>${notasInternas}</td></tr>` : ''}
       <tr><td>Por qué se cobra así</td><td>Se calcula con materiales, herrajes, mano de obra, extras, descuento, merma y costo interno ya estimado por ALUXOR.</td></tr>
     </tbody></table>` : ''}
@@ -2866,6 +2905,114 @@ function App() {
                       <div className="professional-row"><span>Margen/utilidad %</span><strong>{decimal(quote.profitPercent, 1)}%</strong></div>
                     </article>
                   </div>
+                </div>
+                <div className="calculation-detail-panel">
+                  <section className="calculation-section calculation-client">
+                    <h3>Medidas</h3>
+                    <div className="calculation-table">
+                      {quote.measureRows.map((item) => (
+                        <div key={item.id} className="calculation-row">
+                          <strong>{item.nombre}</strong>
+                          <span>{item.ancho} x {item.alto} x {item.fondo} cm</span>
+                          <span>Cantidad: {item.cantidad}</span>
+                          <span>{decimal(item.areaTotal)} m² · {decimal(item.linearTotal)} m</span>
+                          <span className="calculation-operation">({item.ancho} / 100) x ({item.alto} / 100) x {item.cantidad} = {decimal(item.areaTotal)} m²</span>
+                        </div>
+                      ))}
+                      <div className="calculation-row calculation-row-total">
+                        <span>Total m²</span>
+                        <strong>{decimal(quote.areaTotal)} m²</strong>
+                        <span>Total metro lineal</span>
+                        <strong>{decimal(quote.linearTotal)} m</strong>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="calculation-section calculation-internal">
+                    <h3>Materiales</h3>
+                    <div className="calculation-table">
+                      {quote.materialRows.map((item) => {
+                        const internalCost = numberValue(item.baseCost) + numberValue(item.wasteCost);
+                        const marginAmount = marginAmountFromSaleAndCost(item.saleTotal, internalCost);
+                        const marginPercent = marginPercentFromSaleAndCost(item.saleTotal, internalCost);
+                        return (
+                          <div key={item.id} className="calculation-row">
+                            <strong>{item.nombre}</strong>
+                            <span>{decimal(item.rowQuantity)} {item.unidad}</span>
+                            <span>Costo: {money(item.costoUnitario)} · Cliente: {money(item.precioUnitario)}</span>
+                            <span>Interno: {money(internalCost)} · Cliente: {money(item.saleTotal)}</span>
+                            <span>Margen: {money(marginAmount)} ({decimal(marginPercent, 1)}%)</span>
+                            <span className="calculation-operation">
+                              {decimal(item.rowQuantity)} x {money(item.costoUnitario)} = {money(item.baseCost)}; {money(item.baseCost)} + {money(item.wasteCost)} = {money(internalCost)}; {decimal(item.rowQuantity)} x {money(item.precioUnitario)} = {money(item.saleTotal)}; {money(item.saleTotal)} - {money(internalCost)} = {money(marginAmount)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                      <div className="calculation-row calculation-row-total">
+                        <span>Total m²: {decimal(quote.areaTotal)} m²</span>
+                        <span>Total materiales cliente: {money(quote.material)}</span>
+                        <span>Total costo interno materiales: {money(quote.internalMaterialCost)}</span>
+                        <strong>Total margen materiales: {money(marginAmountFromSaleAndCost(quote.material, quote.internalMaterialCost))}</strong>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="calculation-section calculation-internal">
+                    <h3>Accesorios / Herrajes</h3>
+                    <div className="calculation-table">
+                      {quote.accessoryRows.map((item) => {
+                        const marginAmount = marginAmountFromSaleAndCost(item.saleTotal, item.costTotal);
+                        const marginPercent = marginPercentFromSaleAndCost(item.saleTotal, item.costTotal);
+                        return (
+                          <div key={item.id} className="calculation-row">
+                            <strong>{item.nombre}</strong>
+                            <span>Cantidad: {decimal(item.rowQuantity, 0)}</span>
+                            <span>Costo: {money(item.costoUnitario)} · Cliente: {money(item.precioUnitario)}</span>
+                            <span>Interno: {money(item.costTotal)} · Cliente: {money(item.saleTotal)}</span>
+                            <span>Margen: {money(marginAmount)} ({decimal(marginPercent, 1)}%)</span>
+                            <span className="calculation-operation">
+                              {decimal(item.rowQuantity, 0)} x {money(item.costoUnitario)} = {money(item.costTotal)}; {decimal(item.rowQuantity, 0)} x {money(item.precioUnitario)} = {money(item.saleTotal)}; {money(item.saleTotal)} - {money(item.costTotal)} = {money(marginAmount)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                      <div className="calculation-row calculation-row-total">
+                        <span>Total accesorios cliente: {money(quote.hardwareSale)}</span>
+                        <span>Total costo interno accesorios: {money(quote.hardwareCost)}</span>
+                        <strong>Total margen accesorios: {money(marginAmountFromSaleAndCost(quote.hardwareSale, quote.hardwareCost))}</strong>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="calculation-section">
+                    <h3>Resumen de totales</h3>
+                    <div className="professional-breakdown-grid">
+                      <article className="calculation-section calculation-client">
+                        <h4>Cliente</h4>
+                        <div className="professional-row"><span>Materiales</span><strong>{money(quote.material)}</strong></div>
+                        <div className="professional-row"><span>Accesorios</span><strong>{money(quote.hardwareSale)}</strong></div>
+                        <div className="professional-row"><span>Mano de obra</span><strong>{money(quote.manoObra)}</strong></div>
+                        <div className="professional-row"><span>Extras</span><strong>{money(quote.extras)}</strong></div>
+                        <div className="professional-row"><span>Subtotal</span><strong>{money(quote.subtotal)}</strong></div>
+                        <div className="professional-row"><span>Descuento</span><strong>-{money(quote.discountAmount)}</strong></div>
+                        <div className="professional-row professional-row-total"><span>Total cliente</span><strong>{money(quote.total)}</strong></div>
+                        <div className="professional-row"><span>Anticipo</span><strong>{money(quote.deposit)}</strong></div>
+                        <div className="professional-row"><span>Saldo</span><strong>{money(quote.rest)}</strong></div>
+                      </article>
+                      <article className="calculation-section calculation-internal">
+                        <h4>Interno</h4>
+                        <div className="professional-row"><span>Costo material interno</span><strong>{money(quote.internalMaterialCost)}</strong></div>
+                        <div className="professional-row"><span>Costo accesorios interno</span><strong>{money(quote.hardwareCost)}</strong></div>
+                        <div className="professional-row"><span>Extras</span><strong>{money(quote.extras)}</strong></div>
+                        <div className="professional-row professional-row-total"><span>Total interno</span><strong>{money(quote.internalTotal)}</strong></div>
+                        <div className="professional-row"><span>Utilidad estimada</span><strong>{money(quote.profit)}</strong></div>
+                        <div className="professional-row"><span>Utilidad %</span><strong>{decimal(quote.profitPercent, 1)}%</strong></div>
+                        <div className="professional-row"><span>Total margen materiales</span><strong>{money(marginAmountFromSaleAndCost(quote.material, quote.internalMaterialCost))}</strong></div>
+                        <div className="professional-row"><span>Total margen accesorios</span><strong>{money(marginAmountFromSaleAndCost(quote.hardwareSale, quote.hardwareCost))}</strong></div>
+                        <div className="professional-row"><span>Margen total estimado</span><strong>{money(quote.profit)}</strong></div>
+                      </article>
+                    </div>
+                  </section>
                 </div>
               </div>
 
