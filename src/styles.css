@@ -499,7 +499,7 @@ textarea {
 
   .sidebar {
     position: static;
-    min-height: auto;
+    min-height: initial;
   }
 
   .sync-card {
@@ -540,7 +540,7 @@ textarea {
     top: 0;
     z-index: 40;
     gap: 10px;
-    min-height: auto;
+    min-height: initial;
   }
 
   .brand-card {
@@ -563,7 +563,6 @@ textarea {
     margin: 0 -14px;
     padding: 0 14px 6px;
     overflow-x: auto;
-    scrollbar-width: none;
   }
 
   .menu::-webkit-scrollbar {
@@ -647,7 +646,6 @@ textarea {
     flex-direction: column;
   }
 }
-
 * {
   box-sizing: border-box;
 }
@@ -1980,7 +1978,7 @@ pre {
 
   .sidebar {
     position: static;
-    min-height: auto;
+    min-height: initial;
   }
 
   .main-menu {
@@ -2046,7 +2044,6 @@ pre {
     margin: 0 -14px;
     padding: 2px 14px 8px;
     overflow-x: auto;
-    scrollbar-width: none;
   }
 
   .main-menu::-webkit-scrollbar {
@@ -2840,7 +2837,7 @@ textarea {
 
   .sidebar {
     position: static;
-    min-height: auto;
+    min-height: initial;
   }
 
   .sync-card {
@@ -2881,7 +2878,7 @@ textarea {
     top: 0;
     z-index: 40;
     gap: 10px;
-    min-height: auto;
+    min-height: initial;
   }
 
   .brand-card {
@@ -2904,7 +2901,6 @@ textarea {
     margin: 0 -14px;
     padding: 0 14px 6px;
     overflow-x: auto;
-    scrollbar-width: none;
   }
 
   .menu::-webkit-scrollbar {
@@ -2987,4 +2983,17 @@ textarea {
     align-items: flex-start;
     flex-direction: column;
   }
+}
+
+.history-backup-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.file-button {
+  cursor: pointer;
+}
+
+.file-button input {
+  display: none;
 }

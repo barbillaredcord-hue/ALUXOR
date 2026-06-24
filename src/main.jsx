@@ -1,3 +1,4 @@
+// cSpell:words ALUXOR AnunciaPro anunciapro aluxor Clóset clóset clósets Cotizacion cotizacion Telefono telefono whatsapp promocion jaladera Jaladera jaladeras Jaladeras tornillería Silicón categoria bano economico descripcion triplay Triplay buro buró Buró burós pzas Vidrieria Carpinteria zoclo herrajes melamina merma cotizador metalness
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import * as THREE from 'three';
@@ -11,6 +12,7 @@ import {
   ClipboardList,
   Copy,
   DoorOpen,
+  Download,
   Eraser,
   FileText,
   Hammer,
@@ -24,6 +26,7 @@ import {
   Sparkles,
   Store,
   TableProperties,
+  Upload,
 } from 'lucide-react';
 import './styles.css';
 import { registerServiceWorker } from './pwa';
@@ -2195,6 +2198,51 @@ function App() {
     saveHistoryRemote(nextHistory);
   }
 
+  function exportHistoryBackup() {
+    const exportedAt = new Date().toISOString();
+    const backup = {
+      app: BRAND_NAME,
+      type: 'history-backup',
+      version: APP_VERSION,
+      exportedAt,
+      history,
+    };
+    const url = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `aluxor-historial-${exportedAt.slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    setSyncStatus('Respaldo de historial exportado');
+  }
+
+  function importHistoryBackup(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(reader.result);
+        const importedHistory = Array.isArray(parsed) ? parsed : parsed?.history;
+        if (!Array.isArray(importedHistory)) throw new Error('Formato de respaldo inválido');
+        const nextHistory = mergeHistoryItems(importedHistory, history);
+        setHistory(nextHistory);
+        saveHistoryRemote(nextHistory);
+        setSyncStatus('Respaldo de historial importado');
+      } catch (error) {
+        setSyncStatus(`No se pudo importar respaldo: ${error.message}`);
+      } finally {
+        event.target.value = '';
+      }
+    };
+    reader.onerror = () => {
+      setSyncStatus('No se pudo leer el respaldo');
+      event.target.value = '';
+    };
+    reader.readAsText(file);
+  }
+
   function updateHistoryStatus(id, status) {
     const now = Date.now();
     const nextHistory = normalizeHistory(history.map((item) => (
@@ -2519,6 +2567,13 @@ function App() {
             <div className="section-head">
               <div>
                 <h2>Historial de cotizaciones</h2>
+                <div className="history-backup-actions">
+                  <button type="button" className="ghost" onClick={exportHistoryBackup}><Download size={16} /> Exportar respaldo</button>
+                  <label className="ghost file-button">
+                    <Upload size={16} /> Importar respaldo
+                    <input type="file" accept="application/json" onChange={importHistoryBackup} />
+                  </label>
+                </div>
                 <p>{syncStatus}{lastSyncAt ? ` · ${lastSyncAt}` : ''}{legacyRecoveredCount > 0 ? ` · Recuperadas ${legacyRecoveredCount} cotizaciones antiguas` : ''}</p>
               </div>
               <button type="button" className="ghost" onClick={() => syncHistory(true)}><RefreshCw size={18} /> Sincronizar</button>

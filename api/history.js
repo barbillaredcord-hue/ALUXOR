@@ -1,3 +1,4 @@
+// cSpell:words anunciapro
 const { get, put } = require('@vercel/blob');
 
 const HISTORY_PATH = 'anunciapro/history.json';

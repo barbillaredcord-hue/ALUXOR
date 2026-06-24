@@ -4,12 +4,12 @@
     "source.fixAll.eslint": "explicit"
   },
   "cSpell.language": "en,es",
-  "todo-tree.general.tags": [
-    "TODO",
-    "FIXME",
-    "BUG",
-    "HACK",
-    "ALUXOR"
-  ],
-  "todo-tree.ripgrep": "/opt/homebrew/bin/rg"
+  "todo-tree.general.tags": ["TODO", "FIXME", "BUG", "HACK", "ALUXOR"],
+  "todo-tree.ripgrep": "/opt/homebrew/bin/rg",
+  "[json]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[jsonc]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  }
 }
