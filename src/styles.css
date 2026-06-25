@@ -3472,12 +3472,12 @@ textarea {
 
 .quote-measures-table,
 .quote-measure-row {
-  grid-template-columns: minmax(150px, 1.3fr) repeat(4, minmax(96px, 0.8fr)) 64px;
+  grid-template-columns: minmax(150px, 1.3fr) repeat(4, 92px) repeat(3, 105px) 84px;
 }
 
 .quote-materials-table,
 .quote-material-row {
-  grid-template-columns: minmax(150px, 1.2fr) 118px repeat(4, 88px) 105px repeat(5, 105px) 84px;
+  grid-template-columns: minmax(150px, 1.2fr) 150px 130px repeat(4, 88px) 105px repeat(5, 105px) 84px;
 }
 
 .quote-accessories-table,
@@ -3490,6 +3490,32 @@ textarea {
   color: #7b251e;
   background: #ffe7df;
   border-color: #ecc0b2;
+}
+
+.measure-totals {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.material-calc-detail {
+  grid-column: 1 / -1;
+  padding: 8px 10px;
+  background: rgba(230, 244, 247, 0.55);
+  border: 1px solid rgba(34, 116, 95, 0.12);
+  border-radius: 8px;
+}
+
+.material-calc-detail summary {
+  cursor: pointer;
+  color: #173d34;
+  font-weight: 950;
+}
+
+.material-calc-detail span {
+  display: block;
+  margin-top: 4px;
+  color: #526159;
+  font-size: 13px;
+  font-weight: 800;
 }
 
 .add-row-button {

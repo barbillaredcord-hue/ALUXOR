@@ -519,6 +519,7 @@ function normalizeMaterialItem(item, index = 0, data = {}) {
     usarArea: Boolean(item?.usarArea),
     calculo,
     tipoCompra: clean(item?.tipoCompra, calculo),
+    baseCalculo: clean(item?.baseCalculo, calculo === 'lineal' ? 'lineal' : calculo === 'manual' || calculo === 'pieza' ? 'manual_qty' : 'medidas_area'),
     cantidad: item?.cantidad === '' ? '' : positiveNumber(item?.cantidad),
     ancho: item?.ancho === '' ? '' : positiveNumber(item?.ancho),
     alto: item?.alto === '' ? '' : positiveNumber(item?.alto),
@@ -587,13 +588,13 @@ function accessoryItemsFromForm(data) {
 }
 
 function materialItemQuantity(item, quoteBasis = {}) {
-  const calculo = clean(item.calculo || item.tipoCompra, item.usarArea ? 'area' : 'manual');
+  const baseCalculo = clean(item.baseCalculo, item.usarArea ? 'medidas_area' : 'manual_qty');
   const cantidad = Math.max(1, positiveNumber(item.cantidad) || 1);
   const itemArea = (positiveNumber(item.ancho) / 100) * (positiveNumber(item.alto) / 100) * cantidad;
   const itemLineal = (positiveNumber(item.largo) / 100) * cantidad;
-  if (calculo === 'area') return itemArea > 0 ? itemArea : positiveNumber(quoteBasis.areaTotal);
-  if (calculo === 'hoja') return itemArea;
-  if (calculo === 'lineal') return itemLineal > 0 ? itemLineal : positiveNumber(quoteBasis.linearTotal);
+  if (baseCalculo === 'medidas_area') return positiveNumber(quoteBasis.areaTotal);
+  if (baseCalculo === 'manual_area') return itemArea;
+  if (baseCalculo === 'lineal') return itemLineal > 0 ? itemLineal : positiveNumber(quoteBasis.linearTotal);
   return positiveNumber(item.cantidad);
 }
 
@@ -913,33 +914,76 @@ function calculateQuote(data) {
     const itemLinearTotal = (positiveNumber(item.largo) / 100) * Math.max(1, positiveNumber(item.cantidad) || 1);
     const rowMerma = percentValue(item.merma);
     const rowMargin = item.margen === '' ? margenMaterial : positiveNumber(item.margen);
-    const pricing = priceRule(item.costoUnitario, rowMerma, rowMargin);
-    const unitPrice = item.precioManual ? positiveNumber(item.precioUnitario) : pricing.precioCliente;
-    const baseCost = rowQuantity * pricing.costoBase;
-    const costTotal = rowQuantity * pricing.costoConMerma;
-    const wasteCost = costTotal - baseCost;
+    const tipoCompra = clean(item.tipoCompra || item.calculo, 'manual');
+    const areaHoja = (positiveNumber(item.ancho) / 100) * (positiveNumber(item.alto) / 100);
+    const largoUnidad = positiveNumber(item.largo) / 100;
+    const areaNecesaria = ['hoja', 'area'].includes(tipoCompra) ? rowQuantity : 0;
+    const largoNecesario = tipoCompra === 'lineal' ? rowQuantity : 0;
+    const cantidadNecesaria = ['pieza', 'manual'].includes(tipoCompra) ? Math.max(0, rowQuantity) : 0;
+    const factorMerma = 1 + rowMerma / 100;
+    const areaConMerma = areaNecesaria * factorMerma;
+    const largoConMerma = largoNecesario * factorMerma;
+    const cantidadConMerma = cantidadNecesaria * factorMerma;
+    const hojasNecesarias = tipoCompra === 'hoja' && areaHoja > 0 ? Math.ceil(areaConMerma / areaHoja) : 0;
+    const metrosNecesarios = tipoCompra === 'lineal' ? largoConMerma : 0;
+    const piezasNecesarias = ['pieza', 'manual'].includes(tipoCompra) ? Math.ceil(cantidadConMerma) : 0;
+    const costoUnitario = positiveNumber(item.costoUnitario);
+    const costoMetroCuadrado = tipoCompra === 'hoja' && areaHoja > 0 ? costoUnitario / areaHoja : costoUnitario;
+    const costoMetroLineal = tipoCompra === 'lineal' ? costoUnitario : 0;
+    let costTotal = rowQuantity * costoUnitario * factorMerma;
+    if (tipoCompra === 'hoja') costTotal = hojasNecesarias * costoUnitario;
+    if (tipoCompra === 'lineal') costTotal = metrosNecesarios * costoUnitario;
+    if (['pieza', 'manual'].includes(tipoCompra)) costTotal = piezasNecesarias * costoUnitario;
+    const baseCost = tipoCompra === 'hoja' ? areaNecesaria * costoMetroCuadrado : rowQuantity * costoUnitario;
+    const wasteCost = Math.max(0, costTotal - baseCost);
+    const suggestedUnit = (tipoCompra === 'hoja' ? costoMetroCuadrado : costoUnitario) * factorMerma * (1 + rowMargin / 100);
+    const unitPrice = item.precioManual ? positiveNumber(item.precioUnitario) : suggestedUnit;
     const saleTotal = rowQuantity * unitPrice;
-    const suggestedUnit = pricing.precioCliente;
     const suggestedSaleTotal = rowQuantity * suggestedUnit;
     const marginAmount = saleTotal - costTotal;
     const marginPercent = costTotal > 0 ? (marginAmount / costTotal) * 100 : 0;
     return {
       ...item,
+      tipoCompra,
       rowQuantity,
       rowMargin,
       calcLabel: materialCalcLabel(item),
       areaTotal: itemAreaTotal || (['area', 'hoja'].includes(item.calculo) ? rowQuantity : 0),
       largoTotal: itemLinearTotal || (item.calculo === 'lineal' ? rowQuantity : 0),
+      areaHoja,
+      areaNecesaria,
+      areaConMerma,
+      hojasNecesarias,
+      largoNecesario,
+      largoConMerma,
+      metrosNecesarios,
+      cantidadNecesaria,
+      cantidadConMerma,
+      piezasNecesarias,
+      costoMetroCuadrado,
+      costoMetroLineal,
       baseCost,
       wasteCost,
       costTotal,
-      costoConMerma: pricing.costoConMerma,
+      costoConMerma: rowQuantity > 0 ? costTotal / rowQuantity : 0,
       precioCliente: unitPrice,
       saleTotal,
       suggestedUnit,
       suggestedSaleTotal,
       marginAmount,
       marginPercent,
+      calculationSteps: [
+        tipoCompra === 'hoja' ? `Área hoja: ${decimal(areaHoja)} m².` : null,
+        tipoCompra === 'hoja' ? `Costo m² real: ${money(costoMetroCuadrado)}.` : null,
+        `Base usada: ${decimal(rowQuantity)} ${tipoCompra === 'lineal' ? 'm lineales' : ['hoja', 'area'].includes(tipoCompra) ? 'm²' : 'pza(s)'}.`,
+        tipoCompra === 'hoja' ? `Área con merma: ${decimal(areaConMerma)} m².` : null,
+        tipoCompra === 'hoja' ? `Hojas completas: ${hojasNecesarias}.` : null,
+        tipoCompra === 'lineal' ? `Metro lineal con merma: ${decimal(largoConMerma)} m.` : null,
+        ['pieza', 'manual'].includes(tipoCompra) ? `Piezas con merma: ${piezasNecesarias}.` : null,
+        `Costo interno real: ${money(costTotal)}.`,
+        `Precio cliente: ${money(saleTotal)}.`,
+        `Utilidad: ${money(marginAmount)}.`,
+      ].filter(Boolean),
     };
   });
 
@@ -1007,7 +1051,7 @@ function calculateQuote(data) {
       lines: materialRows.map((item) => ({
         label: item.nombre,
         amount: money(item.saleTotal),
-        detail: `${decimal(item.rowQuantity)} ${item.unidad} por ${item.calcLabel}. Costo interno: ${decimal(item.rowQuantity)} x ${money(item.costoUnitario)} = ${money(item.baseCost)}. Merma: ${percentValue(item.merma)}% = ${money(item.wasteCost)}. Precio cliente usado: ${decimal(item.rowQuantity)} x ${money(item.precioUnitario)} = ${money(item.saleTotal)}. Sugerido con margen ${item.rowMargin}%: ${money(item.suggestedSaleTotal)}.`,
+        detail: `${decimal(item.rowQuantity)} ${item.unidad} por ${item.calcLabel}. ${(item.calculationSteps || []).join(' ')}`,
       })),
     },
     {
@@ -2315,11 +2359,15 @@ function App() {
         const next = { ...item, [field]: value };
         if (field === 'calculo') {
           next.usarArea = value !== 'manual';
-          if (value === 'area') next.unidad = 'm²';
-          if (value === 'hoja') next.unidad = 'm²';
-          if (value === 'pieza') next.unidad = 'pieza';
+          next.baseCalculo = value === 'area' ? 'medidas_area' : value;
+        }
+        if (field === 'baseCalculo') {
+          next.usarArea = ['medidas_area', 'manual_area', 'lineal'].includes(value);
+        }
+        if (field === 'tipoCompra') {
+          if (value === 'area' || value === 'hoja') next.unidad = 'm²';
+          if (value === 'pieza' || value === 'manual') next.unidad = 'pieza';
           if (value === 'lineal') next.unidad = 'metro lineal';
-          next.tipoCompra = value;
         }
         if (field === 'unidad' && value === 'metro lineal') next.calculo = 'lineal';
         if (field === 'unidad' && value === 'm²') next.calculo = 'area';
@@ -2773,7 +2821,8 @@ function App() {
       const nextItem = {
         ...(target || normalizeMaterialItem({ id: `mat-${Date.now()}`, nombre: quickCalc.nombre }, materialItems.length, current)),
         nombre: clean(quickCalc.nombre, 'Material'),
-        calculo: quickCalc.tipoCompra === 'hoja' ? 'hoja' : quickCalc.tipoCompra,
+        calculo: quickCalc.tipoCompra === 'lineal' ? 'lineal' : ['pieza', 'manual'].includes(quickCalc.tipoCompra) ? 'manual' : 'area',
+        baseCalculo: quickCalc.tipoCompra === 'lineal' ? 'lineal' : ['pieza', 'manual'].includes(quickCalc.tipoCompra) ? 'manual_qty' : 'medidas_area',
         tipoCompra: quickCalc.tipoCompra,
         unidad: quickCalc.tipoCompra === 'lineal' ? 'metro lineal' : ['pieza', 'manual'].includes(quickCalc.tipoCompra) ? 'pieza' : 'm²',
         usarArea: ['hoja', 'area', 'lineal'].includes(quickCalc.tipoCompra),
@@ -3109,20 +3158,31 @@ function App() {
 
                 <details className="quote-accordion" open>
                   <summary>3. Medidas</summary>
+                  <div className="quick-results measure-totals">
+                    <div><span>Área total del proyecto</span><strong>{decimal(quote.areaTotal)} m²</strong></div>
+                    <div><span>Metro lineal total</span><strong>{decimal(quote.linearTotal)} m</strong></div>
+                    <div><span>Cantidad total de piezas</span><strong>{decimal(quote.cantidad, 0)}</strong></div>
+                  </div>
                   <div className="quote-table quote-measures-table">
                     <div className="quote-table-header">Nombre</div>
                     <div className="quote-table-header">Ancho</div>
                     <div className="quote-table-header">Alto</div>
                     <div className="quote-table-header">Fondo</div>
                     <div className="quote-table-header">Cantidad</div>
-                    <div className="quote-table-header">Acciones</div>
-                    {measurementItemsFromForm(form).map((item) => (
+                    <div className="quote-table-header">Área</div>
+                    <div className="quote-table-header">Metro lineal</div>
+                    <div className="quote-table-header">Subtotal</div>
+                    <div className="quote-table-header">Borrar</div>
+                    {quote.measureRows.map((item) => (
                       <div key={item.id} className="quote-table-row quote-measure-row">
                         <input value={item.nombre} onChange={(event) => updateMeasureItem(item.id, 'nombre', event.target.value)} aria-label="Nombre de medida" />
                         <input type="number" value={item.ancho} onChange={(event) => updateMeasureItem(item.id, 'ancho', numberValue(event.target.value))} aria-label="Ancho" />
                         <input type="number" value={item.alto} onChange={(event) => updateMeasureItem(item.id, 'alto', numberValue(event.target.value))} aria-label="Alto" />
                         <input type="number" value={item.fondo} onChange={(event) => updateMeasureItem(item.id, 'fondo', numberValue(event.target.value))} aria-label="Fondo" />
                         <input type="number" value={item.cantidad} onChange={(event) => updateMeasureItem(item.id, 'cantidad', numberValue(event.target.value))} aria-label="Cantidad" />
+                        <strong>{decimal(item.areaTotal)} m²</strong>
+                        <strong>{decimal(item.linearTotal)} m</strong>
+                        <strong>{decimal(item.areaTotal)} m²</strong>
                         <button type="button" className="ghost" onClick={() => removeMeasureItem(item.id)} aria-label="Eliminar medida"><Eraser size={16} /></button>
                       </div>
                     ))}
@@ -3141,6 +3201,7 @@ function App() {
                   </div>
                   <div className="quote-table quote-materials-table">
                     <div className="quote-table-header">Material</div>
+                    <div className="quote-table-header">Base</div>
                     <div className="quote-table-header">Tipo</div>
                     <div className="quote-table-header">Cantidad</div>
                     <div className="quote-table-header">Ancho</div>
@@ -3157,11 +3218,17 @@ function App() {
                     {quote.materialRows.map((item) => (
                       <div key={item.id} className="quote-table-row quote-material-row">
                         <input value={item.nombre} onChange={(event) => updateMaterialItem(item.id, 'nombre', event.target.value)} aria-label="Material" />
-                        <select value={item.calculo} onChange={(event) => updateMaterialItem(item.id, 'calculo', event.target.value)} aria-label="Cálculo">
+                        <select value={item.baseCalculo} onChange={(event) => updateMaterialItem(item.id, 'baseCalculo', event.target.value)} aria-label="Base de cálculo">
+                          <option value="medidas_area">Área total de medidas</option>
+                          <option value="manual_area">Área manual</option>
+                          <option value="lineal">Metro lineal</option>
+                          <option value="manual_qty">Cantidad manual</option>
+                        </select>
+                        <select value={item.tipoCompra} onChange={(event) => updateMaterialItem(item.id, 'tipoCompra', event.target.value)} aria-label="Tipo de compra">
                           <option value="manual">Manual</option>
                           <option value="pieza">Pieza</option>
-                          <option value="area">m²</option>
-                          <option value="lineal">Lineal</option>
+                          <option value="area">Metro cuadrado</option>
+                          <option value="lineal">Metro lineal</option>
                           <option value="hoja">Hoja / placa</option>
                         </select>
                         <input type="number" value={item.cantidad} onChange={(event) => updateMaterialItem(item.id, 'cantidad', numberValue(event.target.value))} aria-label="Cantidad" />
@@ -3176,6 +3243,10 @@ function App() {
                         <strong>{money(item.costTotal)}</strong>
                         <strong>{money(item.saleTotal)}</strong>
                         <button type="button" className="ghost" onClick={() => removeMaterialItem(item.id)} aria-label="Eliminar material"><Eraser size={16} /></button>
+                        <details className="material-calc-detail">
+                          <summary>¿Cómo se calculó?</summary>
+                          {(item.calculationSteps || []).map((line) => <span key={line}>{line}</span>)}
+                        </details>
                       </div>
                     ))}
                   </div>
