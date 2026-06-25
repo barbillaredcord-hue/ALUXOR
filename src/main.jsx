@@ -511,19 +511,24 @@ function normalizeMaterialItem(item, index = 0, data = {}) {
   const fallbackCalculo = item?.usarArea
     ? (unidad === 'metro lineal' ? 'lineal' : 'area')
     : 'manual';
+  const calculo = clean(item?.calculo || item?.tipoCompra, fallbackCalculo);
   return {
     id: item?.id || `mat-${Date.now()}-${index}`,
     nombre: clean(item?.nombre, clean(data.materialCotizacion, 'Material')),
     unidad,
     usarArea: Boolean(item?.usarArea),
-    calculo: clean(item?.calculo, fallbackCalculo),
+    calculo,
+    tipoCompra: clean(item?.tipoCompra, calculo),
     cantidad: item?.cantidad === '' ? '' : positiveNumber(item?.cantidad),
+    ancho: item?.ancho === '' ? '' : positiveNumber(item?.ancho),
+    alto: item?.alto === '' ? '' : positiveNumber(item?.alto),
+    largo: item?.largo === '' ? '' : positiveNumber(item?.largo),
     grosor: item?.grosor === '' ? '' : positiveNumber(item?.grosor ?? data.grosorMaterial),
     costoUnitario: item?.costoUnitario === '' ? '' : positiveNumber(item?.costoUnitario ?? data.costoMaterialM2),
     precioUnitario: item?.precioUnitario === '' ? '' : positiveNumber(item?.precioUnitario ?? data.precioM2),
     merma: item?.merma === '' ? '' : percentValue(item?.merma ?? data.merma),
     margen: item?.margen === '' ? '' : positiveNumber(item?.margen ?? data.margenMaterial),
-    precioManual: item?.precioManual ?? item?.precioUnitario !== undefined,
+    precioManual: Boolean(item?.precioManual),
     nota: clean(item?.nota),
   };
 }
@@ -554,12 +559,13 @@ function normalizeAccessoryItem(item, index = 0, data = {}) {
   return {
     id: item?.id || `acc-${Date.now()}-${index}`,
     nombre: clean(item?.nombre, clean(data.herrajes, 'Accesorio')),
+    tipoCompra: clean(item?.tipoCompra, 'pieza'),
     cantidad: item?.cantidad === '' ? '' : Math.max(1, positiveNumber(item?.cantidad) || 1),
     costoUnitario: item?.costoUnitario === '' ? '' : positiveNumber(item?.costoUnitario ?? data.costoHerrajes),
     precioUnitario: item?.precioUnitario === '' ? '' : positiveNumber(item?.precioUnitario ?? data.precioHerrajes),
     merma: item?.merma === '' ? '' : percentValue(item?.merma ?? 0),
     margen: item?.margen === '' ? '' : positiveNumber(item?.margen ?? data.margenMaterial),
-    precioManual: item?.precioManual ?? item?.precioUnitario !== undefined,
+    precioManual: Boolean(item?.precioManual),
     nota: clean(item?.nota),
   };
 }
@@ -581,16 +587,22 @@ function accessoryItemsFromForm(data) {
 }
 
 function materialItemQuantity(item, quoteBasis = {}) {
-  const calculo = clean(item.calculo, item.usarArea ? 'area' : 'manual');
-  if (calculo === 'area') return positiveNumber(quoteBasis.areaTotal);
-  if (calculo === 'lineal') return positiveNumber(quoteBasis.linearTotal);
+  const calculo = clean(item.calculo || item.tipoCompra, item.usarArea ? 'area' : 'manual');
+  const cantidad = Math.max(1, positiveNumber(item.cantidad) || 1);
+  const itemArea = (positiveNumber(item.ancho) / 100) * (positiveNumber(item.alto) / 100) * cantidad;
+  const itemLineal = (positiveNumber(item.largo) / 100) * cantidad;
+  if (calculo === 'area') return itemArea > 0 ? itemArea : positiveNumber(quoteBasis.areaTotal);
+  if (calculo === 'hoja') return itemArea;
+  if (calculo === 'lineal') return itemLineal > 0 ? itemLineal : positiveNumber(quoteBasis.linearTotal);
   return positiveNumber(item.cantidad);
 }
 
 function materialCalcLabel(item) {
-  const calculo = clean(item.calculo, item.usarArea ? 'area' : 'manual');
-  if (calculo === 'area') return 'm² de medidas';
-  if (calculo === 'lineal') return 'metro lineal de perímetro';
+  const calculo = clean(item.calculo || item.tipoCompra, item.usarArea ? 'area' : 'manual');
+  if (calculo === 'area') return 'm²';
+  if (calculo === 'hoja') return 'hoja / placa';
+  if (calculo === 'lineal') return 'metro lineal';
+  if (calculo === 'pieza') return 'pieza';
   return 'cantidad manual';
 }
 
@@ -897,6 +909,8 @@ function calculateQuote(data) {
 
   const materialRows = materialItemsFromForm(data, areaTotal).map((item) => {
     const rowQuantity = materialItemQuantity(item, quoteBasis);
+    const itemAreaTotal = (positiveNumber(item.ancho) / 100) * (positiveNumber(item.alto) / 100) * Math.max(1, positiveNumber(item.cantidad) || 1);
+    const itemLinearTotal = (positiveNumber(item.largo) / 100) * Math.max(1, positiveNumber(item.cantidad) || 1);
     const rowMerma = percentValue(item.merma);
     const rowMargin = item.margen === '' ? margenMaterial : positiveNumber(item.margen);
     const pricing = priceRule(item.costoUnitario, rowMerma, rowMargin);
@@ -914,7 +928,8 @@ function calculateQuote(data) {
       rowQuantity,
       rowMargin,
       calcLabel: materialCalcLabel(item),
-      areaTotal: rowQuantity,
+      areaTotal: itemAreaTotal || (['area', 'hoja'].includes(item.calculo) ? rowQuantity : 0),
+      largoTotal: itemLinearTotal || (item.calculo === 'lineal' ? rowQuantity : 0),
       baseCost,
       wasteCost,
       costTotal,
@@ -942,6 +957,7 @@ function calculateQuote(data) {
     return {
       ...item,
       rowQuantity,
+      tipoCompra: clean(item.tipoCompra, 'pieza'),
       rowMerma,
       rowMargin,
       areaTotal: rowQuantity,
@@ -1779,7 +1795,7 @@ function professionalDocFromQuote(data, quote) {
   };
 }
 
-function quotePrintHtml(data, quote, materials, mode = 'client', doc = null) {
+function quotePrintHtml(data, quote, materials, mode = 'client', doc = null, logo = '') {
   const isBusiness = mode === 'business';
   const today = new Date().toLocaleDateString('es-MX');
   const folio = clean(data.folio || data.folioManual, 'Por asignar');
@@ -1820,6 +1836,7 @@ function quotePrintHtml(data, quote, materials, mode = 'client', doc = null) {
   <style>
     body{font-family:Arial,sans-serif;margin:0;padding:32px;color:#17201b}
     header{display:flex;justify-content:space-between;gap:24px;border-bottom:3px solid #22745f;padding-bottom:18px;margin-bottom:24px}
+    .brandline{display:flex;align-items:center;gap:12px}.logo{width:58px;height:58px;object-fit:contain;border-radius:8px}
     h1{margin:0;font-size:30px} h2{margin:24px 0 10px;font-size:18px} p{line-height:1.45}
     .brand{color:#22745f;font-weight:800}.total{font-size:34px;font-weight:900;color:#22745f}
     table{width:100%;border-collapse:collapse;margin-top:10px}td,th{border:1px solid #d8d2c7;padding:10px;text-align:left}th{background:#eef1ed}
@@ -1828,7 +1845,7 @@ function quotePrintHtml(data, quote, materials, mode = 'client', doc = null) {
     button{margin-top:20px;padding:12px 18px;border:0;border-radius:7px;background:#22745f;color:white;font-weight:800}
     @media print{button{display:none}body{padding:20px}}
   </style></head><body>
-    <header><div><div class="brand">${BRAND_NAME}</div><h1>${escapeHtml(documentData.titulo || (isBusiness ? 'Hoja interna del negocio' : 'Cotización'))}</h1><p>${today}</p></div><div><div>Total</div><div class="total">${escapeHtml(documentData.total || money(quote.total))}</div></div></header>
+    <header><div class="brandline">${logo ? `<img src="${logo}" class="logo" alt="Logo" />` : ''}<div><div class="brand">${BRAND_NAME}</div><h1>${escapeHtml(documentData.titulo || (isBusiness ? 'Hoja interna del negocio' : 'Cotización'))}</h1><p>${today}</p></div></div><div><div>Total</div><div class="total">${escapeHtml(documentData.total || money(quote.total))}</div></div></header>
     ${isBusiness ? '<div class="internal"><strong>Uso interno ALUXOR.</strong> Esta hoja incluye costos, utilidad y datos de operación. No entregar al cliente.</div>' : ''}
     <section class="grid"><div class="box"><strong>Cliente</strong><p>${escapeHtml(documentData.cliente || clean(data.clienteNombre, 'Cliente'))}${data.clienteTelefono ? `<br>${data.clienteTelefono}` : ''}</p></div><div class="box"><strong>Proyecto</strong><p>${data.producto}<br>${data.tipoTrabajo}<br>${data.medidas}</p></div></section>
     <section class="grid"><div class="box"><strong>Folio</strong><p>${folio}</p></div><div class="box"><strong>Forma de pago</strong><p>${formaPago}</p></div></section>
@@ -2071,7 +2088,7 @@ function App() {
   const [typeDetails, setTypeDetails] = useState(loadTypeDetails);
   const [appLogo, setAppLogo] = useState(loadAppLogo);
   const [floatingSummary, setFloatingSummary] = useState({ x: 24, y: 120, compact: false, minimized: false });
-  const [quickCalc, setQuickCalc] = useState({ ancho: 100, alto: 100, cantidad: 1, largo: 100, costoM2: 1000, merma: 8, margen: 35 });
+  const [quickCalc, setQuickCalc] = useState({ materialId: '', nombre: 'Melamina', tipoCompra: 'hoja', ancho: 122, alto: 244, largo: 100, cantidad: 1, precioTotal: 1200, merma: 8, margen: 35 });
   const [pdfEditor, setPdfEditor] = useState(null);
 
   const quote = useMemo(() => calculateQuote(form), [form]);
@@ -2084,9 +2101,15 @@ function App() {
   const mainOutput = outputs[0];
   const quoteOutput = outputs[1];
   const currentTypeOptions = typeOptionsFor(form.giro, typeDetails);
-  const quickArea = (positiveNumber(quickCalc.ancho) / 100) * (positiveNumber(quickCalc.alto) / 100) * Math.max(1, positiveNumber(quickCalc.cantidad) || 1);
-  const quickLinear = (positiveNumber(quickCalc.largo) / 100) * Math.max(1, positiveNumber(quickCalc.cantidad) || 1);
-  const quickPricing = priceRule(quickCalc.costoM2, quickCalc.merma, quickCalc.margen);
+  const quickCantidad = Math.max(1, positiveNumber(quickCalc.cantidad) || 1);
+  const quickAreaPorPieza = (positiveNumber(quickCalc.ancho) / 100) * (positiveNumber(quickCalc.alto) / 100);
+  const quickArea = quickAreaPorPieza * quickCantidad;
+  const quickLinear = (positiveNumber(quickCalc.largo) / 100) * quickCantidad;
+  const quickCostoM2 = quickArea > 0 ? positiveNumber(quickCalc.precioTotal) / quickArea : 0;
+  const quickCostoLineal = quickLinear > 0 ? positiveNumber(quickCalc.precioTotal) / quickLinear : 0;
+  const quickCostoUnitario = quickCalc.tipoCompra === 'lineal' ? quickCostoLineal : quickCalc.tipoCompra === 'pieza' || quickCalc.tipoCompra === 'manual' ? positiveNumber(quickCalc.precioTotal) / quickCantidad : quickCostoM2;
+  const quickPricing = priceRule(quickCostoUnitario, quickCalc.merma, quickCalc.margen);
+  const quickProfit = quickPricing.precioCliente - quickPricing.costoConMerma;
 
   const menuItems = [
     { id: 'inicio', label: 'Inicio', icon: LayoutDashboard },
@@ -2095,6 +2118,7 @@ function App() {
     { id: 'catalogo', label: 'Catálogo', icon: TableProperties },
     { id: 'historial', label: 'Historial', icon: History },
     { id: 'textos', label: 'Textos', icon: Sparkles },
+    { id: 'ajustes', label: 'Ajustes', icon: Accessibility },
   ];
 
   useEffect(() => {
@@ -2292,7 +2316,10 @@ function App() {
         if (field === 'calculo') {
           next.usarArea = value !== 'manual';
           if (value === 'area') next.unidad = 'm²';
+          if (value === 'hoja') next.unidad = 'm²';
+          if (value === 'pieza') next.unidad = 'pieza';
           if (value === 'lineal') next.unidad = 'metro lineal';
+          next.tipoCompra = value;
         }
         if (field === 'unidad' && value === 'metro lineal') next.calculo = 'lineal';
         if (field === 'unidad' && value === 'm²') next.calculo = 'area';
@@ -2317,7 +2344,11 @@ function App() {
           unidad: 'pieza',
           usarArea: false,
           calculo: 'manual',
+          tipoCompra: 'manual',
           cantidad: 1,
+          ancho: 0,
+          alto: 0,
+          largo: 0,
           grosor: current.grosorMaterial,
           costoUnitario: 0,
           precioUnitario: 0,
@@ -2407,6 +2438,7 @@ function App() {
         {
           id: `acc-${Date.now()}`,
           nombre: 'Nuevo accesorio',
+          tipoCompra: 'pieza',
           cantidad: 1,
           costoUnitario: 0,
           precioUnitario: 0,
@@ -2698,15 +2730,17 @@ function App() {
   }
 
   function updateQuickCalc(field, value) {
-    setQuickCalc((current) => ({ ...current, [field]: numberValue(value) }));
+    setQuickCalc((current) => ({ ...current, [field]: field === 'nombre' || field === 'tipoCompra' || field === 'materialId' ? value : numberValue(value) }));
   }
 
   function quickCalcText() {
     return [
-      `Área m²: ${decimal(quickArea)} m²`,
-      `Metro lineal: ${decimal(quickLinear)} m`,
+      `Material: ${quickCalc.nombre}`,
+      `Área total comprada: ${decimal(quickArea)} m²`,
+      `Costo real por m²: ${money(quickCostoM2)}`,
+      `Costo real por metro lineal: ${money(quickCostoLineal)}`,
       `Costo con merma: ${money(quickPricing.costoConMerma)}`,
-      `Precio con margen: ${money(quickPricing.precioCliente)}`,
+      `Precio recomendado: ${money(quickPricing.precioCliente)}`,
     ].join('\n');
   }
 
@@ -2734,28 +2768,35 @@ function App() {
   function applyQuickCalcToMaterial() {
     setForm((current) => {
       const materialItems = materialItemsFromForm(current, quoteAreaTotal(current));
-      const first = materialItems[0] || normalizeMaterialItem({}, 0, current);
+      const selectedId = quickCalc.materialId;
+      const target = materialItems.find((item) => item.id === selectedId);
+      const nextItem = {
+        ...(target || normalizeMaterialItem({ id: `mat-${Date.now()}`, nombre: quickCalc.nombre }, materialItems.length, current)),
+        nombre: clean(quickCalc.nombre, 'Material'),
+        calculo: quickCalc.tipoCompra === 'hoja' ? 'hoja' : quickCalc.tipoCompra,
+        tipoCompra: quickCalc.tipoCompra,
+        unidad: quickCalc.tipoCompra === 'lineal' ? 'metro lineal' : ['pieza', 'manual'].includes(quickCalc.tipoCompra) ? 'pieza' : 'm²',
+        usarArea: ['hoja', 'area', 'lineal'].includes(quickCalc.tipoCompra),
+        cantidad: quickCantidad,
+        ancho: positiveNumber(quickCalc.ancho),
+        alto: positiveNumber(quickCalc.alto),
+        largo: positiveNumber(quickCalc.largo),
+        costoUnitario: Math.round(quickCostoUnitario),
+        precioUnitario: Math.round(quickPricing.precioCliente),
+        merma: percentValue(quickCalc.merma),
+        margen: positiveNumber(quickCalc.margen),
+        precioManual: false,
+      };
+      const nextItems = target
+        ? materialItems.map((item) => (item.id === selectedId ? nextItem : item))
+        : [nextItem, ...materialItems];
       return {
         ...current,
-        costoMaterialM2: Math.round(positiveNumber(quickCalc.costoM2)),
+        costoMaterialM2: Math.round(quickCostoM2 || quickCostoUnitario),
         precioM2: Math.round(quickPricing.precioCliente),
         merma: percentValue(quickCalc.merma),
         margenMaterial: positiveNumber(quickCalc.margen),
-        materialItems: [
-          {
-            ...first,
-            calculo: 'manual',
-            unidad: 'm²',
-            usarArea: false,
-            cantidad: decimal(quickArea),
-            costoUnitario: Math.round(positiveNumber(quickCalc.costoM2)),
-            precioUnitario: Math.round(quickPricing.precioCliente),
-            merma: percentValue(quickCalc.merma),
-            margen: positiveNumber(quickCalc.margen),
-            precioManual: false,
-          },
-          ...materialItems.slice(1),
-        ],
+        materialItems: nextItems,
       };
     });
   }
@@ -2794,7 +2835,7 @@ function App() {
   function generateProfessionalPdf(mode = 'client') {
     const printWindow = window.open('', '_blank', 'noopener,noreferrer');
     if (!printWindow) return;
-    printWindow.document.write(quotePrintHtml(form, quote, materials, mode, pdfEditor?.doc));
+    printWindow.document.write(quotePrintHtml(form, quote, materials, mode, pdfEditor?.doc, appLogo));
     printWindow.document.close();
     setPdfEditor(null);
   }
@@ -2806,6 +2847,10 @@ function App() {
     const reader = new FileReader();
     reader.onload = () => setAppLogo(String(reader.result || ''));
     reader.readAsDataURL(file);
+  }
+
+  function removeAppLogo() {
+    setAppLogo('');
   }
 
   const input = (field, type = 'text') => (
@@ -2882,7 +2927,10 @@ function App() {
         <header className="hero">
           <div>
             <p className="eyebrow">Versión {APP_VERSION}</p>
-            <h1>ALUXOR/BosqueReal</h1>
+            <div className="hero-brand-line">
+              {appLogo ? <img src={appLogo} alt="Logo ALUXOR/BosqueReal" className="hero-logo" /> : null}
+              <h1>ALUXOR/BosqueReal</h1>
+            </div>
             <p>Cotizador profesional, anuncios, catálogo, historial sincronizado, planos SVG, vista 3D y PWA móvil.</p>
           </div>
           <div className="hero-actions">
@@ -2984,26 +3032,50 @@ function App() {
               </div>
 
               <details className="quote-accordion quick-calculator" open>
-                <summary>Calculadora rápida</summary>
+                <summary>Calculadora de costo por unidad</summary>
                 <div className="form-grid">
+                  <Field id="quickNombre" label="Nombre del material"><input id="quickNombre" value={quickCalc.nombre} onChange={(event) => updateQuickCalc('nombre', event.target.value)} /></Field>
+                  <Field id="quickTipoCompra" label="Tipo de compra">
+                    <select id="quickTipoCompra" value={quickCalc.tipoCompra} onChange={(event) => updateQuickCalc('tipoCompra', event.target.value)}>
+                      <option value="hoja">Hoja / placa</option>
+                      <option value="pieza">Pieza</option>
+                      <option value="area">Metro cuadrado</option>
+                      <option value="lineal">Metro lineal</option>
+                      <option value="manual">Manual</option>
+                    </select>
+                  </Field>
+                  <Field id="quickMaterialId" label="Material destino">
+                    <select id="quickMaterialId" value={quickCalc.materialId} onChange={(event) => updateQuickCalc('materialId', event.target.value)}>
+                      <option value="">Crear nuevo</option>
+                      {materialItemsFromForm(form, quote.areaTotal).map((item) => <option key={item.id} value={item.id}>{item.nombre}</option>)}
+                    </select>
+                  </Field>
                   <Field id="quickAncho" label="Ancho cm"><input id="quickAncho" type="number" value={quickCalc.ancho} onChange={(event) => updateQuickCalc('ancho', event.target.value)} /></Field>
                   <Field id="quickAlto" label="Alto cm"><input id="quickAlto" type="number" value={quickCalc.alto} onChange={(event) => updateQuickCalc('alto', event.target.value)} /></Field>
-                  <Field id="quickCantidad" label="Cantidad"><input id="quickCantidad" type="number" value={quickCalc.cantidad} onChange={(event) => updateQuickCalc('cantidad', event.target.value)} /></Field>
                   <Field id="quickLargo" label="Largo cm"><input id="quickLargo" type="number" value={quickCalc.largo} onChange={(event) => updateQuickCalc('largo', event.target.value)} /></Field>
-                  <Field id="quickCostoM2" label="Costo por m²"><input id="quickCostoM2" type="number" value={quickCalc.costoM2} onChange={(event) => updateQuickCalc('costoM2', event.target.value)} /></Field>
+                  <Field id="quickCantidad" label="Cantidad comprada"><input id="quickCantidad" type="number" value={quickCalc.cantidad} onChange={(event) => updateQuickCalc('cantidad', event.target.value)} /></Field>
+                  <Field id="quickPrecioTotal" label="Precio total de compra"><input id="quickPrecioTotal" type="number" value={quickCalc.precioTotal} onChange={(event) => updateQuickCalc('precioTotal', event.target.value)} /></Field>
                   <Field id="quickMerma" label="Merma %"><input id="quickMerma" type="number" value={quickCalc.merma} onChange={(event) => updateQuickCalc('merma', event.target.value)} /></Field>
                   <Field id="quickMargen" label="Margen %"><input id="quickMargen" type="number" value={quickCalc.margen} onChange={(event) => updateQuickCalc('margen', event.target.value)} /></Field>
                 </div>
                 <div className="quick-results">
-                  <div><span>Área m²</span><strong>{decimal(quickArea)} m²</strong></div>
-                  <div><span>Metro lineal</span><strong>{decimal(quickLinear)} m</strong></div>
+                  <div><span>Área total comprada</span><strong>{decimal(quickArea)} m²</strong></div>
+                  <div><span>Costo real por m²</span><strong>{money(quickCostoM2)}</strong></div>
+                  <div><span>Costo real por metro lineal</span><strong>{money(quickCostoLineal)}</strong></div>
                   <div><span>Costo con merma</span><strong>{money(quickPricing.costoConMerma)}</strong></div>
-                  <div><span>Precio con margen</span><strong>{money(quickPricing.precioCliente)}</strong></div>
+                  <div><span>Precio recomendado al cliente</span><strong>{money(quickPricing.precioCliente)}</strong></div>
+                  <div><span>Utilidad estimada</span><strong>{money(quickProfit)}</strong></div>
                 </div>
-                <p className="advanced-note">Para qué sirve: calcula rápido área, metro lineal y precio sugerido. Cómo se calcula: ancho x alto x cantidad; largo x cantidad; costo con merma y margen.</p>
+                <details className="field-help calc-help">
+                  <summary>¿Cómo se calculó?</summary>
+                  <span>Se multiplica ancho x alto para obtener m² por hoja.</span>
+                  <span>Se multiplica por cantidad comprada.</span>
+                  <span>Se divide precio total entre m² totales.</span>
+                  <span>Se aplica merma.</span>
+                  <span>Se aplica margen para obtener precio al cliente.</span>
+                </details>
                 <div className="actions compact">
-                  <button type="button" className="ghost" onClick={() => copyText(quickCalcText(), 'Calculadora rápida')}><Copy size={18} /> Copiar</button>
-                  <button type="button" className="ghost" onClick={applyQuickCalcToQuote}>Aplicar a cotización</button>
+                  <button type="button" className="ghost" onClick={() => copyText(quickCalcText(), 'Calculadora de costo')}><Copy size={18} /> Copiar</button>
                   <button type="button" className="ghost" onClick={applyQuickCalcToMaterial}>Aplicar a material</button>
                 </div>
               </details>
@@ -3069,23 +3141,33 @@ function App() {
                   </div>
                   <div className="quote-table quote-materials-table">
                     <div className="quote-table-header">Material</div>
-                    <div className="quote-table-header">Cálculo</div>
+                    <div className="quote-table-header">Tipo</div>
+                    <div className="quote-table-header">Cantidad</div>
+                    <div className="quote-table-header">Ancho</div>
+                    <div className="quote-table-header">Alto</div>
+                    <div className="quote-table-header">Largo</div>
                     <div className="quote-table-header">Área total</div>
                     <div className="quote-table-header">Merma %</div>
                     <div className="quote-table-header">Margen %</div>
-                    <div className="quote-table-header">Costo unitario</div>
-                    <div className="quote-table-header">Precio unitario</div>
+                    <div className="quote-table-header">Costo unit.</div>
+                    <div className="quote-table-header">Precio unit.</div>
                     <div className="quote-table-header">Total costo</div>
                     <div className="quote-table-header">Total cliente</div>
-                    <div className="quote-table-header">Acciones</div>
+                    <div className="quote-table-header">Borrar</div>
                     {quote.materialRows.map((item) => (
                       <div key={item.id} className="quote-table-row quote-material-row">
                         <input value={item.nombre} onChange={(event) => updateMaterialItem(item.id, 'nombre', event.target.value)} aria-label="Material" />
                         <select value={item.calculo} onChange={(event) => updateMaterialItem(item.id, 'calculo', event.target.value)} aria-label="Cálculo">
+                          <option value="manual">Manual</option>
+                          <option value="pieza">Pieza</option>
                           <option value="area">m²</option>
-                          <option value="lineal">Metro lineal</option>
-                          <option value="manual">Manual / pieza</option>
+                          <option value="lineal">Lineal</option>
+                          <option value="hoja">Hoja / placa</option>
                         </select>
+                        <input type="number" value={item.cantidad} onChange={(event) => updateMaterialItem(item.id, 'cantidad', numberValue(event.target.value))} aria-label="Cantidad" />
+                        <input type="number" value={item.ancho} onChange={(event) => updateMaterialItem(item.id, 'ancho', numberValue(event.target.value))} aria-label="Ancho" />
+                        <input type="number" value={item.alto} onChange={(event) => updateMaterialItem(item.id, 'alto', numberValue(event.target.value))} aria-label="Alto" />
+                        <input type="number" value={item.largo} onChange={(event) => updateMaterialItem(item.id, 'largo', numberValue(event.target.value))} aria-label="Largo" />
                         <strong>{decimal(item.rowQuantity)} {item.unidad}</strong>
                         <input type="number" value={item.merma} onChange={(event) => updateMaterialItem(item.id, 'merma', numberValue(event.target.value))} aria-label="Merma" />
                         <input type="number" value={item.rowMargin} onChange={(event) => updateMaterialItem(item.id, 'margen', numberValue(event.target.value))} aria-label="Margen" />
@@ -3104,20 +3186,24 @@ function App() {
                   <summary>5. Herrajes y accesorios</summary>
                   <div className="quote-table quote-accessories-table">
                     <div className="quote-table-header">Accesorio</div>
+                    <div className="quote-table-header">Tipo</div>
                     <div className="quote-table-header">Cantidad</div>
-                    <div className="quote-table-header">Área total</div>
                     <div className="quote-table-header">Merma %</div>
                     <div className="quote-table-header">Margen %</div>
-                    <div className="quote-table-header">Costo unitario</div>
-                    <div className="quote-table-header">Precio unitario</div>
+                    <div className="quote-table-header">Costo unit.</div>
+                    <div className="quote-table-header">Precio unit.</div>
                     <div className="quote-table-header">Total costo</div>
                     <div className="quote-table-header">Total cliente</div>
-                    <div className="quote-table-header">Acciones</div>
+                    <div className="quote-table-header">Borrar</div>
                     {quote.accessoryRows.map((item) => (
                       <div key={item.id} className="quote-table-row quote-accessory-row">
                         <input value={item.nombre} onChange={(event) => updateAccessoryItem(item.id, 'nombre', event.target.value)} aria-label="Accesorio" />
+                        <select value={item.tipoCompra} onChange={(event) => updateAccessoryItem(item.id, 'tipoCompra', event.target.value)} aria-label="Tipo de accesorio">
+                          <option value="pieza">Pieza</option>
+                          <option value="juego">Juego</option>
+                          <option value="manual">Manual</option>
+                        </select>
                         <input type="number" value={item.cantidad} onChange={(event) => updateAccessoryItem(item.id, 'cantidad', numberValue(event.target.value))} aria-label="Cantidad" />
-                        <strong>{decimal(item.rowQuantity, 0)} pza(s)</strong>
                         <input type="number" value={item.merma} onChange={(event) => updateAccessoryItem(item.id, 'merma', numberValue(event.target.value))} aria-label="Merma" />
                         <input type="number" value={item.rowMargin} onChange={(event) => updateAccessoryItem(item.id, 'margen', numberValue(event.target.value))} aria-label="Margen" />
                         <input type="number" value={item.costoUnitario} onChange={(event) => updateAccessoryItem(item.id, 'costoUnitario', numberValue(event.target.value))} aria-label="Costo unitario" />
@@ -3207,7 +3293,7 @@ function App() {
                 <strong>Resumen de cotización</strong>
                 <div>
                   <button type="button" onClick={() => setFloatingSummary((current) => ({ ...current, compact: !current.compact }))}>Compacta</button>
-                  <button type="button" onClick={() => setFloatingSummary((current) => ({ ...current, minimized: !current.minimized }))}>{floatingSummary.minimized ? 'Abrir' : 'Minimizar'}</button>
+                  <button type="button" onClick={() => setFloatingSummary((current) => ({ ...current, minimized: !current.minimized }))}>{floatingSummary.minimized ? 'Abrir' : 'Cerrar'}</button>
                   <button type="button" onClick={() => setFloatingSummary({ x: 24, y: 120, compact: false, minimized: false })}>Inicial</button>
                 </div>
               </div>
@@ -3230,8 +3316,8 @@ function App() {
                     <button type="button" className="ghost" onClick={() => openPrint('client')}><FileText size={18} /> Editar PDF</button>
                     <button type="button" className="ghost" onClick={openWhatsApp}><MessageCircle size={18} /> WhatsApp</button>
                   </div>
-                  <div className="floating-analysis">
-                    <h3>Análisis profesional</h3>
+                  <details className="floating-analysis" open={!floatingSummary.compact}>
+                    <summary>Análisis profesional</summary>
                     {professionalAnalysis.map((item) => (
                       <article key={item.role} className="professional-card">
                         <span>{item.role}</span>
@@ -3240,7 +3326,7 @@ function App() {
                         {!floatingSummary.compact && <p>{item.why}</p>}
                       </article>
                     ))}
-                  </div>
+                  </details>
                 </div>
               )}
             </aside>
@@ -3330,6 +3416,31 @@ function App() {
                 </article>
               ))}
             </div>
+          </section>
+        )}
+
+        {activeSection === 'ajustes' && (
+          <section className="panel settings-panel">
+            <div className="section-head">
+              <div>
+                <h2>Ajustes</h2>
+                <p>Logo y vista de marca para sidebar, encabezado y PDF.</p>
+              </div>
+            </div>
+            <div className="settings-grid">
+              <div className="logo-preview-box">
+                {appLogo ? <img src={appLogo} alt="Vista previa del logo" /> : <div className="brand-mark">A</div>}
+                <strong>{BRAND_NAME}</strong>
+              </div>
+              <div className="actions">
+                <label htmlFor="settingsLogoUpload" className="upload-logo">
+                  Subir logo manualmente
+                  <input id="settingsLogoUpload" type="file" accept="image/*" onChange={handleLogoUpload} />
+                </label>
+                <button type="button" className="ghost" onClick={removeAppLogo}>Quitar logo</button>
+              </div>
+            </div>
+            <p className="advanced-note">El logo se guarda automáticamente en localStorage y se reutiliza al abrir la app.</p>
           </section>
         )}
 
@@ -3468,10 +3579,6 @@ function App() {
 
         <footer className="footer-bar">
           <span>Calidad de datos: {score}/12</span>
-          <label htmlFor="logoUpload" className="upload-logo">
-            Subir logo
-            <input id="logoUpload" type="file" accept="image/*" onChange={handleLogoUpload} />
-          </label>
           {copied && <strong>{copied}</strong>}
         </footer>
       </section>
