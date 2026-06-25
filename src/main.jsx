@@ -33,7 +33,7 @@ import { registerServiceWorker } from './pwa';
 
 const APP_VERSION = '2026.05.39';
 const APP_VERSION_QUERY = '20260539';
-const BRAND_NAME = 'ALUXOR';
+const BRAND_NAME = 'ALUXOR/BosqueReal';
 const HISTORY_API = '/api/history';
 
 const defaults = {
@@ -2664,7 +2664,7 @@ function App() {
           {appLogo ? <img src={appLogo} alt="Logo ALUXOR" className="brand-logo" /> : <div className="brand-mark">A</div>}
           <div>
             <strong>{BRAND_NAME}</strong>
-            <span>AnunciaPro</span>
+            <span>Cotizador profesional</span>
           </div>
         </div>
 
@@ -2714,8 +2714,8 @@ function App() {
         <header className="hero">
           <div>
             <p className="eyebrow">Versión {APP_VERSION}</p>
-            <h1>ALUXOR / AnunciaPro</h1>
-            <p>Cotizador, anuncios, catálogo, historial sincronizado, planos SVG, vista 3D y PWA móvil.</p>
+            <h1>ALUXOR/BosqueReal</h1>
+            <p>Cotizador profesional, anuncios, catálogo, historial sincronizado, planos SVG, vista 3D y PWA móvil.</p>
           </div>
           <div className="hero-actions">
             <button type="button" className="ghost" onClick={refreshInstalledApp}><RefreshCw size={18} /> Actualizar app</button>
@@ -2799,23 +2799,14 @@ function App() {
         )}
 
         {activeSection === 'cotizador' && (
-          <section className="panel-grid two-cols">
-            <article className="panel">
-              <div className="live-quote-summary" aria-label="Resumen vivo de la cotización" aria-live="polite">
-                <h3>Resumen vivo</h3>
-                <div className="live-summary-grid">
-                  <div className="live-summary-item live-summary-total"><span>Total cliente</span><strong>{money(quote.total)}</strong></div>
-                  <div className="live-summary-item"><span>Total interno</span><strong>{money(quote.internalTotal)}</strong></div>
-                  <div className="live-summary-item"><span>Utilidad</span><strong>{money(quote.profit)}</strong></div>
-                  <div className="live-summary-item"><span>Anticipo</span><strong>{money(quote.deposit)}</strong></div>
-                  <div className="live-summary-item"><span>Saldo</span><strong>{money(quote.rest)}</strong></div>
-                  <div className="live-summary-item"><span>Estado de datos</span><strong>{dataHealth.score}%</strong></div>
+          <section className="quote-workspace panel-grid two-cols">
+            <article className="panel quote-editor">
+              <div className="section-head quote-head">
+                <div>
+                  <h2>Cotizador profesional</h2>
+                  <p>Captura por secciones, con medidas y materiales listos para editar.</p>
                 </div>
-                {dataHealth.warnings.length > 0 && (
-                  <p className="live-summary-warning" role="status" aria-live="polite">{dataHealth.warnings[0]}</p>
-                )}
               </div>
-              <h2>Cotizador profesional</h2>
               <div className="actions compact">
                 {Object.keys(quoteProfiles).map((key) => (
                   <button key={key} type="button" className="ghost" onClick={() => applyQuoteProfile(key)}>
@@ -2824,45 +2815,209 @@ function App() {
                 ))}
               </div>
 
-              <div className="form-grid">
-                <Field id="clienteNombre" label="Cliente" {...guideFor('clienteNombre')}>{input('clienteNombre')}</Field>
-                <Field id="clienteTelefono" label="Teléfono" {...guideFor('clienteTelefono')}>{input('clienteTelefono')}</Field>
-                <Field id="materialCotizacion" label="Material cotización" {...guideFor('materialCotizacion')}>{input('materialCotizacion')}</Field>
-                <Field id="precioM2" label="Precio m²" {...guideFor('precioM2')}>{input('precioM2', 'number')}</Field>
-                <Field id="costoMaterialM2" label="Costo m²" {...guideFor('costoMaterialM2')}>{input('costoMaterialM2', 'number')}</Field>
-                <Field id="merma" label="Merma %" {...guideFor('merma')}>{input('merma', 'number')}</Field>
-                <Field id="margenMaterial" label="Margen %" {...guideFor('margenMaterial')}>{input('margenMaterial', 'number')}</Field>
-                <Field id="manoObra" label="Mano de obra" {...guideFor('manoObra')}>{input('manoObra', 'number')}</Field>
-                <Field id="extras" label="Extras" {...guideFor('extras')}>{input('extras', 'number')}</Field>
-                <Field id="descuento" label="Descuento %" {...guideFor('descuento')}>{input('descuento', 'number')}</Field>
-                <Field id="anticipo" label="Anticipo %" {...guideFor('anticipo')}>{input('anticipo', 'number')}</Field>
-                <Field id="vigencia" label="Vigencia días" {...guideFor('vigencia')}>{input('vigencia', 'number')}</Field>
-                <Field id="condiciones" label="Condiciones" {...guideFor('condiciones')}>{textareaInput('condiciones')}</Field>
-              </div>
+              <div className="quote-accordion-list">
+                <details className="quote-accordion" open>
+                  <summary>1. Cliente</summary>
+                  <div className="form-grid">
+                    <Field id="clienteNombre" label="Cliente" {...guideFor('clienteNombre')}>{input('clienteNombre')}</Field>
+                    <Field id="clienteTelefono" label="Teléfono" {...guideFor('clienteTelefono')}>{input('clienteTelefono')}</Field>
+                    <Field id="ciudad" label="Ciudad">{input('ciudad')}</Field>
+                    <Field id="whatsapp" label="WhatsApp">{input('whatsapp')}</Field>
+                  </div>
+                </details>
 
-              <div className="advanced-quote-panel">
-                <h3>Cotización avanzada</h3>
-                <div className="advanced-grid">
-                  <Field id="folioManual" label="Folio manual opcional" {...guideFor('folioManual')}>{input('folioManual')}</Field>
-                  <Field id="estadoCotizacion" label="Estado de cotización" {...guideFor('estadoCotizacion')}>
-                    <select id="estadoCotizacion" value={form.estadoCotizacion} onChange={(event) => update('estadoCotizacion', event.target.value)}>
-                      <option>Pendiente</option>
-                      <option>Enviada</option>
-                      <option>Aceptada</option>
-                      <option>En fabricación</option>
-                      <option>Instalación</option>
-                      <option>Terminada</option>
-                      <option>Cancelada</option>
-                    </select>
-                  </Field>
-                  <Field id="formaPago" label="Forma de pago" {...guideFor('formaPago')}>{input('formaPago')}</Field>
-                  <Field id="notasCliente" label="Notas para cliente" {...guideFor('notasCliente')}>{textareaInput('notasCliente')}</Field>
-                  <Field id="notasInternas" label="Notas internas" {...guideFor('notasInternas')}>{textareaInput('notasInternas')}</Field>
+                <details className="quote-accordion">
+                  <summary>2. Proyecto / diseño</summary>
+                  <div className="form-grid">
+                    <Field id="giro" label="Giro">{input('giro')}</Field>
+                    <Field id="tipoTrabajo" label="Tipo de trabajo">
+                      <select id="tipoTrabajo" value={form.tipoTrabajo} onChange={(event) => update('tipoTrabajo', event.target.value)}>
+                        {currentTypeOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+                      </select>
+                    </Field>
+                    <Field id="producto" label="Producto" {...guideFor('producto')}>{input('producto')}</Field>
+                    <Field id="material" label="Diseño / acabado base">{input('material')}</Field>
+                    <Field id="acabado" label="Acabado">{input('acabado')}</Field>
+                    <Field id="beneficio" label="Beneficio">{textareaInput('beneficio')}</Field>
+                  </div>
+                </details>
+
+                <details className="quote-accordion" open>
+                  <summary>3. Medidas</summary>
+                  <div className="quote-table quote-measures-table">
+                    <div className="quote-table-header">Nombre</div>
+                    <div className="quote-table-header">Ancho</div>
+                    <div className="quote-table-header">Alto</div>
+                    <div className="quote-table-header">Fondo</div>
+                    <div className="quote-table-header">Cantidad</div>
+                    <div className="quote-table-header">Acciones</div>
+                    {measurementItemsFromForm(form).map((item) => (
+                      <div key={item.id} className="quote-table-row quote-measure-row">
+                        <input value={item.nombre} onChange={(event) => updateMeasureItem(item.id, 'nombre', event.target.value)} aria-label="Nombre de medida" />
+                        <input type="number" value={item.ancho} onChange={(event) => updateMeasureItem(item.id, 'ancho', numberValue(event.target.value))} aria-label="Ancho" />
+                        <input type="number" value={item.alto} onChange={(event) => updateMeasureItem(item.id, 'alto', numberValue(event.target.value))} aria-label="Alto" />
+                        <input type="number" value={item.fondo} onChange={(event) => updateMeasureItem(item.id, 'fondo', numberValue(event.target.value))} aria-label="Fondo" />
+                        <input type="number" value={item.cantidad} onChange={(event) => updateMeasureItem(item.id, 'cantidad', numberValue(event.target.value))} aria-label="Cantidad" />
+                        <button type="button" className="ghost" onClick={() => removeMeasureItem(item.id)} aria-label="Eliminar medida"><Eraser size={16} /></button>
+                      </div>
+                    ))}
+                  </div>
+                  <button type="button" className="ghost add-row-button" onClick={addMeasureItem}>Agregar medida</button>
+                </details>
+
+                <details className="quote-accordion" open>
+                  <summary>4. Materiales</summary>
+                  <div className="form-grid material-base-grid">
+                    <Field id="materialCotizacion" label="Material cotización" {...guideFor('materialCotizacion')}>{input('materialCotizacion')}</Field>
+                    <Field id="precioM2" label="Precio m²" {...guideFor('precioM2')}>{input('precioM2', 'number')}</Field>
+                    <Field id="costoMaterialM2" label="Costo m²" {...guideFor('costoMaterialM2')}>{input('costoMaterialM2', 'number')}</Field>
+                    <Field id="merma" label="Merma %" {...guideFor('merma')}>{input('merma', 'number')}</Field>
+                    <Field id="margenMaterial" label="Margen %" {...guideFor('margenMaterial')}>{input('margenMaterial', 'number')}</Field>
+                  </div>
+                  <div className="quote-table quote-materials-table">
+                    <div className="quote-table-header">Material</div>
+                    <div className="quote-table-header">Cálculo</div>
+                    <div className="quote-table-header">Costo unit.</div>
+                    <div className="quote-table-header">Precio unit.</div>
+                    <div className="quote-table-header">Merma</div>
+                    <div className="quote-table-header">Acciones</div>
+                    {quote.materialRows.map((item) => (
+                      <div key={item.id} className="quote-table-row quote-material-row">
+                        <input value={item.nombre} onChange={(event) => updateMaterialItem(item.id, 'nombre', event.target.value)} aria-label="Material" />
+                        <select value={item.calculo} onChange={(event) => updateMaterialItem(item.id, 'calculo', event.target.value)} aria-label="Cálculo">
+                          <option value="area">m²</option>
+                          <option value="lineal">Metro lineal</option>
+                          <option value="manual">Manual / pieza</option>
+                        </select>
+                        <input type="number" value={item.costoUnitario} onChange={(event) => updateMaterialItem(item.id, 'costoUnitario', numberValue(event.target.value))} aria-label="Costo unitario" />
+                        <input type="number" value={item.precioUnitario} onChange={(event) => updateMaterialItem(item.id, 'precioUnitario', numberValue(event.target.value))} aria-label="Precio unitario" />
+                        <input type="number" value={item.merma} onChange={(event) => updateMaterialItem(item.id, 'merma', numberValue(event.target.value))} aria-label="Merma" />
+                        <button type="button" className="ghost" onClick={() => removeMaterialItem(item.id)} aria-label="Eliminar material"><Eraser size={16} /></button>
+                      </div>
+                    ))}
+                  </div>
+                  <button type="button" className="ghost add-row-button" onClick={addMaterialItem}>Agregar material</button>
+                </details>
+
+                <details className="quote-accordion">
+                  <summary>5. Herrajes y accesorios</summary>
+                  <div className="quote-table quote-accessories-table">
+                    <div className="quote-table-header">Accesorio</div>
+                    <div className="quote-table-header">Cantidad</div>
+                    <div className="quote-table-header">Costo</div>
+                    <div className="quote-table-header">Precio</div>
+                    <div className="quote-table-header">Acciones</div>
+                    {quote.accessoryRows.map((item) => (
+                      <div key={item.id} className="quote-table-row quote-accessory-row">
+                        <input value={item.nombre} onChange={(event) => updateAccessoryItem(item.id, 'nombre', event.target.value)} aria-label="Accesorio" />
+                        <input type="number" value={item.cantidad} onChange={(event) => updateAccessoryItem(item.id, 'cantidad', numberValue(event.target.value))} aria-label="Cantidad" />
+                        <input type="number" value={item.costoUnitario} onChange={(event) => updateAccessoryItem(item.id, 'costoUnitario', numberValue(event.target.value))} aria-label="Costo" />
+                        <input type="number" value={item.precioUnitario} onChange={(event) => updateAccessoryItem(item.id, 'precioUnitario', numberValue(event.target.value))} aria-label="Precio" />
+                        <button type="button" className="ghost" onClick={() => removeAccessoryItem(item.id)} aria-label="Eliminar accesorio"><Eraser size={16} /></button>
+                      </div>
+                    ))}
+                  </div>
+                  <button type="button" className="ghost add-row-button" onClick={addAccessoryItem}>Agregar accesorio</button>
+                </details>
+
+                <details className="quote-accordion">
+                  <summary>6. Mano de obra</summary>
+                  <div className="form-grid">
+                    <Field id="manoObra" label="Mano de obra" {...guideFor('manoObra')}>{input('manoObra', 'number')}</Field>
+                    <Field id="incluye" label="Incluye">{textareaInput('incluye')}</Field>
+                    <Field id="entrega" label="Entrega">{input('entrega')}</Field>
+                  </div>
+                </details>
+
+                <details className="quote-accordion">
+                  <summary>7. Ajuste de precio</summary>
+                  <div className="form-grid">
+                    <Field id="extras" label="Extras" {...guideFor('extras')}>{input('extras', 'number')}</Field>
+                    <Field id="descuento" label="Descuento %" {...guideFor('descuento')}>{input('descuento', 'number')}</Field>
+                    <Field id="anticipo" label="Anticipo %" {...guideFor('anticipo')}>{input('anticipo', 'number')}</Field>
+                    <Field id="folioManual" label="Folio manual opcional" {...guideFor('folioManual')}>{input('folioManual')}</Field>
+                  </div>
+                </details>
+
+                <details className="quote-accordion">
+                  <summary>8. Condiciones</summary>
+                  <div className="form-grid">
+                    <Field id="vigencia" label="Vigencia días" {...guideFor('vigencia')}>{input('vigencia', 'number')}</Field>
+                    <Field id="formaPago" label="Forma de pago" {...guideFor('formaPago')}>{input('formaPago')}</Field>
+                    <Field id="estadoCotizacion" label="Estado de cotización" {...guideFor('estadoCotizacion')}>
+                      <select id="estadoCotizacion" value={form.estadoCotizacion} onChange={(event) => update('estadoCotizacion', event.target.value)}>
+                        <option>Pendiente</option>
+                        <option>Enviada</option>
+                        <option>Aceptada</option>
+                        <option>En fabricación</option>
+                        <option>Instalación</option>
+                        <option>Terminada</option>
+                        <option>Cancelada</option>
+                      </select>
+                    </Field>
+                    <Field id="condiciones" label="Condiciones" {...guideFor('condiciones')}>{textareaInput('condiciones')}</Field>
+                    <Field id="notasCliente" label="Notas para cliente" {...guideFor('notasCliente')}>{textareaInput('notasCliente')}</Field>
+                    <Field id="notasInternas" label="Notas internas" {...guideFor('notasInternas')}>{textareaInput('notasInternas')}</Field>
+                  </div>
+                  <p className="advanced-note">Estos datos no modifican el cálculo de la cotización.</p>
+                </details>
+
+                <details className="quote-accordion">
+                  <summary>9. Advertencias</summary>
+                  <div className="data-health-panel compact-health">
+                    <h4>Datos completos</h4>
+                    <div className="data-health-list">
+                      {dataHealth.present.map((item) => <span key={item.label} className="data-health-ok">{item.label}</span>)}
+                    </div>
+                    <h4>Datos faltantes</h4>
+                    <div className="data-health-list">
+                      {dataHealth.missing.map((item) => <span key={item.label} className="data-health-missing">{item.label}</span>)}
+                    </div>
+                    {dataHealth.warnings.length > 0 && (
+                      <>
+                        <h4>Advertencias</h4>
+                        <div className="data-health-list" role="status" aria-live="polite">
+                          {dataHealth.warnings.map((warning) => <span key={warning} className="data-health-warning">{warning}</span>)}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </details>
+              </div>
+            </article>
+
+            <aside className="quote-side">
+              <article className="panel summary-card" aria-label="Resumen de cotización" aria-live="polite">
+                <h2>Resumen de cotización</h2>
+                <div className="total-number">{money(quote.total)}</div>
+                <div className="live-summary-grid">
+                  <div className="live-summary-item"><span>Área total</span><strong>{decimal(quote.areaTotal)} m²</strong></div>
+                  <div className="live-summary-item"><span>Lineal</span><strong>{decimal(quote.linearTotal)} m</strong></div>
+                  <div className="live-summary-item"><span>Anticipo</span><strong>{money(quote.deposit)}</strong></div>
+                  <div className="live-summary-item"><span>Saldo</span><strong>{money(quote.rest)}</strong></div>
+                  <div className="live-summary-item"><span>Utilidad</span><strong>{money(quote.profit)}</strong></div>
+                  <div className="live-summary-item"><span>Datos</span><strong>{dataHealth.score}%</strong></div>
                 </div>
-                <p className="advanced-note">Estos datos no modifican el cálculo de la cotización.</p>
-              </div>
+                {dataHealth.warnings.length > 0 && (
+                  <p className="live-summary-warning" role="status" aria-live="polite">{dataHealth.warnings[0]}</p>
+                )}
+                <div className="actions">
+                  <button type="button" onClick={saveToHistory}><Save size={18} /> Guardar historial</button>
+                  <button type="button" className="ghost" onClick={applySuggestedPrices}><BarChart3 size={18} /> Aplicar sugeridos</button>
+                  <button type="button" className="ghost" onClick={() => openPrint('client')}><FileText size={18} /> PDF cliente</button>
+                  <button type="button" className="ghost" onClick={() => openPrint('business')}><ClipboardList size={18} /> Hoja interna</button>
+                </div>
 
-              <div className="professional-analysis">
+                <h3>Materiales calculados</h3>
+                {materials.map((item) => (
+                  <div key={`${item.name}-${item.detail}`} className="mini-row">
+                    <span>{item.name}</span>
+                    <strong>{money(item.cost)}</strong>
+                  </div>
+                ))}
+              </article>
+
+              <article className="panel professional-analysis">
                 <div>
                   <h3>Análisis profesional</h3>
                   <p>Vista rápida para cotizar, instalar y comprar materiales.</p>
@@ -2878,259 +3033,25 @@ function App() {
                     </ul>
                   </article>
                 ))}
-                <div className="professional-breakdown">
-                  <h3>Desglose completo</h3>
-                  <div className="professional-breakdown-grid">
-                    <article className="professional-card">
-                      <h4>Total cliente</h4>
-                      <div className="professional-row"><span>Materiales</span><strong>{money(quote.material)}</strong></div>
-                      <div className="professional-row"><span>Herrajes/accesorios</span><strong>{money(quote.hardwareSale)}</strong></div>
-                      <div className="professional-row"><span>Mano de obra</span><strong>{money(quote.manoObra)}</strong></div>
-                      <div className="professional-row"><span>Extras</span><strong>{money(quote.extras)}</strong></div>
-                      <div className="professional-row"><span>Subtotal</span><strong>{money(quote.subtotal)}</strong></div>
-                      <div className="professional-row"><span>Descuento</span><strong>-{money(quote.discountAmount)}</strong></div>
-                      <div className="professional-row professional-row-total"><span>Total</span><strong>{money(quote.total)}</strong></div>
-                      <div className="professional-row"><span>Anticipo</span><strong>{money(quote.deposit)}</strong></div>
-                      <div className="professional-row"><span>Saldo</span><strong>{money(quote.rest)}</strong></div>
-                    </article>
-                    <article className="professional-card internal-only">
-                      <h4>Total interno ALUXOR</h4>
-                      <div className="professional-row"><span>Costo material base</span><strong>{money(quote.materialBaseCost)}</strong></div>
-                      <div className="professional-row"><span>Merma</span><strong>{money(quote.wasteCost)}</strong></div>
-                      <div className="professional-row"><span>Costo material interno</span><strong>{money(quote.internalMaterialCost)}</strong></div>
-                      <div className="professional-row"><span>Costo herrajes</span><strong>{money(quote.hardwareCost)}</strong></div>
-                      <div className="professional-row"><span>Extras</span><strong>{money(quote.extras)}</strong></div>
-                      <div className="professional-row professional-row-total"><span>Total interno</span><strong>{money(quote.internalTotal)}</strong></div>
-                      <div className="professional-row"><span>Utilidad estimada</span><strong>{money(quote.profit)}</strong></div>
-                      <div className="professional-row"><span>Margen/utilidad %</span><strong>{decimal(quote.profitPercent, 1)}%</strong></div>
-                    </article>
-                  </div>
+                <div className="professional-card">
+                  <h4>Total cliente</h4>
+                  <div className="professional-row"><span>Materiales</span><strong>{money(quote.material)}</strong></div>
+                  <div className="professional-row"><span>Herrajes/accesorios</span><strong>{money(quote.hardwareSale)}</strong></div>
+                  <div className="professional-row"><span>Mano de obra</span><strong>{money(quote.manoObra)}</strong></div>
+                  <div className="professional-row"><span>Extras</span><strong>{money(quote.extras)}</strong></div>
+                  <div className="professional-row"><span>Descuento</span><strong>-{money(quote.discountAmount)}</strong></div>
+                  <div className="professional-row professional-row-total"><span>Total</span><strong>{money(quote.total)}</strong></div>
                 </div>
-                <div className="calculation-detail-panel">
-                  <section className="calculation-section calculation-client">
-                    <h3>Medidas</h3>
-                    <div className="calculation-table calculation-table-grid calculation-grid-measures">
-                      <div className="calculation-table-header"><strong>Nombre</strong><span className="calculation-cell-help">Qué se mide</span></div>
-                      <div className="calculation-table-header"><strong>Ancho cm</strong><span className="calculation-cell-help">De izquierda a derecha</span></div>
-                      <div className="calculation-table-header"><strong>Alto cm</strong><span className="calculation-cell-help">De abajo hacia arriba</span></div>
-                      <div className="calculation-table-header"><strong>Fondo cm</strong><span className="calculation-cell-help">Profundidad</span></div>
-                      <div className="calculation-table-header"><strong>Cantidad</strong><span className="calculation-cell-help">Piezas iguales</span></div>
-                      <div className="calculation-table-header"><strong>Área m²</strong><span className="calculation-cell-help">Material calculado</span></div>
-                      <div className="calculation-table-header"><strong>Metro lineal</strong><span className="calculation-cell-help">Cantos/perímetro</span></div>
-                      {quote.measureRows.map((item) => (
-                        <div key={item.id} className="calculation-row calculation-table-grid calculation-grid-measures">
-                          <span>{item.nombre}</span>
-                          <span>{item.ancho}</span>
-                          <span>{item.alto}</span>
-                          <span>{item.fondo}</span>
-                          <span>{item.cantidad}</span>
-                          <span>{decimal(item.areaTotal)} m²</span>
-                          <span>{decimal(item.linearTotal)} m</span>
-                          <span className="calculation-operation">({item.ancho} / 100) x ({item.alto} / 100) x {item.cantidad} = {decimal(item.areaTotal)} m²</span>
-                        </div>
-                      ))}
-                      <div className="calculation-section-total">
-                        <span>Total m² de todas las medidas: <strong>{decimal(quote.areaTotal)} m²</strong></span>
-                        <span>Total metro lineal: <strong>{decimal(quote.linearTotal)} m</strong></span>
-                        <span>Total precio material cliente: <strong>{money(quote.material)}</strong></span>
-                      </div>
-                    </div>
-                  </section>
-
-                  <section className="calculation-section calculation-internal">
-                    <h3>Materiales</h3>
-                    <div className="calculation-table calculation-table-grid calculation-grid-materials">
-                      <div className="calculation-table-header"><strong>Material</strong><span className="calculation-cell-help">Qué se compra</span></div>
-                      <div className="calculation-table-header"><strong>Cantidad</strong><span className="calculation-cell-help">Cuánto se usa</span></div>
-                      <div className="calculation-table-header"><strong>Unidad</strong><span className="calculation-cell-help">m², metro o pieza</span></div>
-                      <div className="calculation-table-header"><strong>Costo unitario</strong><span className="calculation-cell-help">Costo proveedor</span></div>
-                      <div className="calculation-table-header"><strong>Precio cliente</strong><span className="calculation-cell-help">Precio venta</span></div>
-                      <div className="calculation-table-header"><strong>Merma</strong><span className="calculation-cell-help">Desperdicio</span></div>
-                      <div className="calculation-table-header"><strong>Margen</strong><span className="calculation-cell-help">Ganancia</span></div>
-                      <div className="calculation-table-header"><strong>Total cliente</strong><span className="calculation-cell-help">Importe cobrado</span></div>
-                      {quote.materialRows.map((item) => {
-                        const internalCost = numberValue(item.baseCost) + numberValue(item.wasteCost);
-                        const marginAmount = marginAmountFromSaleAndCost(item.saleTotal, internalCost);
-                        const marginPercent = marginPercentFromSaleAndCost(item.saleTotal, internalCost);
-                        return (
-                          <div key={item.id} className="calculation-row calculation-table-grid calculation-grid-materials">
-                            <span>{item.nombre}</span>
-                            <span>{decimal(item.rowQuantity)}</span>
-                            <span>{item.unidad}</span>
-                            <span>{money(item.costoUnitario)}</span>
-                            <span>{money(item.precioUnitario)}</span>
-                            <span>{decimal(item.merma, 1)}%</span>
-                            <span>{money(marginAmount)} ({decimal(marginPercent, 1)}%)</span>
-                            <strong>{money(item.saleTotal)}</strong>
-                            <span className="calculation-operation">
-                              {decimal(item.rowQuantity)} x {money(item.costoUnitario)} = {money(item.baseCost)}; {money(item.baseCost)} + {money(item.wasteCost)} = {money(internalCost)}; {decimal(item.rowQuantity)} x {money(item.precioUnitario)} = {money(item.saleTotal)}; {money(item.saleTotal)} - {money(internalCost)} = {money(marginAmount)}
-                            </span>
-                          </div>
-                        );
-                      })}
-                      <div className="calculation-section-total">
-                        <span>Total m²: {decimal(quote.areaTotal)} m²</span>
-                        <span>Total materiales cliente: {money(quote.material)}</span>
-                        <span>Total costo interno materiales: {money(quote.internalMaterialCost)}</span>
-                        <strong>Total margen materiales: {money(marginAmountFromSaleAndCost(quote.material, quote.internalMaterialCost))}</strong>
-                      </div>
-                    </div>
-                  </section>
-
-                  <section className="calculation-section calculation-internal">
-                    <h3>Accesorios / Herrajes</h3>
-                    <div className="calculation-table calculation-table-grid calculation-grid-accessories">
-                      <div className="calculation-table-header"><strong>Accesorio</strong><span className="calculation-cell-help">Herraje o pieza</span></div>
-                      <div className="calculation-table-header"><strong>Cantidad</strong><span className="calculation-cell-help">Cuántos</span></div>
-                      <div className="calculation-table-header"><strong>Costo unitario</strong><span className="calculation-cell-help">Costo proveedor</span></div>
-                      <div className="calculation-table-header"><strong>Precio cliente</strong><span className="calculation-cell-help">Precio venta</span></div>
-                      <div className="calculation-table-header"><strong>Costo interno</strong><span className="calculation-cell-help">Cantidad x costo</span></div>
-                      <div className="calculation-table-header"><strong>Total cliente</strong><span className="calculation-cell-help">Cantidad x precio</span></div>
-                      <div className="calculation-table-header"><strong>Margen</strong><span className="calculation-cell-help">Ganancia</span></div>
-                      <div className="calculation-table-header"><strong>Margen %</strong><span className="calculation-cell-help">Rentabilidad</span></div>
-                      {quote.accessoryRows.map((item) => {
-                        const marginAmount = marginAmountFromSaleAndCost(item.saleTotal, item.costTotal);
-                        const marginPercent = marginPercentFromSaleAndCost(item.saleTotal, item.costTotal);
-                        return (
-                          <div key={item.id} className="calculation-row calculation-table-grid calculation-grid-accessories">
-                            <span>{item.nombre}</span>
-                            <span>{decimal(item.rowQuantity, 0)}</span>
-                            <span>{money(item.costoUnitario)}</span>
-                            <span>{money(item.precioUnitario)}</span>
-                            <span>{money(item.costTotal)}</span>
-                            <strong>{money(item.saleTotal)}</strong>
-                            <span>{money(marginAmount)}</span>
-                            <span>{decimal(marginPercent, 1)}%</span>
-                            <span className="calculation-operation">
-                              {decimal(item.rowQuantity, 0)} x {money(item.costoUnitario)} = {money(item.costTotal)}; {decimal(item.rowQuantity, 0)} x {money(item.precioUnitario)} = {money(item.saleTotal)}; {money(item.saleTotal)} - {money(item.costTotal)} = {money(marginAmount)}
-                            </span>
-                          </div>
-                        );
-                      })}
-                      <div className="calculation-section-total">
-                        <span>Total accesorios cliente: {money(quote.hardwareSale)}</span>
-                        <span>Total costo interno accesorios: {money(quote.hardwareCost)}</span>
-                        <strong>Total margen accesorios: {money(marginAmountFromSaleAndCost(quote.hardwareSale, quote.hardwareCost))}</strong>
-                      </div>
-                    </div>
-                  </section>
-
-                  <section className="calculation-section">
-                    <h3>Resumen de totales</h3>
-                    <div className="professional-breakdown-grid">
-                      <article className="calculation-section calculation-client">
-                        <h4>Cliente</h4>
-                        <div className="professional-row"><span>Materiales</span><strong>{money(quote.material)}</strong></div>
-                        <div className="professional-row"><span>Accesorios</span><strong>{money(quote.hardwareSale)}</strong></div>
-                        <div className="professional-row"><span>Mano de obra</span><strong>{money(quote.manoObra)}</strong></div>
-                        <div className="professional-row"><span>Extras</span><strong>{money(quote.extras)}</strong></div>
-                        <div className="professional-row"><span>Subtotal</span><strong>{money(quote.subtotal)}</strong></div>
-                        <div className="professional-row"><span>Descuento</span><strong>-{money(quote.discountAmount)}</strong></div>
-                        <div className="professional-row professional-row-total"><span>Total cliente</span><strong>{money(quote.total)}</strong></div>
-                        <div className="professional-row"><span>Anticipo</span><strong>{money(quote.deposit)}</strong></div>
-                        <div className="professional-row"><span>Saldo</span><strong>{money(quote.rest)}</strong></div>
-                      </article>
-                      <article className="calculation-section calculation-internal">
-                        <h4>Interno</h4>
-                        <div className="professional-row"><span>Costo material interno</span><strong>{money(quote.internalMaterialCost)}</strong></div>
-                        <div className="professional-row"><span>Costo accesorios interno</span><strong>{money(quote.hardwareCost)}</strong></div>
-                        <div className="professional-row"><span>Extras</span><strong>{money(quote.extras)}</strong></div>
-                        <div className="professional-row professional-row-total"><span>Total interno</span><strong>{money(quote.internalTotal)}</strong></div>
-                        <div className="professional-row"><span>Utilidad estimada</span><strong>{money(quote.profit)}</strong></div>
-                        <div className="professional-row"><span>Utilidad %</span><strong>{decimal(quote.profitPercent, 1)}%</strong></div>
-                        <div className="professional-row"><span>Total margen materiales</span><strong>{money(marginAmountFromSaleAndCost(quote.material, quote.internalMaterialCost))}</strong></div>
-                        <div className="professional-row"><span>Total margen accesorios</span><strong>{money(marginAmountFromSaleAndCost(quote.hardwareSale, quote.hardwareCost))}</strong></div>
-                        <div className="professional-row"><span>Margen total estimado</span><strong>{money(quote.profit)}</strong></div>
-                      </article>
-                    </div>
-                  </section>
+                <div className="professional-card internal-only">
+                  <h4>Total interno ALUXOR</h4>
+                  <div className="professional-row"><span>Material interno</span><strong>{money(quote.internalMaterialCost)}</strong></div>
+                  <div className="professional-row"><span>Costo herrajes</span><strong>{money(quote.hardwareCost)}</strong></div>
+                  <div className="professional-row"><span>Total interno</span><strong>{money(quote.internalTotal)}</strong></div>
+                  <div className="professional-row"><span>Utilidad estimada</span><strong>{money(quote.profit)}</strong></div>
+                  <div className="professional-row"><span>Utilidad %</span><strong>{decimal(quote.profitPercent, 1)}%</strong></div>
                 </div>
-              </div>
-
-              <div className="data-health-panel">
-                <h3>Datos de la cotización</h3>
-                <h4>Datos completos</h4>
-                <div className="data-health-list">
-                  {dataHealth.present.map((item) => <span key={item.label} className="data-health-ok">{item.label}</span>)}
-                </div>
-                <h4>Datos faltantes</h4>
-                <div className="data-health-list">
-                  {dataHealth.missing.map((item) => <span key={item.label} className="data-health-missing">{item.label}</span>)}
-                </div>
-                {dataHealth.warnings.length > 0 && (
-                  <>
-                    <h4>Advertencias</h4>
-                    <div className="data-health-list" role="status" aria-live="polite">
-                      {dataHealth.warnings.map((warning) => <span key={warning} className="data-health-warning">{warning}</span>)}
-                    </div>
-                  </>
-                )}
-              </div>
-
-              <h3>Medidas</h3>
-              {measurementItemsFromForm(form).map((item) => (
-                <div key={item.id} className="row-card">
-                  <input value={item.nombre} onChange={(event) => updateMeasureItem(item.id, 'nombre', event.target.value)} aria-label="Nombre de medida" />
-                  <input type="number" value={item.ancho} onChange={(event) => updateMeasureItem(item.id, 'ancho', numberValue(event.target.value))} aria-label="Ancho" />
-                  <input type="number" value={item.alto} onChange={(event) => updateMeasureItem(item.id, 'alto', numberValue(event.target.value))} aria-label="Alto" />
-                  <input type="number" value={item.fondo} onChange={(event) => updateMeasureItem(item.id, 'fondo', numberValue(event.target.value))} aria-label="Fondo" />
-                  <input type="number" value={item.cantidad} onChange={(event) => updateMeasureItem(item.id, 'cantidad', numberValue(event.target.value))} aria-label="Cantidad" />
-                  <button type="button" className="ghost" onClick={() => removeMeasureItem(item.id)}><Eraser size={16} /></button>
-                </div>
-              ))}
-              <button type="button" className="ghost" onClick={addMeasureItem}>Agregar medida</button>
-
-              <h3>Materiales</h3>
-              {quote.materialRows.map((item) => (
-                <div key={item.id} className="row-card material-row">
-                  <input value={item.nombre} onChange={(event) => updateMaterialItem(item.id, 'nombre', event.target.value)} aria-label="Material" />
-                  <select value={item.calculo} onChange={(event) => updateMaterialItem(item.id, 'calculo', event.target.value)} aria-label="Cálculo">
-                    <option value="area">m²</option>
-                    <option value="lineal">Metro lineal</option>
-                    <option value="manual">Manual / pieza</option>
-                  </select>
-                  <input type="number" value={item.costoUnitario} onChange={(event) => updateMaterialItem(item.id, 'costoUnitario', numberValue(event.target.value))} aria-label="Costo unitario" />
-                  <input type="number" value={item.precioUnitario} onChange={(event) => updateMaterialItem(item.id, 'precioUnitario', numberValue(event.target.value))} aria-label="Precio unitario" />
-                  <input type="number" value={item.merma} onChange={(event) => updateMaterialItem(item.id, 'merma', numberValue(event.target.value))} aria-label="Merma" />
-                  <button type="button" className="ghost" onClick={() => removeMaterialItem(item.id)}><Eraser size={16} /></button>
-                </div>
-              ))}
-              <button type="button" className="ghost" onClick={addMaterialItem}>Agregar material</button>
-
-              <h3>Accesorios y herrajes</h3>
-              {quote.accessoryRows.map((item) => (
-                <div key={item.id} className="row-card accessory-row">
-                  <input value={item.nombre} onChange={(event) => updateAccessoryItem(item.id, 'nombre', event.target.value)} aria-label="Accesorio" />
-                  <input type="number" value={item.cantidad} onChange={(event) => updateAccessoryItem(item.id, 'cantidad', numberValue(event.target.value))} aria-label="Cantidad" />
-                  <input type="number" value={item.costoUnitario} onChange={(event) => updateAccessoryItem(item.id, 'costoUnitario', numberValue(event.target.value))} aria-label="Costo" />
-                  <input type="number" value={item.precioUnitario} onChange={(event) => updateAccessoryItem(item.id, 'precioUnitario', numberValue(event.target.value))} aria-label="Precio" />
-                  <button type="button" className="ghost" onClick={() => removeAccessoryItem(item.id)}><Eraser size={16} /></button>
-                </div>
-              ))}
-              <button type="button" className="ghost" onClick={addAccessoryItem}>Agregar accesorio</button>
-            </article>
-
-            <article className="panel summary-card">
-              <h2>Resumen</h2>
-              <div className="total-number">{money(quote.total)}</div>
-              <p>Área total: {decimal(quote.areaTotal)} m² · Lineal: {decimal(quote.linearTotal)} m</p>
-              <p>Anticipo: {money(quote.deposit)} · Resto: {money(quote.rest)}</p>
-              <p>Utilidad estimada: {money(quote.profit)} ({decimal(quote.profitPercent, 1)}%)</p>
-              <div className="actions">
-                <button type="button" onClick={saveToHistory}><Save size={18} /> Guardar historial</button>
-                <button type="button" className="ghost" onClick={applySuggestedPrices}><BarChart3 size={18} /> Aplicar sugeridos</button>
-                <button type="button" className="ghost" onClick={() => openPrint('client')}><FileText size={18} /> PDF cliente</button>
-                <button type="button" className="ghost" onClick={() => openPrint('business')}><ClipboardList size={18} /> Hoja interna</button>
-              </div>
-
-              <h3>Materiales calculados</h3>
-              {materials.map((item) => (
-                <div key={`${item.name}-${item.detail}`} className="mini-row">
-                  <span>{item.name}</span>
-                  <strong>{money(item.cost)}</strong>
-                </div>
-              ))}
-            </article>
+              </article>
+            </aside>
           </section>
         )}
 
