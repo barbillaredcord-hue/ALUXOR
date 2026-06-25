@@ -3373,7 +3373,7 @@ textarea {
 
 .quote-workspace.panel-grid.two-cols {
   align-items: start;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .quote-editor {
@@ -3462,12 +3462,12 @@ textarea {
 
 .quote-materials-table,
 .quote-material-row {
-  grid-template-columns: minmax(160px, 1.3fr) 130px repeat(3, minmax(105px, 0.8fr)) 64px;
+  grid-template-columns: minmax(160px, 1.3fr) 130px repeat(7, minmax(105px, 0.8fr)) 64px;
 }
 
 .quote-accessories-table,
 .quote-accessory-row {
-  grid-template-columns: minmax(170px, 1.4fr) repeat(3, minmax(110px, 0.8fr)) 64px;
+  grid-template-columns: minmax(170px, 1.4fr) repeat(8, minmax(105px, 0.8fr)) 64px;
 }
 
 .quote-table button.ghost {
@@ -3508,6 +3508,136 @@ textarea {
   padding: 0;
   border: 0;
   background: transparent;
+}
+
+.quick-calculator {
+  margin-bottom: 14px;
+}
+
+.quick-results {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0 16px 12px;
+}
+
+.quick-results div {
+  padding: 10px;
+  background: rgba(255, 253, 248, 0.9);
+  border: 1px solid rgba(34, 116, 95, 0.16);
+  border-radius: 8px;
+}
+
+.quick-results span,
+.quick-results strong {
+  display: block;
+}
+
+.quick-results span {
+  color: #526159;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.quick-results strong {
+  color: #22745f;
+  margin-top: 3px;
+}
+
+.quote-floating {
+  position: fixed;
+  z-index: 60;
+  width: min(390px, calc(100vw - 24px));
+  max-height: calc(100vh - 28px);
+  overflow: hidden;
+  background: rgba(255, 253, 248, 0.96);
+  border: 1px solid rgba(34, 116, 95, 0.22);
+  border-radius: 8px;
+  box-shadow: 0 18px 46px rgba(20, 36, 28, 0.22);
+}
+
+.quote-floating-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  color: #f6fbf7;
+  background: #14241c;
+  cursor: move;
+}
+
+.quote-floating-head div {
+  display: flex;
+  gap: 6px;
+}
+
+.quote-floating-head button {
+  min-height: 30px;
+  padding: 0 8px;
+  color: #16231c;
+  background: #f0c84e;
+  border: 1px solid #f0c84e;
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.quote-floating-body {
+  max-height: calc(100vh - 88px);
+  overflow: auto;
+  padding: 12px;
+}
+
+.quote-floating .total-number {
+  font-size: 32px;
+}
+
+.quote-floating.compact .live-summary-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.quote-floating.compact .professional-card p:not(.professional-total),
+.quote-floating.compact .professional-card ul {
+  display: none;
+}
+
+.quote-floating.minimized {
+  width: min(360px, calc(100vw - 24px));
+}
+
+.floating-analysis {
+  display: grid;
+  gap: 10px;
+}
+
+.floating-analysis h3 {
+  margin: 10px 0 0;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(20, 36, 28, 0.48);
+}
+
+.pdf-editor-modal {
+  width: min(980px, 100%);
+  max-height: calc(100vh - 36px);
+  overflow: auto;
+}
+
+.pdf-preview {
+  margin-top: 14px;
+  padding: 14px;
+  background: #edf5f1;
+  border: 1px solid #bdd8ce;
+  border-radius: 8px;
 }
 
 .calculation-detail-panel,
@@ -3598,5 +3728,40 @@ textarea {
 
   .quote-table button.ghost {
     width: 100%;
+  }
+
+  .quick-results {
+    grid-template-columns: 1fr;
+    margin-inline: 12px;
+  }
+
+  .quote-floating {
+    left: 10px !important;
+    right: 10px;
+    top: auto !important;
+    bottom: 10px;
+    width: auto;
+    max-height: 72vh;
+  }
+
+  .quote-floating-head {
+    cursor: default;
+  }
+
+  .quote-floating-body {
+    max-height: 58vh;
+  }
+
+  .quote-floating .live-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .modal-backdrop {
+    align-items: end;
+    padding: 10px;
+  }
+
+  .pdf-editor-modal {
+    max-height: 92vh;
   }
 }

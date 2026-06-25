@@ -523,6 +523,7 @@ function normalizeMaterialItem(item, index = 0, data = {}) {
     precioUnitario: item?.precioUnitario === '' ? '' : positiveNumber(item?.precioUnitario ?? data.precioM2),
     merma: item?.merma === '' ? '' : percentValue(item?.merma ?? data.merma),
     margen: item?.margen === '' ? '' : positiveNumber(item?.margen ?? data.margenMaterial),
+    precioManual: item?.precioManual ?? item?.precioUnitario !== undefined,
     nota: clean(item?.nota),
   };
 }
@@ -556,6 +557,9 @@ function normalizeAccessoryItem(item, index = 0, data = {}) {
     cantidad: item?.cantidad === '' ? '' : Math.max(1, positiveNumber(item?.cantidad) || 1),
     costoUnitario: item?.costoUnitario === '' ? '' : positiveNumber(item?.costoUnitario ?? data.costoHerrajes),
     precioUnitario: item?.precioUnitario === '' ? '' : positiveNumber(item?.precioUnitario ?? data.precioHerrajes),
+    merma: item?.merma === '' ? '' : percentValue(item?.merma ?? 0),
+    margen: item?.margen === '' ? '' : positiveNumber(item?.margen ?? data.margenMaterial),
+    precioManual: item?.precioManual ?? item?.precioUnitario !== undefined,
     nota: clean(item?.nota),
   };
 }
@@ -588,6 +592,13 @@ function materialCalcLabel(item) {
   if (calculo === 'area') return 'm² de medidas';
   if (calculo === 'lineal') return 'metro lineal de perímetro';
   return 'cantidad manual';
+}
+
+function priceRule(costoUnitario, merma, margen) {
+  const costoBase = positiveNumber(costoUnitario);
+  const costoConMerma = costoBase * (1 + percentValue(merma) / 100);
+  const precioCliente = costoConMerma * (1 + positiveNumber(margen) / 100);
+  return { costoBase, costoConMerma, precioCliente };
 }
 
 function normalizePlanItem(item, index = 0) {
@@ -888,21 +899,27 @@ function calculateQuote(data) {
     const rowQuantity = materialItemQuantity(item, quoteBasis);
     const rowMerma = percentValue(item.merma);
     const rowMargin = item.margen === '' ? margenMaterial : positiveNumber(item.margen);
-    const baseCost = rowQuantity * positiveNumber(item.costoUnitario);
-    const wasteCost = baseCost * (rowMerma / 100);
-    const saleTotal = rowQuantity * positiveNumber(item.precioUnitario);
-    const suggestedUnit = positiveNumber(item.costoUnitario) * (1 + rowMerma / 100) * (1 + rowMargin / 100);
+    const pricing = priceRule(item.costoUnitario, rowMerma, rowMargin);
+    const unitPrice = item.precioManual ? positiveNumber(item.precioUnitario) : pricing.precioCliente;
+    const baseCost = rowQuantity * pricing.costoBase;
+    const costTotal = rowQuantity * pricing.costoConMerma;
+    const wasteCost = costTotal - baseCost;
+    const saleTotal = rowQuantity * unitPrice;
+    const suggestedUnit = pricing.precioCliente;
     const suggestedSaleTotal = rowQuantity * suggestedUnit;
-    const marginAmount = saleTotal - (baseCost + wasteCost);
-    const marginPercent = baseCost + wasteCost > 0 ? (marginAmount / (baseCost + wasteCost)) * 100 : 0;
+    const marginAmount = saleTotal - costTotal;
+    const marginPercent = costTotal > 0 ? (marginAmount / costTotal) * 100 : 0;
     return {
       ...item,
       rowQuantity,
       rowMargin,
       calcLabel: materialCalcLabel(item),
+      areaTotal: rowQuantity,
       baseCost,
       wasteCost,
-      costTotal: baseCost + wasteCost,
+      costTotal,
+      costoConMerma: pricing.costoConMerma,
+      precioCliente: unitPrice,
       saleTotal,
       suggestedUnit,
       suggestedSaleTotal,
@@ -913,11 +930,29 @@ function calculateQuote(data) {
 
   const accessoryRows = accessoryItemsFromForm(data).map((item) => {
     const rowQuantity = Math.max(1, positiveNumber(item.cantidad) || 1);
+    const rowMerma = percentValue(item.merma);
+    const rowMargin = item.margen === '' ? margenMaterial : positiveNumber(item.margen);
+    const pricing = priceRule(item.costoUnitario, rowMerma, rowMargin);
+    const unitPrice = item.precioManual ? positiveNumber(item.precioUnitario) : pricing.precioCliente;
+    const baseCost = rowQuantity * pricing.costoBase;
+    const costTotal = rowQuantity * pricing.costoConMerma;
+    const saleTotal = rowQuantity * unitPrice;
+    const marginAmount = saleTotal - costTotal;
+    const marginPercent = costTotal > 0 ? (marginAmount / costTotal) * 100 : 0;
     return {
       ...item,
       rowQuantity,
-      costTotal: rowQuantity * positiveNumber(item.costoUnitario),
-      saleTotal: rowQuantity * positiveNumber(item.precioUnitario),
+      rowMerma,
+      rowMargin,
+      areaTotal: rowQuantity,
+      baseCost,
+      wasteCost: costTotal - baseCost,
+      costTotal,
+      costoConMerma: pricing.costoConMerma,
+      precioCliente: unitPrice,
+      saleTotal,
+      marginAmount,
+      marginPercent,
     };
   });
 
@@ -1724,13 +1759,34 @@ async function requestHistory(options = {}) {
   return normalizeHistory(data.history || []);
 }
 
-function quotePrintHtml(data, quote, materials, mode = 'client') {
+function professionalDocFromQuote(data, quote) {
+  return {
+    titulo: 'Cotización profesional',
+    cliente: clean(data.clienteNombre, 'Cliente'),
+    descripcion: `Proyecto: ${clean(data.producto)}. Material: ${clean(data.material)}. Acabado: ${clean(data.acabado)}.`,
+    partidas: [
+      ...quote.materialRows.map((item) => `${item.nombre}: ${decimal(item.rowQuantity)} ${item.unidad} - ${money(item.saleTotal)}`),
+      ...quote.accessoryRows.map((item) => `${item.nombre}: ${decimal(item.rowQuantity, 0)} pza(s) - ${money(item.saleTotal)}`),
+      quote.manoObra > 0 ? `Mano de obra / instalación: ${money(quote.manoObra)}` : '',
+      quote.extras > 0 ? `Extras: ${money(quote.extras)}` : '',
+    ].filter(Boolean).join('\n'),
+    condiciones: clean(data.condiciones),
+    notas: clean(data.notasCliente || data.notasInternas),
+    vigencia: String(data.vigencia ?? ''),
+    anticipo: money(quote.deposit),
+    saldo: money(quote.rest),
+    total: money(quote.total),
+  };
+}
+
+function quotePrintHtml(data, quote, materials, mode = 'client', doc = null) {
   const isBusiness = mode === 'business';
   const today = new Date().toLocaleDateString('es-MX');
   const folio = clean(data.folio || data.folioManual, 'Por asignar');
   const formaPago = clean(data.formaPago, 'Anticipo y saldo contra entrega');
   const notasCliente = clean(data.notasCliente);
   const notasInternas = clean(data.notasInternas);
+  const documentData = doc || professionalDocFromQuote(data, quote);
   const internalRows = materials.map((item) => `
     <tr><td>${item.name}</td><td>${item.detail}</td><td>${money(item.cost)}</td></tr>
   `).join('');
@@ -1772,11 +1828,12 @@ function quotePrintHtml(data, quote, materials, mode = 'client') {
     button{margin-top:20px;padding:12px 18px;border:0;border-radius:7px;background:#22745f;color:white;font-weight:800}
     @media print{button{display:none}body{padding:20px}}
   </style></head><body>
-    <header><div><div class="brand">${BRAND_NAME}</div><h1>${isBusiness ? 'Hoja interna del negocio' : 'Cotización'}</h1><p>${today}</p></div><div><div>Total</div><div class="total">${money(quote.total)}</div></div></header>
+    <header><div><div class="brand">${BRAND_NAME}</div><h1>${escapeHtml(documentData.titulo || (isBusiness ? 'Hoja interna del negocio' : 'Cotización'))}</h1><p>${today}</p></div><div><div>Total</div><div class="total">${escapeHtml(documentData.total || money(quote.total))}</div></div></header>
     ${isBusiness ? '<div class="internal"><strong>Uso interno ALUXOR.</strong> Esta hoja incluye costos, utilidad y datos de operación. No entregar al cliente.</div>' : ''}
-    <section class="grid"><div class="box"><strong>Cliente</strong><p>${clean(data.clienteNombre, 'Cliente')}${data.clienteTelefono ? `<br>${data.clienteTelefono}` : ''}</p></div><div class="box"><strong>Proyecto</strong><p>${data.producto}<br>${data.tipoTrabajo}<br>${data.medidas}</p></div></section>
+    <section class="grid"><div class="box"><strong>Cliente</strong><p>${escapeHtml(documentData.cliente || clean(data.clienteNombre, 'Cliente'))}${data.clienteTelefono ? `<br>${data.clienteTelefono}` : ''}</p></div><div class="box"><strong>Proyecto</strong><p>${data.producto}<br>${data.tipoTrabajo}<br>${data.medidas}</p></div></section>
     <section class="grid"><div class="box"><strong>Folio</strong><p>${folio}</p></div><div class="box"><strong>Forma de pago</strong><p>${formaPago}</p></div></section>
-    <h2>Descripción</h2><p>Material: ${data.material}. Acabado: ${data.acabado}. Incluye: ${data.incluye}.</p>
+    <h2>Descripción</h2><p>${escapeHtml(documentData.descripcion || `Material: ${data.material}. Acabado: ${data.acabado}. Incluye: ${data.incluye}.`)}</p>
+    ${documentData.partidas ? `<h2>Partidas editadas</h2><p>${escapeHtml(documentData.partidas).replace(/\n/g, '<br>')}</p>` : ''}
     <h2>Medidas</h2><table><thead><tr><th>Partida</th><th>Medida</th><th>Cantidad</th><th>Área total</th><th>Metro lineal</th></tr></thead><tbody>${measureRows}</tbody></table>
     <h2>${isBusiness ? 'Lista interna de materiales y costos' : 'Conceptos de la cotización'}</h2><table><thead><tr><th>Concepto</th><th>Detalle</th><th>${isBusiness ? 'Importe interno' : 'Importe'}</th></tr></thead><tbody>${isBusiness ? internalRows : clientRows}</tbody></table>
     <h2>Resumen</h2><table><tbody>
@@ -1786,8 +1843,8 @@ function quotePrintHtml(data, quote, materials, mode = 'client') {
       <tr><td>Extras</td><td>${money(quote.extras)}</td></tr>
       <tr><td>Descuento</td><td>-${money(quote.discountAmount)}</td></tr>
       <tr><th>Total</th><th>${money(quote.total)}</th></tr>
-      <tr><td>Anticipo sugerido</td><td>${money(quote.deposit)}</td></tr>
-      <tr><td>Resto al entregar</td><td>${money(quote.rest)}</td></tr>
+      <tr><td>Anticipo sugerido</td><td>${escapeHtml(documentData.anticipo || money(quote.deposit))}</td></tr>
+      <tr><td>Resto al entregar</td><td>${escapeHtml(documentData.saldo || money(quote.rest))}</td></tr>
       ${isBusiness ? `<tr><td>Margen material usado</td><td>${quote.margenMaterial}%</td></tr>` : ''}
     </tbody></table>
     ${isBusiness ? `<h2>Resumen interno ALUXOR</h2><table><tbody>
@@ -1821,8 +1878,8 @@ function quotePrintHtml(data, quote, materials, mode = 'client') {
       ${notasInternas ? `<tr><td>Notas internas</td><td>${notasInternas}</td></tr>` : ''}
       <tr><td>Por qué se cobra así</td><td>Se calcula con materiales, herrajes, mano de obra, extras, descuento, merma y costo interno ya estimado por ALUXOR.</td></tr>
     </tbody></table>` : ''}
-    <h2>Condiciones</h2><p>Vigencia: ${data.vigencia} días. ${data.condiciones}</p>
-    ${notasCliente ? `<h2>Notas para cliente</h2><p>${notasCliente}</p>` : ''}
+    <h2>Condiciones</h2><p>Vigencia: ${escapeHtml(documentData.vigencia || data.vigencia)} días. ${escapeHtml(documentData.condiciones || data.condiciones)}</p>
+    ${(documentData.notas || notasCliente) ? `<h2>Notas para cliente</h2><p>${escapeHtml(documentData.notas || notasCliente)}</p>` : ''}
     ${isBusiness && notasInternas ? `<h2>Notas internas</h2><p>${notasInternas}</p>` : ''}
     <button onclick="window.print()">Imprimir o guardar PDF</button>
   </body></html>`;
@@ -2013,6 +2070,9 @@ function App() {
   const [planZoom, setPlanZoom] = useState(100);
   const [typeDetails, setTypeDetails] = useState(loadTypeDetails);
   const [appLogo, setAppLogo] = useState(loadAppLogo);
+  const [floatingSummary, setFloatingSummary] = useState({ x: 24, y: 120, compact: false, minimized: false });
+  const [quickCalc, setQuickCalc] = useState({ ancho: 100, alto: 100, cantidad: 1, largo: 100, costoM2: 1000, merma: 8, margen: 35 });
+  const [pdfEditor, setPdfEditor] = useState(null);
 
   const quote = useMemo(() => calculateQuote(form), [form]);
   const dataHealth = useMemo(() => quoteDataHealth(form, quote), [form, quote]);
@@ -2024,6 +2084,9 @@ function App() {
   const mainOutput = outputs[0];
   const quoteOutput = outputs[1];
   const currentTypeOptions = typeOptionsFor(form.giro, typeDetails);
+  const quickArea = (positiveNumber(quickCalc.ancho) / 100) * (positiveNumber(quickCalc.alto) / 100) * Math.max(1, positiveNumber(quickCalc.cantidad) || 1);
+  const quickLinear = (positiveNumber(quickCalc.largo) / 100) * Math.max(1, positiveNumber(quickCalc.cantidad) || 1);
+  const quickPricing = priceRule(quickCalc.costoM2, quickCalc.merma, quickCalc.margen);
 
   const menuItems = [
     { id: 'inicio', label: 'Inicio', icon: LayoutDashboard },
@@ -2233,6 +2296,10 @@ function App() {
         }
         if (field === 'unidad' && value === 'metro lineal') next.calculo = 'lineal';
         if (field === 'unidad' && value === 'm²') next.calculo = 'area';
+        if (field === 'precioUnitario') next.precioManual = true;
+        if (['costoUnitario', 'merma', 'margen'].includes(field) && !next.precioManual) {
+          next.precioUnitario = Math.round(priceRule(next.costoUnitario, next.merma, next.margen || current.margenMaterial).precioCliente);
+        }
         return next;
       });
       return { ...current, materialItems };
@@ -2256,6 +2323,7 @@ function App() {
           precioUnitario: 0,
           merma: 0,
           margen: current.margenMaterial,
+          precioManual: false,
           nota: '',
         },
       ],
@@ -2316,9 +2384,18 @@ function App() {
   function updateAccessoryItem(id, field, value) {
     setForm((current) => ({
       ...current,
-      accessoryItems: accessoryItemsFromForm(current).map((item) => (
-        item.id === id ? { ...item, [field]: value } : item
-      )),
+      accessoryItems: accessoryItemsFromForm(current).map((item) => {
+        if (item.id !== id) return item;
+        const next = {
+          ...item,
+          [field]: value,
+          ...(field === 'precioUnitario' ? { precioManual: true } : {}),
+        };
+        if (['costoUnitario', 'merma', 'margen'].includes(field) && !next.precioManual) {
+          next.precioUnitario = Math.round(priceRule(next.costoUnitario, next.merma, next.margen || current.margenMaterial).precioCliente);
+        }
+        return next;
+      }),
     }));
   }
 
@@ -2333,6 +2410,9 @@ function App() {
           cantidad: 1,
           costoUnitario: 0,
           precioUnitario: 0,
+          merma: 0,
+          margen: current.margenMaterial,
+          precioManual: false,
           nota: '',
         },
       ],
@@ -2617,6 +2697,89 @@ function App() {
     });
   }
 
+  function updateQuickCalc(field, value) {
+    setQuickCalc((current) => ({ ...current, [field]: numberValue(value) }));
+  }
+
+  function quickCalcText() {
+    return [
+      `Área m²: ${decimal(quickArea)} m²`,
+      `Metro lineal: ${decimal(quickLinear)} m`,
+      `Costo con merma: ${money(quickPricing.costoConMerma)}`,
+      `Precio con margen: ${money(quickPricing.precioCliente)}`,
+    ].join('\n');
+  }
+
+  function applyQuickCalcToQuote() {
+    setForm((current) => {
+      const measureItems = measurementItemsFromForm(current);
+      const first = measureItems[0] || normalizeMeasureItem({}, 0, current);
+      const nextMeasure = {
+        ...first,
+        ancho: positiveNumber(quickCalc.ancho),
+        alto: positiveNumber(quickCalc.alto),
+        cantidad: Math.max(1, positiveNumber(quickCalc.cantidad) || 1),
+      };
+      const next = {
+        ...current,
+        ancho: nextMeasure.ancho,
+        alto: nextMeasure.alto,
+        cantidad: nextMeasure.cantidad,
+        measureItems: [nextMeasure, ...measureItems.slice(1)],
+      };
+      return { ...next, medidas: formatDimensions(next) };
+    });
+  }
+
+  function applyQuickCalcToMaterial() {
+    setForm((current) => {
+      const materialItems = materialItemsFromForm(current, quoteAreaTotal(current));
+      const first = materialItems[0] || normalizeMaterialItem({}, 0, current);
+      return {
+        ...current,
+        costoMaterialM2: Math.round(positiveNumber(quickCalc.costoM2)),
+        precioM2: Math.round(quickPricing.precioCliente),
+        merma: percentValue(quickCalc.merma),
+        margenMaterial: positiveNumber(quickCalc.margen),
+        materialItems: [
+          {
+            ...first,
+            calculo: 'manual',
+            unidad: 'm²',
+            usarArea: false,
+            cantidad: decimal(quickArea),
+            costoUnitario: Math.round(positiveNumber(quickCalc.costoM2)),
+            precioUnitario: Math.round(quickPricing.precioCliente),
+            merma: percentValue(quickCalc.merma),
+            margen: positiveNumber(quickCalc.margen),
+            precioManual: false,
+          },
+          ...materialItems.slice(1),
+        ],
+      };
+    });
+  }
+
+  function startSummaryDrag(event) {
+    if (event.target.closest('button')) return;
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const start = floatingSummary;
+    const onMove = (moveEvent) => {
+      setFloatingSummary((current) => ({
+        ...current,
+        x: Math.max(8, start.x + moveEvent.clientX - startX),
+        y: Math.max(8, start.y + moveEvent.clientY - startY),
+      }));
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }
+
   function openWhatsApp() {
     const phone = String(form.whatsapp || form.clienteTelefono || '').replace(/\D/g, '');
     const message = encodeURIComponent(`Hola, quiero cotizar ${form.producto || 'un proyecto'} con ALUXOR.`);
@@ -2625,10 +2788,15 @@ function App() {
   }
 
   function openPrint(mode = 'client') {
+    setPdfEditor({ mode, view: mode, doc: professionalDocFromQuote(form, quote) });
+  }
+
+  function generateProfessionalPdf(mode = 'client') {
     const printWindow = window.open('', '_blank', 'noopener,noreferrer');
     if (!printWindow) return;
-    printWindow.document.write(quotePrintHtml(form, quote, materials, mode));
+    printWindow.document.write(quotePrintHtml(form, quote, materials, mode, pdfEditor?.doc));
     printWindow.document.close();
+    setPdfEditor(null);
   }
 
   function handleLogoUpload(event) {
@@ -2815,6 +2983,31 @@ function App() {
                 ))}
               </div>
 
+              <details className="quote-accordion quick-calculator" open>
+                <summary>Calculadora rápida</summary>
+                <div className="form-grid">
+                  <Field id="quickAncho" label="Ancho cm"><input id="quickAncho" type="number" value={quickCalc.ancho} onChange={(event) => updateQuickCalc('ancho', event.target.value)} /></Field>
+                  <Field id="quickAlto" label="Alto cm"><input id="quickAlto" type="number" value={quickCalc.alto} onChange={(event) => updateQuickCalc('alto', event.target.value)} /></Field>
+                  <Field id="quickCantidad" label="Cantidad"><input id="quickCantidad" type="number" value={quickCalc.cantidad} onChange={(event) => updateQuickCalc('cantidad', event.target.value)} /></Field>
+                  <Field id="quickLargo" label="Largo cm"><input id="quickLargo" type="number" value={quickCalc.largo} onChange={(event) => updateQuickCalc('largo', event.target.value)} /></Field>
+                  <Field id="quickCostoM2" label="Costo por m²"><input id="quickCostoM2" type="number" value={quickCalc.costoM2} onChange={(event) => updateQuickCalc('costoM2', event.target.value)} /></Field>
+                  <Field id="quickMerma" label="Merma %"><input id="quickMerma" type="number" value={quickCalc.merma} onChange={(event) => updateQuickCalc('merma', event.target.value)} /></Field>
+                  <Field id="quickMargen" label="Margen %"><input id="quickMargen" type="number" value={quickCalc.margen} onChange={(event) => updateQuickCalc('margen', event.target.value)} /></Field>
+                </div>
+                <div className="quick-results">
+                  <div><span>Área m²</span><strong>{decimal(quickArea)} m²</strong></div>
+                  <div><span>Metro lineal</span><strong>{decimal(quickLinear)} m</strong></div>
+                  <div><span>Costo con merma</span><strong>{money(quickPricing.costoConMerma)}</strong></div>
+                  <div><span>Precio con margen</span><strong>{money(quickPricing.precioCliente)}</strong></div>
+                </div>
+                <p className="advanced-note">Para qué sirve: calcula rápido área, metro lineal y precio sugerido. Cómo se calcula: ancho x alto x cantidad; largo x cantidad; costo con merma y margen.</p>
+                <div className="actions compact">
+                  <button type="button" className="ghost" onClick={() => copyText(quickCalcText(), 'Calculadora rápida')}><Copy size={18} /> Copiar</button>
+                  <button type="button" className="ghost" onClick={applyQuickCalcToQuote}>Aplicar a cotización</button>
+                  <button type="button" className="ghost" onClick={applyQuickCalcToMaterial}>Aplicar a material</button>
+                </div>
+              </details>
+
               <div className="quote-accordion-list">
                 <details className="quote-accordion" open>
                   <summary>1. Cliente</summary>
@@ -2877,9 +3070,13 @@ function App() {
                   <div className="quote-table quote-materials-table">
                     <div className="quote-table-header">Material</div>
                     <div className="quote-table-header">Cálculo</div>
-                    <div className="quote-table-header">Costo unit.</div>
-                    <div className="quote-table-header">Precio unit.</div>
-                    <div className="quote-table-header">Merma</div>
+                    <div className="quote-table-header">Área total</div>
+                    <div className="quote-table-header">Merma %</div>
+                    <div className="quote-table-header">Margen %</div>
+                    <div className="quote-table-header">Costo unitario</div>
+                    <div className="quote-table-header">Precio unitario</div>
+                    <div className="quote-table-header">Total costo</div>
+                    <div className="quote-table-header">Total cliente</div>
                     <div className="quote-table-header">Acciones</div>
                     {quote.materialRows.map((item) => (
                       <div key={item.id} className="quote-table-row quote-material-row">
@@ -2889,9 +3086,13 @@ function App() {
                           <option value="lineal">Metro lineal</option>
                           <option value="manual">Manual / pieza</option>
                         </select>
-                        <input type="number" value={item.costoUnitario} onChange={(event) => updateMaterialItem(item.id, 'costoUnitario', numberValue(event.target.value))} aria-label="Costo unitario" />
-                        <input type="number" value={item.precioUnitario} onChange={(event) => updateMaterialItem(item.id, 'precioUnitario', numberValue(event.target.value))} aria-label="Precio unitario" />
+                        <strong>{decimal(item.rowQuantity)} {item.unidad}</strong>
                         <input type="number" value={item.merma} onChange={(event) => updateMaterialItem(item.id, 'merma', numberValue(event.target.value))} aria-label="Merma" />
+                        <input type="number" value={item.rowMargin} onChange={(event) => updateMaterialItem(item.id, 'margen', numberValue(event.target.value))} aria-label="Margen" />
+                        <input type="number" value={item.costoUnitario} onChange={(event) => updateMaterialItem(item.id, 'costoUnitario', numberValue(event.target.value))} aria-label="Costo unitario" />
+                        <input type="number" value={item.precioManual ? item.precioUnitario : Math.round(item.precioCliente)} onChange={(event) => updateMaterialItem(item.id, 'precioUnitario', numberValue(event.target.value))} aria-label="Precio unitario" />
+                        <strong>{money(item.costTotal)}</strong>
+                        <strong>{money(item.saleTotal)}</strong>
                         <button type="button" className="ghost" onClick={() => removeMaterialItem(item.id)} aria-label="Eliminar material"><Eraser size={16} /></button>
                       </div>
                     ))}
@@ -2904,15 +3105,25 @@ function App() {
                   <div className="quote-table quote-accessories-table">
                     <div className="quote-table-header">Accesorio</div>
                     <div className="quote-table-header">Cantidad</div>
-                    <div className="quote-table-header">Costo</div>
-                    <div className="quote-table-header">Precio</div>
+                    <div className="quote-table-header">Área total</div>
+                    <div className="quote-table-header">Merma %</div>
+                    <div className="quote-table-header">Margen %</div>
+                    <div className="quote-table-header">Costo unitario</div>
+                    <div className="quote-table-header">Precio unitario</div>
+                    <div className="quote-table-header">Total costo</div>
+                    <div className="quote-table-header">Total cliente</div>
                     <div className="quote-table-header">Acciones</div>
                     {quote.accessoryRows.map((item) => (
                       <div key={item.id} className="quote-table-row quote-accessory-row">
                         <input value={item.nombre} onChange={(event) => updateAccessoryItem(item.id, 'nombre', event.target.value)} aria-label="Accesorio" />
                         <input type="number" value={item.cantidad} onChange={(event) => updateAccessoryItem(item.id, 'cantidad', numberValue(event.target.value))} aria-label="Cantidad" />
-                        <input type="number" value={item.costoUnitario} onChange={(event) => updateAccessoryItem(item.id, 'costoUnitario', numberValue(event.target.value))} aria-label="Costo" />
-                        <input type="number" value={item.precioUnitario} onChange={(event) => updateAccessoryItem(item.id, 'precioUnitario', numberValue(event.target.value))} aria-label="Precio" />
+                        <strong>{decimal(item.rowQuantity, 0)} pza(s)</strong>
+                        <input type="number" value={item.merma} onChange={(event) => updateAccessoryItem(item.id, 'merma', numberValue(event.target.value))} aria-label="Merma" />
+                        <input type="number" value={item.rowMargin} onChange={(event) => updateAccessoryItem(item.id, 'margen', numberValue(event.target.value))} aria-label="Margen" />
+                        <input type="number" value={item.costoUnitario} onChange={(event) => updateAccessoryItem(item.id, 'costoUnitario', numberValue(event.target.value))} aria-label="Costo unitario" />
+                        <input type="number" value={item.precioManual ? item.precioUnitario : Math.round(item.precioCliente)} onChange={(event) => updateAccessoryItem(item.id, 'precioUnitario', numberValue(event.target.value))} aria-label="Precio unitario" />
+                        <strong>{money(item.costTotal)}</strong>
+                        <strong>{money(item.saleTotal)}</strong>
                         <button type="button" className="ghost" onClick={() => removeAccessoryItem(item.id)} aria-label="Eliminar accesorio"><Eraser size={16} /></button>
                       </div>
                     ))}
@@ -2986,73 +3197,116 @@ function App() {
               </div>
             </article>
 
-            <aside className="quote-side">
-              <article className="panel summary-card" aria-label="Resumen de cotización" aria-live="polite">
-                <h2>Resumen de cotización</h2>
-                <div className="total-number">{money(quote.total)}</div>
-                <div className="live-summary-grid">
-                  <div className="live-summary-item"><span>Área total</span><strong>{decimal(quote.areaTotal)} m²</strong></div>
-                  <div className="live-summary-item"><span>Lineal</span><strong>{decimal(quote.linearTotal)} m</strong></div>
-                  <div className="live-summary-item"><span>Anticipo</span><strong>{money(quote.deposit)}</strong></div>
-                  <div className="live-summary-item"><span>Saldo</span><strong>{money(quote.rest)}</strong></div>
-                  <div className="live-summary-item"><span>Utilidad</span><strong>{money(quote.profit)}</strong></div>
-                  <div className="live-summary-item"><span>Datos</span><strong>{dataHealth.score}%</strong></div>
-                </div>
-                {dataHealth.warnings.length > 0 && (
-                  <p className="live-summary-warning" role="status" aria-live="polite">{dataHealth.warnings[0]}</p>
-                )}
-                <div className="actions">
-                  <button type="button" onClick={saveToHistory}><Save size={18} /> Guardar historial</button>
-                  <button type="button" className="ghost" onClick={applySuggestedPrices}><BarChart3 size={18} /> Aplicar sugeridos</button>
-                  <button type="button" className="ghost" onClick={() => openPrint('client')}><FileText size={18} /> PDF cliente</button>
-                  <button type="button" className="ghost" onClick={() => openPrint('business')}><ClipboardList size={18} /> Hoja interna</button>
-                </div>
-
-                <h3>Materiales calculados</h3>
-                {materials.map((item) => (
-                  <div key={`${item.name}-${item.detail}`} className="mini-row">
-                    <span>{item.name}</span>
-                    <strong>{money(item.cost)}</strong>
-                  </div>
-                ))}
-              </article>
-
-              <article className="panel professional-analysis">
+            <aside
+              className={`quote-floating ${floatingSummary.compact ? 'compact' : ''} ${floatingSummary.minimized ? 'minimized' : ''}`}
+              style={{ left: floatingSummary.x, top: floatingSummary.y }}
+              aria-label="Resumen de cotización"
+              aria-live="polite"
+            >
+              <div className="quote-floating-head" onMouseDown={startSummaryDrag}>
+                <strong>Resumen de cotización</strong>
                 <div>
-                  <h3>Análisis profesional</h3>
-                  <p>Vista rápida para cotizar, instalar y comprar materiales.</p>
+                  <button type="button" onClick={() => setFloatingSummary((current) => ({ ...current, compact: !current.compact }))}>Compacta</button>
+                  <button type="button" onClick={() => setFloatingSummary((current) => ({ ...current, minimized: !current.minimized }))}>{floatingSummary.minimized ? 'Abrir' : 'Minimizar'}</button>
+                  <button type="button" onClick={() => setFloatingSummary({ x: 24, y: 120, compact: false, minimized: false })}>Inicial</button>
                 </div>
-                {professionalAnalysis.map((item) => (
-                  <article key={item.role} className="professional-card">
-                    <span>{item.role}</span>
-                    <h4>{item.title}</h4>
-                    <p className="professional-total">{item.total}</p>
-                    <p>{item.why}</p>
-                    <ul className="professional-how">
-                      {item.how.map((line) => <li key={line}>{line}</li>)}
-                    </ul>
-                  </article>
-                ))}
-                <div className="professional-card">
-                  <h4>Total cliente</h4>
-                  <div className="professional-row"><span>Materiales</span><strong>{money(quote.material)}</strong></div>
-                  <div className="professional-row"><span>Herrajes/accesorios</span><strong>{money(quote.hardwareSale)}</strong></div>
-                  <div className="professional-row"><span>Mano de obra</span><strong>{money(quote.manoObra)}</strong></div>
-                  <div className="professional-row"><span>Extras</span><strong>{money(quote.extras)}</strong></div>
-                  <div className="professional-row"><span>Descuento</span><strong>-{money(quote.discountAmount)}</strong></div>
-                  <div className="professional-row professional-row-total"><span>Total</span><strong>{money(quote.total)}</strong></div>
+              </div>
+              {!floatingSummary.minimized && (
+                <div className="quote-floating-body">
+                  <div className="total-number">{money(quote.total)}</div>
+                  <div className="live-summary-grid">
+                    <div className="live-summary-item"><span>Total cliente</span><strong>{money(quote.total)}</strong></div>
+                    <div className="live-summary-item"><span>Anticipo</span><strong>{money(quote.deposit)}</strong></div>
+                    <div className="live-summary-item"><span>Saldo</span><strong>{money(quote.rest)}</strong></div>
+                    <div className="live-summary-item"><span>Utilidad</span><strong>{money(quote.profit)}</strong></div>
+                    <div className="live-summary-item"><span>Estado</span><strong>{form.estadoCotizacion}</strong></div>
+                    <div className="live-summary-item"><span>Datos</span><strong>{dataHealth.score}%</strong></div>
+                  </div>
+                  {dataHealth.warnings.length > 0 && (
+                    <p className="live-summary-warning" role="status" aria-live="polite">{dataHealth.warnings[0]}</p>
+                  )}
+                  <div className="actions compact">
+                    <button type="button" onClick={saveToHistory}><Save size={18} /> Guardar</button>
+                    <button type="button" className="ghost" onClick={() => openPrint('client')}><FileText size={18} /> Editar PDF</button>
+                    <button type="button" className="ghost" onClick={openWhatsApp}><MessageCircle size={18} /> WhatsApp</button>
+                  </div>
+                  <div className="floating-analysis">
+                    <h3>Análisis profesional</h3>
+                    {professionalAnalysis.map((item) => (
+                      <article key={item.role} className="professional-card">
+                        <span>{item.role}</span>
+                        <h4>{item.title}</h4>
+                        <p className="professional-total">{item.total}</p>
+                        {!floatingSummary.compact && <p>{item.why}</p>}
+                      </article>
+                    ))}
+                  </div>
                 </div>
-                <div className="professional-card internal-only">
-                  <h4>Total interno ALUXOR</h4>
-                  <div className="professional-row"><span>Material interno</span><strong>{money(quote.internalMaterialCost)}</strong></div>
-                  <div className="professional-row"><span>Costo herrajes</span><strong>{money(quote.hardwareCost)}</strong></div>
-                  <div className="professional-row"><span>Total interno</span><strong>{money(quote.internalTotal)}</strong></div>
-                  <div className="professional-row"><span>Utilidad estimada</span><strong>{money(quote.profit)}</strong></div>
-                  <div className="professional-row"><span>Utilidad %</span><strong>{decimal(quote.profitPercent, 1)}%</strong></div>
-                </div>
-              </article>
+              )}
             </aside>
           </section>
+        )}
+
+        {pdfEditor && (
+          <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Editar documento profesional">
+            <section className="panel pdf-editor-modal">
+              <div className="section-head">
+                <div>
+                  <h2>Editar documento profesional</h2>
+                  <p>Revisa el documento antes de generar PDF cliente o interno.</p>
+                </div>
+              </div>
+              <div className="actions compact">
+                <button type="button" className={pdfEditor.view === 'client' ? '' : 'ghost'} onClick={() => setPdfEditor((current) => ({ ...current, view: 'client' }))}>Vista cliente</button>
+                <button type="button" className={pdfEditor.view === 'business' ? '' : 'ghost'} onClick={() => setPdfEditor((current) => ({ ...current, view: 'business' }))}>Vista interna</button>
+              </div>
+              <div className="form-grid">
+                {[
+                  ['titulo', 'Título'],
+                  ['cliente', 'Cliente'],
+                  ['vigencia', 'Vigencia'],
+                  ['anticipo', 'Anticipo'],
+                  ['saldo', 'Saldo'],
+                  ['total', 'Total'],
+                ].map(([field, label]) => (
+                  <Field key={field} id={`pdf-${field}`} label={label}>
+                    <input
+                      id={`pdf-${field}`}
+                      value={pdfEditor.doc[field] || ''}
+                      onChange={(event) => setPdfEditor((current) => ({ ...current, doc: { ...current.doc, [field]: event.target.value } }))}
+                    />
+                  </Field>
+                ))}
+                {[
+                  ['descripcion', 'Descripción'],
+                  ['partidas', 'Partidas'],
+                  ['condiciones', 'Condiciones'],
+                  ['notas', 'Notas'],
+                ].map(([field, label]) => (
+                  <Field key={field} id={`pdf-${field}`} label={label}>
+                    <textarea
+                      id={`pdf-${field}`}
+                      value={pdfEditor.doc[field] || ''}
+                      onChange={(event) => setPdfEditor((current) => ({ ...current, doc: { ...current.doc, [field]: event.target.value } }))}
+                    />
+                  </Field>
+                ))}
+              </div>
+              <div className="pdf-preview">
+                <h3>{pdfEditor.view === 'business' ? 'Vista interna' : 'Vista cliente'}</h3>
+                <p><strong>Total:</strong> {pdfEditor.doc.total}</p>
+                <p><strong>Anticipo:</strong> {pdfEditor.doc.anticipo} · <strong>Saldo:</strong> {pdfEditor.doc.saldo}</p>
+                {pdfEditor.view === 'business' && (
+                  <p><strong>Interno:</strong> costo {money(quote.internalTotal)}, utilidad {money(quote.profit)}, margen {decimal(quote.profitPercent, 1)}%.</p>
+                )}
+              </div>
+              <div className="actions">
+                <button type="button" onClick={() => generateProfessionalPdf('client')}><FileText size={18} /> Generar PDF cliente</button>
+                <button type="button" className="ghost" onClick={() => generateProfessionalPdf('business')}><ClipboardList size={18} /> Generar PDF interno</button>
+                <button type="button" className="ghost" onClick={() => setPdfEditor(null)}>Cancelar</button>
+              </div>
+            </section>
+          </div>
         )}
 
         {activeSection === 'catalogo' && (
