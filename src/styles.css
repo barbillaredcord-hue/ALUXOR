@@ -3541,8 +3541,27 @@ textarea {
   overflow-x: auto;
   scroll-snap-type: x proximity;
   padding: 0 12px 14px;
-  scrollbar-width: thin;
+  scrollbar-width: thin; /* Firefox */
   scroll-behavior: smooth;
+}
+
+/* Chrome, Edge, Safari */
+.calc-chain-flow::-webkit-scrollbar {
+  height: 8px;
+}
+
+.calc-chain-flow::-webkit-scrollbar-track {
+  background: rgba(23, 32, 27, 0.06);
+  border-radius: 999px;
+}
+
+.calc-chain-flow::-webkit-scrollbar-thumb {
+  background: rgba(34, 116, 95, 0.35);
+  border-radius: 999px;
+}
+
+.calc-chain-flow::-webkit-scrollbar-thumb:hover {
+  background: rgba(34, 116, 95, 0.55);
 }
 
 .calc-step {
