@@ -3541,7 +3541,6 @@ textarea {
   overflow-x: auto;
   scroll-snap-type: x proximity;
   padding: 0 12px 14px;
-  scrollbar-width: thin; /* Firefox */
   scroll-behavior: smooth;
 }
 
