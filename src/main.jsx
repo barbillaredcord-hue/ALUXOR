@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import './styles.css';
 import { registerServiceWorker } from './pwa';
+import { Pricing } from './lib/br-engine/index.js';
 
 const APP_VERSION = '2026.05.39';
 const APP_VERSION_QUERY = '20260539';
@@ -518,6 +519,7 @@ function normalizeMaterialItem(item, index = 0, data = {}) {
     unidad,
     usarArea: Boolean(item?.usarArea),
     calculo,
+    categoria: clean(item?.categoria, clean(data.giro, 'Material')),
     tipoCompra: clean(item?.tipoCompra, calculo),
     baseCalculo: clean(item?.baseCalculo, calculo === 'lineal' ? 'lineal' : calculo === 'manual' || calculo === 'pieza' ? 'manual_qty' : 'medidas_area'),
     cantidad: item?.cantidad === '' ? '' : positiveNumber(item?.cantidad),
@@ -936,12 +938,13 @@ function calculateQuote(data) {
     if (['pieza', 'manual'].includes(tipoCompra)) costTotal = piezasNecesarias * costoUnitario;
     const baseCost = tipoCompra === 'hoja' ? areaNecesaria * costoMetroCuadrado : rowQuantity * costoUnitario;
     const wasteCost = Math.max(0, costTotal - baseCost);
-    const suggestedUnit = (tipoCompra === 'hoja' ? costoMetroCuadrado : costoUnitario) * factorMerma * (1 + rowMargin / 100);
-    const unitPrice = item.precioManual ? positiveNumber(item.precioUnitario) : suggestedUnit;
-    const saleTotal = rowQuantity * unitPrice;
-    const suggestedSaleTotal = rowQuantity * suggestedUnit;
-    const marginAmount = saleTotal - costTotal;
-    const marginPercent = costTotal > 0 ? (marginAmount / costTotal) * 100 : 0;
+    const suggestedSaleTotal = Pricing.aplicarMargenSobreCosto(costTotal, rowMargin);
+    const suggestedUnit = rowQuantity > 0 ? suggestedSaleTotal / rowQuantity : 0;
+    const saleTotal = item.precioManual ? rowQuantity * positiveNumber(item.precioUnitario) : suggestedSaleTotal;
+    const unitPrice = rowQuantity > 0 ? saleTotal / rowQuantity : 0;
+    const marginAmount = Pricing.calcularUtilidad(saleTotal, costTotal);
+    const marginPercent = Pricing.calcularUtilidadSobreCosto(marginAmount, costTotal);
+    const marginPercentOverSale = Pricing.calcularUtilidadSobreVenta(marginAmount, saleTotal);
     return {
       ...item,
       tipoCompra,
@@ -972,6 +975,7 @@ function calculateQuote(data) {
       suggestedSaleTotal,
       marginAmount,
       marginPercent,
+      marginPercentOverSale,
       calculationSteps: [
         tipoCompra === 'hoja' ? `Área hoja: ${decimal(areaHoja)} m².` : null,
         tipoCompra === 'hoja' ? `Costo m² real: ${money(costoMetroCuadrado)}.` : null,
@@ -991,13 +995,16 @@ function calculateQuote(data) {
     const rowQuantity = Math.max(1, positiveNumber(item.cantidad) || 1);
     const rowMerma = percentValue(item.merma);
     const rowMargin = item.margen === '' ? margenMaterial : positiveNumber(item.margen);
-    const pricing = priceRule(item.costoUnitario, rowMerma, rowMargin);
-    const unitPrice = item.precioManual ? positiveNumber(item.precioUnitario) : pricing.precioCliente;
-    const baseCost = rowQuantity * pricing.costoBase;
-    const costTotal = rowQuantity * pricing.costoConMerma;
-    const saleTotal = rowQuantity * unitPrice;
-    const marginAmount = saleTotal - costTotal;
-    const marginPercent = costTotal > 0 ? (marginAmount / costTotal) * 100 : 0;
+    const unitCost = positiveNumber(item.costoUnitario);
+    const baseCost = rowQuantity * unitCost;
+    const costTotal = baseCost * (1 + rowMerma / 100);
+    const suggestedSaleTotal = Pricing.aplicarMargenSobreCosto(costTotal, rowMargin);
+    const suggestedUnit = rowQuantity > 0 ? suggestedSaleTotal / rowQuantity : 0;
+    const saleTotal = item.precioManual ? rowQuantity * positiveNumber(item.precioUnitario) : suggestedSaleTotal;
+    const unitPrice = rowQuantity > 0 ? saleTotal / rowQuantity : 0;
+    const marginAmount = Pricing.calcularUtilidad(saleTotal, costTotal);
+    const marginPercent = Pricing.calcularUtilidadSobreCosto(marginAmount, costTotal);
+    const marginPercentOverSale = Pricing.calcularUtilidadSobreVenta(marginAmount, saleTotal);
     return {
       ...item,
       rowQuantity,
@@ -1008,11 +1015,14 @@ function calculateQuote(data) {
       baseCost,
       wasteCost: costTotal - baseCost,
       costTotal,
-      costoConMerma: pricing.costoConMerma,
+      costoConMerma: rowQuantity > 0 ? costTotal / rowQuantity : 0,
       precioCliente: unitPrice,
       saleTotal,
+      suggestedUnit,
+      suggestedSaleTotal,
       marginAmount,
       marginPercent,
+      marginPercentOverSale,
     };
   });
 
@@ -1963,6 +1973,74 @@ function Field({ id, label, children, help, why, how }) {
   );
 }
 
+function CalculationChain({ title, steps, defaultOpen = false }) {
+  const toneForStep = (step) => {
+    const label = `${step.title} ${step.next || ''}`.toLowerCase();
+    if (/medida|área|lineal|cantidad|pieza/.test(label)) return 'measure';
+    if (/material|hoja|madera|merma/.test(label)) return 'material';
+    if (/precio|utilidad|saldo|anticipo|resultado|documento|cliente/.test(label)) return 'result';
+    if (/advert|riesgo|faltante|negativa/.test(label)) return 'warning';
+    return 'calc';
+  };
+  return (
+    <details className="calc-chain" open={defaultOpen}>
+      <summary><span>Operación</span><strong>{title}</strong></summary>
+      <div className="calc-chain-flow">
+        {steps.filter(Boolean).map((step, index) => {
+          const tone = step.tone || toneForStep(step);
+          return (
+          <article key={`${step.title}-${index}-${step.result}`} className={`calc-step calc-step-${tone}`}>
+            <div className="calc-step-main">
+              <div className="calc-step-icon"><Check size={14} /></div>
+              <h4>{step.title}</h4>
+              <strong className="calc-step-value">{step.result}</strong>
+            </div>
+            <details className="calc-step-info">
+              <summary aria-label={`Ver explicación de ${step.title}`}>?</summary>
+              {step.input && <p><strong>Entrada:</strong> {step.input}</p>}
+              {step.operation && <p><strong>Operación:</strong> {step.operation}</p>}
+              {step.next && <p className="calc-next"><strong>Sigue:</strong> {step.next}</p>}
+            </details>
+          </article>
+        );
+        })}
+      </div>
+    </details>
+  );
+}
+
+function DashboardSummary({ number, title, description, status = 'Revisar', highlight = false }) {
+  return (
+    <summary className={highlight ? 'dashboard-summary highlight' : 'dashboard-summary'}>
+      <span className="dashboard-number">{number}</span>
+      <span className="dashboard-title">
+        <strong>{title}</strong>
+        <small>{description}</small>
+      </span>
+      <em>{status}</em>
+    </summary>
+  );
+}
+
+function professionalChainInsights(quote) {
+  const totalInternal = Math.max(quote.internalTotal, 0);
+  const percent = (value) => totalInternal > 0 ? decimal((value / totalInternal) * 100, 0) : '0';
+  const materialShare = percent(quote.internalMaterialCost);
+  const laborShare = quote.total > 0 ? decimal((quote.manoObra / quote.total) * 100, 0) : '0';
+  const hardwareShare = percent(quote.hardwareCost);
+  const sheetsWarning = quote.materialRows.find((item) => item.hojasNecesarias > 0 && item.areaHoja > 0 && item.areaConMerma > 0 && item.hojasNecesarias - (item.areaConMerma / item.areaHoja) >= 0.25);
+  const highWaste = quote.materialRows.find((item) => percentValue(item.merma) >= 10);
+
+  return [
+    quote.wasteCost > 0 ? `✔ El incremento proviene de la merma: ${money(quote.wasteCost)}.` : '✔ No hay merma relevante capturada.',
+    `✔ El material representa ${materialShare}% del costo interno.`,
+    `✔ Mano de obra representa ${laborShare}% del precio cliente.`,
+    `✔ Herrajes representan ${hardwareShare}% del costo interno.`,
+    highWaste ? `⚠ La utilidad podría aumentar reduciendo desperdicio en ${highWaste.nombre}.` : null,
+    sheetsWarning ? `⚠ Se compran ${sheetsWarning.hojasNecesarias} hojas completas aunque se usan ${decimal(sheetsWarning.areaConMerma / sheetsWarning.areaHoja)} hojas equivalentes.` : null,
+  ].filter(Boolean);
+}
+
 function PlanCanvas3D({ data, rotation, zoom }) {
   const mountRef = useRef(null);
 
@@ -2132,7 +2210,7 @@ function App() {
   const [typeDetails, setTypeDetails] = useState(loadTypeDetails);
   const [appLogo, setAppLogo] = useState(loadAppLogo);
   const [floatingSummary, setFloatingSummary] = useState({ x: 24, y: 120, compact: false, minimized: false });
-  const [quickCalc, setQuickCalc] = useState({ materialId: '', nombre: 'Melamina', tipoCompra: 'hoja', ancho: 122, alto: 244, largo: 100, cantidad: 1, precioTotal: 1200, merma: 8, margen: 35 });
+  const [quickCalc, setQuickCalc] = useState({ materialId: '', nombre: 'Melamina', categoria: 'Madera/Melamina', tipoCompra: 'hoja', baseUso: 'medidas', ancho: 122, alto: 244, largo: 100, cantidad: 1, precioTotal: 1200, areaManual: 0, linealManual: 0, cantidadManual: 1, merma: 8, margen: 35 });
   const [pdfEditor, setPdfEditor] = useState(null);
 
   const quote = useMemo(() => calculateQuote(form), [form]);
@@ -2141,19 +2219,32 @@ function App() {
   const outputs = useMemo(() => generateOutputs(form, quote), [form, quote]);
   const roleCards = useMemo(() => workRoleCards(form, quote), [form, quote]);
   const professionalAnalysis = useMemo(() => quoteProfessionalAnalysis(form, quote), [form, quote]);
+  const chainInsights = useMemo(() => professionalChainInsights(quote), [quote]);
   const score = countScore(form);
   const mainOutput = outputs[0];
   const quoteOutput = outputs[1];
   const currentTypeOptions = typeOptionsFor(form.giro, typeDetails);
   const quickCantidad = Math.max(1, positiveNumber(quickCalc.cantidad) || 1);
+  const quickPrecioUnidadCompra = positiveNumber(quickCalc.precioTotal) / quickCantidad;
   const quickAreaPorPieza = (positiveNumber(quickCalc.ancho) / 100) * (positiveNumber(quickCalc.alto) / 100);
   const quickArea = quickAreaPorPieza * quickCantidad;
   const quickLinear = (positiveNumber(quickCalc.largo) / 100) * quickCantidad;
   const quickCostoM2 = quickArea > 0 ? positiveNumber(quickCalc.precioTotal) / quickArea : 0;
   const quickCostoLineal = quickLinear > 0 ? positiveNumber(quickCalc.precioTotal) / quickLinear : 0;
-  const quickCostoUnitario = quickCalc.tipoCompra === 'lineal' ? quickCostoLineal : quickCalc.tipoCompra === 'pieza' || quickCalc.tipoCompra === 'manual' ? positiveNumber(quickCalc.precioTotal) / quickCantidad : quickCostoM2;
+  const quickCostoUnitario = quickCalc.tipoCompra === 'lineal' ? quickCostoLineal : quickCalc.tipoCompra === 'pieza' || quickCalc.tipoCompra === 'manual' ? quickPrecioUnidadCompra : quickCostoM2;
   const quickPricing = priceRule(quickCostoUnitario, quickCalc.merma, quickCalc.margen);
-  const quickProfit = quickPricing.precioCliente - quickPricing.costoConMerma;
+  const quickAreaNecesaria = quickCalc.baseUso === 'manual' ? positiveNumber(quickCalc.areaManual) : quote.areaTotal;
+  const quickLinealNecesario = quickCalc.baseUso === 'manual' ? positiveNumber(quickCalc.linealManual) : quote.linearTotal;
+  const quickCantidadNecesaria = quickCalc.baseUso === 'manual' ? Math.max(1, positiveNumber(quickCalc.cantidadManual) || 1) : Math.max(1, quote.cantidad || 1);
+  const quickFactorMerma = 1 + percentValue(quickCalc.merma) / 100;
+  const quickHojasComprar = quickAreaPorPieza > 0 ? Math.ceil((quickAreaNecesaria * quickFactorMerma) / quickAreaPorPieza) : 0;
+  const quickPiezasComprar = Math.ceil(quickCantidadNecesaria * quickFactorMerma);
+  const quickCompraSinMerma = quickCalc.tipoCompra === 'lineal' ? quickLinealNecesario * quickCostoLineal : quickCalc.tipoCompra === 'pieza' || quickCalc.tipoCompra === 'manual' ? quickCantidadNecesaria * quickCostoUnitario : quickAreaNecesaria * quickCostoM2;
+  const quickCompraConMerma = quickCalc.tipoCompra === 'hoja' ? quickHojasComprar * quickPrecioUnidadCompra : quickCalc.tipoCompra === 'lineal' ? quickLinealNecesario * quickFactorMerma * quickCostoLineal : quickPiezasComprar * quickCostoUnitario;
+  const quickTotalClienteSinMargen = quickCompraSinMerma * quickFactorMerma;
+  const quickTotalClienteConMargen = quickCalc.tipoCompra === 'lineal' ? quickLinealNecesario * quickPricing.precioCliente : quickCalc.tipoCompra === 'pieza' || quickCalc.tipoCompra === 'manual' ? quickCantidadNecesaria * quickPricing.precioCliente : quickAreaNecesaria * quickPricing.precioCliente;
+  const quickProfit = quickTotalClienteConMargen - quickCompraConMerma;
+  const quickProfitPercent = quickCompraConMerma > 0 ? (quickProfit / quickCompraConMerma) * 100 : 0;
 
   const menuItems = [
     { id: 'inicio', label: 'Inicio', icon: LayoutDashboard },
@@ -2778,7 +2869,7 @@ function App() {
   }
 
   function updateQuickCalc(field, value) {
-    setQuickCalc((current) => ({ ...current, [field]: field === 'nombre' || field === 'tipoCompra' || field === 'materialId' ? value : numberValue(value) }));
+    setQuickCalc((current) => ({ ...current, [field]: ['nombre', 'categoria', 'tipoCompra', 'materialId', 'baseUso'].includes(field) ? value : numberValue(value) }));
   }
 
   function quickCalcText() {
@@ -2821,16 +2912,19 @@ function App() {
       const nextItem = {
         ...(target || normalizeMaterialItem({ id: `mat-${Date.now()}`, nombre: quickCalc.nombre }, materialItems.length, current)),
         nombre: clean(quickCalc.nombre, 'Material'),
+        categoria: clean(quickCalc.categoria, 'Material'),
         calculo: quickCalc.tipoCompra === 'lineal' ? 'lineal' : ['pieza', 'manual'].includes(quickCalc.tipoCompra) ? 'manual' : 'area',
-        baseCalculo: quickCalc.tipoCompra === 'lineal' ? 'lineal' : ['pieza', 'manual'].includes(quickCalc.tipoCompra) ? 'manual_qty' : 'medidas_area',
+        baseCalculo: quickCalc.baseUso === 'manual'
+          ? (quickCalc.tipoCompra === 'lineal' ? 'lineal' : ['pieza', 'manual'].includes(quickCalc.tipoCompra) ? 'manual_qty' : 'manual_area')
+          : (quickCalc.tipoCompra === 'lineal' ? 'lineal' : ['pieza', 'manual'].includes(quickCalc.tipoCompra) ? 'manual_qty' : 'medidas_area'),
         tipoCompra: quickCalc.tipoCompra,
         unidad: quickCalc.tipoCompra === 'lineal' ? 'metro lineal' : ['pieza', 'manual'].includes(quickCalc.tipoCompra) ? 'pieza' : 'm²',
         usarArea: ['hoja', 'area', 'lineal'].includes(quickCalc.tipoCompra),
-        cantidad: quickCantidad,
+        cantidad: quickCalc.tipoCompra === 'lineal' ? Math.max(1, positiveNumber(quickCalc.largo) || 1) : ['pieza', 'manual'].includes(quickCalc.tipoCompra) ? quickCantidadNecesaria : quickCantidad,
         ancho: positiveNumber(quickCalc.ancho),
         alto: positiveNumber(quickCalc.alto),
         largo: positiveNumber(quickCalc.largo),
-        costoUnitario: Math.round(quickCostoUnitario),
+        costoUnitario: Math.round(quickCalc.tipoCompra === 'hoja' ? quickPrecioUnidadCompra : quickCostoUnitario),
         precioUnitario: Math.round(quickPricing.precioCliente),
         merma: percentValue(quickCalc.merma),
         margen: positiveNumber(quickCalc.margen),
@@ -3081,9 +3175,18 @@ function App() {
               </div>
 
               <details className="quote-accordion quick-calculator" open>
-                <summary>Calculadora de costo por unidad</summary>
+                <DashboardSummary number="03" title="Calculadora rápida de material" description="Herramienta de referencia, no suma hasta aplicar." status="Herramienta" highlight />
                 <div className="form-grid">
                   <Field id="quickNombre" label="Nombre del material"><input id="quickNombre" value={quickCalc.nombre} onChange={(event) => updateQuickCalc('nombre', event.target.value)} /></Field>
+                  <Field id="quickCategoria" label="Categoría">
+                    <select id="quickCategoria" value={quickCalc.categoria} onChange={(event) => updateQuickCalc('categoria', event.target.value)}>
+                      <option>Vidrio</option>
+                      <option>Aluminio</option>
+                      <option>Madera/Melamina</option>
+                      <option>Herraje</option>
+                      <option>Otro</option>
+                    </select>
+                  </Field>
                   <Field id="quickTipoCompra" label="Tipo de compra">
                     <select id="quickTipoCompra" value={quickCalc.tipoCompra} onChange={(event) => updateQuickCalc('tipoCompra', event.target.value)}>
                       <option value="hoja">Hoja / placa</option>
@@ -3099,21 +3202,46 @@ function App() {
                       {materialItemsFromForm(form, quote.areaTotal).map((item) => <option key={item.id} value={item.id}>{item.nombre}</option>)}
                     </select>
                   </Field>
+                  <Field id="quickBaseUso" label="Usar base">
+                    <select id="quickBaseUso" value={quickCalc.baseUso} onChange={(event) => updateQuickCalc('baseUso', event.target.value)}>
+                      <option value="medidas">Automático de medidas</option>
+                      <option value="manual">Captura manual</option>
+                    </select>
+                  </Field>
                   <Field id="quickAncho" label="Ancho cm"><input id="quickAncho" type="number" value={quickCalc.ancho} onChange={(event) => updateQuickCalc('ancho', event.target.value)} /></Field>
                   <Field id="quickAlto" label="Alto cm"><input id="quickAlto" type="number" value={quickCalc.alto} onChange={(event) => updateQuickCalc('alto', event.target.value)} /></Field>
                   <Field id="quickLargo" label="Largo cm"><input id="quickLargo" type="number" value={quickCalc.largo} onChange={(event) => updateQuickCalc('largo', event.target.value)} /></Field>
                   <Field id="quickCantidad" label="Cantidad comprada"><input id="quickCantidad" type="number" value={quickCalc.cantidad} onChange={(event) => updateQuickCalc('cantidad', event.target.value)} /></Field>
                   <Field id="quickPrecioTotal" label="Precio total de compra"><input id="quickPrecioTotal" type="number" value={quickCalc.precioTotal} onChange={(event) => updateQuickCalc('precioTotal', event.target.value)} /></Field>
+                  <Field id="quickAreaManual" label="Área necesaria manual"><input id="quickAreaManual" type="number" value={quickCalc.areaManual} onChange={(event) => updateQuickCalc('areaManual', event.target.value)} /></Field>
+                  <Field id="quickLinealManual" label="ML necesarios manual"><input id="quickLinealManual" type="number" value={quickCalc.linealManual} onChange={(event) => updateQuickCalc('linealManual', event.target.value)} /></Field>
+                  <Field id="quickCantidadManual" label="Cantidad necesaria manual"><input id="quickCantidadManual" type="number" value={quickCalc.cantidadManual} onChange={(event) => updateQuickCalc('cantidadManual', event.target.value)} /></Field>
                   <Field id="quickMerma" label="Merma %"><input id="quickMerma" type="number" value={quickCalc.merma} onChange={(event) => updateQuickCalc('merma', event.target.value)} /></Field>
                   <Field id="quickMargen" label="Margen %"><input id="quickMargen" type="number" value={quickCalc.margen} onChange={(event) => updateQuickCalc('margen', event.target.value)} /></Field>
                 </div>
-                <div className="quick-results">
-                  <div><span>Área total comprada</span><strong>{decimal(quickArea)} m²</strong></div>
-                  <div><span>Costo real por m²</span><strong>{money(quickCostoM2)}</strong></div>
-                  <div><span>Costo real por metro lineal</span><strong>{money(quickCostoLineal)}</strong></div>
-                  <div><span>Costo con merma</span><strong>{money(quickPricing.costoConMerma)}</strong></div>
-                  <div><span>Precio recomendado al cliente</span><strong>{money(quickPricing.precioCliente)}</strong></div>
-                  <div><span>Utilidad estimada</span><strong>{money(quickProfit)}</strong></div>
+                <div className="quick-result-groups">
+                  <section>
+                    <h3>Costo interno sin venta</h3>
+                    <div className="quick-results">
+                      <div><span>Área por hoja/pieza</span><strong>{decimal(quickAreaPorPieza)} m²</strong></div>
+                      <div><span>Costo real por m²</span><strong>{money(quickCostoM2)}</strong></div>
+                      <div><span>Costo real por ML</span><strong>{money(quickCostoLineal)}</strong></div>
+                      <div><span>Hojas/piezas a comprar</span><strong>{quickCalc.tipoCompra === 'hoja' ? quickHojasComprar : quickPiezasComprar}</strong></div>
+                      <div><span>Total sin merma</span><strong>{money(quickCompraSinMerma)}</strong></div>
+                      <div><span>Total con merma</span><strong>{money(quickCompraConMerma)}</strong></div>
+                    </div>
+                  </section>
+                  <section>
+                    <h3>Precio sugerido al cliente</h3>
+                    <div className="quick-results">
+                      <div><span>Precio m² sin margen</span><strong>{money(quickPricing.costoConMerma)}</strong></div>
+                      <div><span>Precio m² con margen</span><strong>{money(quickPricing.precioCliente)}</strong></div>
+                      <div><span>Precio ML con margen</span><strong>{money(quickCalc.tipoCompra === 'lineal' ? quickPricing.precioCliente : 0)}</strong></div>
+                      <div><span>Total sin margen</span><strong>{money(quickTotalClienteSinMargen)}</strong></div>
+                      <div><span>Total con margen</span><strong>{money(quickTotalClienteConMargen)}</strong></div>
+                      <div><span>Utilidad</span><strong>{money(quickProfit)} ({decimal(quickProfitPercent, 1)}%)</strong></div>
+                    </div>
+                  </section>
                 </div>
                 <details className="field-help calc-help">
                   <summary>¿Cómo se calculó?</summary>
@@ -3131,7 +3259,7 @@ function App() {
 
               <div className="quote-accordion-list">
                 <details className="quote-accordion" open>
-                  <summary>1. Cliente</summary>
+                  <DashboardSummary number="01" title="Cliente y proyecto" description="Datos básicos para identificar la cotización." status={form.clienteNombre ? 'Completo' : 'Incompleto'} />
                   <div className="form-grid">
                     <Field id="clienteNombre" label="Cliente" {...guideFor('clienteNombre')}>{input('clienteNombre')}</Field>
                     <Field id="clienteTelefono" label="Teléfono" {...guideFor('clienteTelefono')}>{input('clienteTelefono')}</Field>
@@ -3141,7 +3269,7 @@ function App() {
                 </details>
 
                 <details className="quote-accordion">
-                  <summary>2. Proyecto / diseño</summary>
+                  <DashboardSummary number="01B" title="Proyecto / diseño" description="Producto, tipo de trabajo y acabado." status={form.producto ? 'Completo' : 'Revisar'} />
                   <div className="form-grid">
                     <Field id="giro" label="Giro">{input('giro')}</Field>
                     <Field id="tipoTrabajo" label="Tipo de trabajo">
@@ -3157,12 +3285,21 @@ function App() {
                 </details>
 
                 <details className="quote-accordion" open>
-                  <summary>3. Medidas</summary>
+                  <DashboardSummary number="02" title="Medidas del trabajo" description="Área, metro lineal y piezas del proyecto." status={quote.areaTotal > 0 ? 'Completo' : 'Revisar'} highlight />
                   <div className="quick-results measure-totals">
                     <div><span>Área total del proyecto</span><strong>{decimal(quote.areaTotal)} m²</strong></div>
                     <div><span>Metro lineal total</span><strong>{decimal(quote.linearTotal)} m</strong></div>
                     <div><span>Cantidad total de piezas</span><strong>{decimal(quote.cantidad, 0)}</strong></div>
                   </div>
+                  <CalculationChain
+                    title="Cálculo de medidas"
+                    steps={[
+                      { title: 'Área por pieza', input: `${quote.measureRows[0]?.ancho || 0} cm x ${quote.measureRows[0]?.alto || 0} cm`, operation: '(ancho / 100) x (alto / 100)', result: `${decimal(quote.measureRows[0]?.area || 0)} m²`, next: 'Área total del proyecto' },
+                      { title: 'Área total del proyecto', input: `${quote.measureRows.length} partida(s)`, operation: 'Suma de área por pieza x cantidad.', result: `${decimal(quote.areaTotal)} m²`, next: 'Metro lineal total' },
+                      { title: 'Metro lineal total', input: 'Ancho + alto por partida', operation: '((ancho + alto) x 2 / 100) x cantidad.', result: `${decimal(quote.linearTotal)} m`, next: 'Cantidad total' },
+                      { title: 'Cantidad total', input: 'Cantidad de cada partida', operation: 'Suma de cantidades capturadas.', result: `${decimal(quote.cantidad, 0)} pieza(s)`, next: 'Materiales' },
+                    ]}
+                  />
                   <div className="quote-table quote-measures-table">
                     <div className="quote-table-header">Nombre</div>
                     <div className="quote-table-header">Ancho</div>
@@ -3191,7 +3328,7 @@ function App() {
                 </details>
 
                 <details className="quote-accordion" open>
-                  <summary>4. Materiales</summary>
+                  <DashboardSummary number="04" title="Materiales de cotización" description="Compra, merma, margen y utilidad por material." status={quote.material > 0 ? 'Completo' : 'Revisar'} highlight />
                   <div className="form-grid material-base-grid">
                     <Field id="materialCotizacion" label="Material cotización" {...guideFor('materialCotizacion')}>{input('materialCotizacion')}</Field>
                     <Field id="precioM2" label="Precio m²" {...guideFor('precioM2')}>{input('precioM2', 'number')}</Field>
@@ -3201,52 +3338,67 @@ function App() {
                   </div>
                   <div className="quote-table quote-materials-table">
                     <div className="quote-table-header">Material</div>
+                    <div className="quote-table-header">Categoría</div>
+                    <div className="quote-table-header">Compra</div>
                     <div className="quote-table-header">Base</div>
-                    <div className="quote-table-header">Tipo</div>
-                    <div className="quote-table-header">Cantidad</div>
-                    <div className="quote-table-header">Ancho</div>
-                    <div className="quote-table-header">Alto</div>
-                    <div className="quote-table-header">Largo</div>
-                    <div className="quote-table-header">Área total</div>
+                    <div className="quote-table-header">Área/ml/cant.</div>
+                    <div className="quote-table-header">Medida compra</div>
                     <div className="quote-table-header">Merma %</div>
                     <div className="quote-table-header">Margen %</div>
-                    <div className="quote-table-header">Costo unit.</div>
-                    <div className="quote-table-header">Precio unit.</div>
-                    <div className="quote-table-header">Total costo</div>
-                    <div className="quote-table-header">Total cliente</div>
+                    <div className="quote-table-header">Cantidad a comprar</div>
+                    <div className="quote-table-header">Costo interno</div>
+                    <div className="quote-table-header">Cliente</div>
+                    <div className="quote-table-header">Utilidad</div>
                     <div className="quote-table-header">Borrar</div>
                     {quote.materialRows.map((item) => (
                       <div key={item.id} className="quote-table-row quote-material-row">
                         <input value={item.nombre} onChange={(event) => updateMaterialItem(item.id, 'nombre', event.target.value)} aria-label="Material" />
+                        <select value={item.categoria} onChange={(event) => updateMaterialItem(item.id, 'categoria', event.target.value)} aria-label="Categoría">
+                          <option>Vidrio</option>
+                          <option>Aluminio</option>
+                          <option>Madera/Melamina</option>
+                          <option>Herraje</option>
+                          <option>Otro</option>
+                        </select>
+                        <select value={item.tipoCompra} onChange={(event) => updateMaterialItem(item.id, 'tipoCompra', event.target.value)} aria-label="Tipo de compra">
+                          <option value="manual">Manual</option>
+                          <option value="pieza">Pieza</option>
+                          <option value="area">m²</option>
+                          <option value="lineal">Metro lineal</option>
+                          <option value="hoja">Hoja / placa</option>
+                        </select>
                         <select value={item.baseCalculo} onChange={(event) => updateMaterialItem(item.id, 'baseCalculo', event.target.value)} aria-label="Base de cálculo">
                           <option value="medidas_area">Área total de medidas</option>
                           <option value="manual_area">Área manual</option>
                           <option value="lineal">Metro lineal</option>
                           <option value="manual_qty">Cantidad manual</option>
                         </select>
-                        <select value={item.tipoCompra} onChange={(event) => updateMaterialItem(item.id, 'tipoCompra', event.target.value)} aria-label="Tipo de compra">
-                          <option value="manual">Manual</option>
-                          <option value="pieza">Pieza</option>
-                          <option value="area">Metro cuadrado</option>
-                          <option value="lineal">Metro lineal</option>
-                          <option value="hoja">Hoja / placa</option>
-                        </select>
-                        <input type="number" value={item.cantidad} onChange={(event) => updateMaterialItem(item.id, 'cantidad', numberValue(event.target.value))} aria-label="Cantidad" />
-                        <input type="number" value={item.ancho} onChange={(event) => updateMaterialItem(item.id, 'ancho', numberValue(event.target.value))} aria-label="Ancho" />
-                        <input type="number" value={item.alto} onChange={(event) => updateMaterialItem(item.id, 'alto', numberValue(event.target.value))} aria-label="Alto" />
-                        <input type="number" value={item.largo} onChange={(event) => updateMaterialItem(item.id, 'largo', numberValue(event.target.value))} aria-label="Largo" />
                         <strong>{decimal(item.rowQuantity)} {item.unidad}</strong>
+                        <div className="measure-purchase">
+                          <input type="number" value={item.ancho} onChange={(event) => updateMaterialItem(item.id, 'ancho', numberValue(event.target.value))} aria-label="Ancho compra" />
+                          <input type="number" value={item.alto} onChange={(event) => updateMaterialItem(item.id, 'alto', numberValue(event.target.value))} aria-label="Alto compra" />
+                          <input type="number" value={item.largo} onChange={(event) => updateMaterialItem(item.id, 'largo', numberValue(event.target.value))} aria-label="Largo compra" />
+                        </div>
                         <input type="number" value={item.merma} onChange={(event) => updateMaterialItem(item.id, 'merma', numberValue(event.target.value))} aria-label="Merma" />
                         <input type="number" value={item.rowMargin} onChange={(event) => updateMaterialItem(item.id, 'margen', numberValue(event.target.value))} aria-label="Margen" />
-                        <input type="number" value={item.costoUnitario} onChange={(event) => updateMaterialItem(item.id, 'costoUnitario', numberValue(event.target.value))} aria-label="Costo unitario" />
-                        <input type="number" value={item.precioManual ? item.precioUnitario : Math.round(item.precioCliente)} onChange={(event) => updateMaterialItem(item.id, 'precioUnitario', numberValue(event.target.value))} aria-label="Precio unitario" />
+                        <strong>{item.tipoCompra === 'hoja' ? `${item.hojasNecesarias} hoja(s)` : item.tipoCompra === 'lineal' ? `${decimal(item.metrosNecesarios)} m` : `${item.piezasNecesarias || decimal(item.rowQuantity, 0)} pza(s)`}</strong>
                         <strong>{money(item.costTotal)}</strong>
                         <strong>{money(item.saleTotal)}</strong>
+                        <strong>{money(item.marginAmount)}</strong>
                         <button type="button" className="ghost" onClick={() => removeMaterialItem(item.id)} aria-label="Eliminar material"><Eraser size={16} /></button>
-                        <details className="material-calc-detail">
-                          <summary>¿Cómo se calculó?</summary>
-                          {(item.calculationSteps || []).map((line) => <span key={line}>{line}</span>)}
-                        </details>
+                        <CalculationChain
+                          title={`Ver cálculo: ${item.nombre}`}
+                          steps={[
+                            { title: 'Base usada', input: item.baseCalculo, operation: 'Se toma área, lineal o cantidad según la base.', result: `${decimal(item.rowQuantity)} ${item.unidad}`, next: 'Merma' },
+                            { title: 'Merma', input: `${decimal(item.rowQuantity)} con ${decimal(item.merma, 1)}%`, operation: `base x (1 + ${decimal(item.merma, 1)} / 100)`, result: item.tipoCompra === 'hoja' ? `${decimal(item.areaConMerma)} m²` : item.tipoCompra === 'lineal' ? `${decimal(item.largoConMerma)} m` : `${decimal(item.cantidadConMerma)} pza(s)`, next: item.tipoCompra === 'hoja' ? 'Área por hoja' : 'Costo interno' },
+                            item.tipoCompra === 'hoja' ? { title: 'Área por hoja', input: `${item.ancho} cm x ${item.alto} cm`, operation: '(ancho / 100) x (alto / 100)', result: `${decimal(item.areaHoja)} m²`, next: 'Hojas necesarias' } : null,
+                            item.tipoCompra === 'hoja' ? { title: 'Hojas necesarias', input: `${decimal(item.areaConMerma)} m² / ${decimal(item.areaHoja)} m²`, operation: 'Se redondea hacia arriba.', result: `${item.hojasNecesarias} hoja(s)`, next: 'Costo interno' } : null,
+                            { title: 'Costo interno', input: item.tipoCompra === 'hoja' ? `${item.hojasNecesarias} x ${money(item.costoUnitario)}` : `${decimal(item.rowQuantity)} x ${money(item.costoUnitario)} + merma`, operation: 'Cantidad comprada x costo unitario.', result: money(item.costTotal), next: 'Margen' },
+                            { title: 'Margen', input: `${decimal(item.rowMargin, 1)}%`, operation: 'Costo interno real x margen = precio cliente', result: `${money(item.precioCliente)} por unidad base`, next: 'Precio cliente' },
+                            { title: 'Precio cliente', input: `${decimal(item.rowQuantity)} x ${money(item.precioCliente)}`, operation: 'Base usada x precio unitario cliente.', result: money(item.saleTotal), next: 'Utilidad' },
+                            { title: 'Utilidad', input: `${money(item.saleTotal)} - ${money(item.costTotal)}`, operation: 'Precio cliente - costo interno.', result: money(item.marginAmount), next: 'Resumen' },
+                          ]}
+                        />
                       </div>
                     ))}
                   </div>
@@ -3254,7 +3406,7 @@ function App() {
                 </details>
 
                 <details className="quote-accordion">
-                  <summary>5. Herrajes y accesorios</summary>
+                  <DashboardSummary number="05" title="Herrajes y accesorios" description="Accesorios, juegos, piezas y margen." status={quote.hardwareSale > 0 ? 'Completo' : 'Revisar'} />
                   <div className="quote-table quote-accessories-table">
                     <div className="quote-table-header">Accesorio</div>
                     <div className="quote-table-header">Tipo</div>
@@ -3282,6 +3434,16 @@ function App() {
                         <strong>{money(item.costTotal)}</strong>
                         <strong>{money(item.saleTotal)}</strong>
                         <button type="button" className="ghost" onClick={() => removeAccessoryItem(item.id)} aria-label="Eliminar accesorio"><Eraser size={16} /></button>
+                        <CalculationChain
+                          title={`¿Cómo se calculó ${item.nombre}?`}
+                          steps={[
+                            { title: 'Cantidad', input: `${decimal(item.rowQuantity, 0)} ${item.tipoCompra}`, operation: 'Cantidad capturada.', result: `${decimal(item.rowQuantity, 0)} pza(s)`, next: 'Costo unitario' },
+                            { title: 'Costo unitario', input: money(item.costoUnitario), operation: 'Costo proveedor por unidad.', result: money(item.costoUnitario), next: 'Costo total' },
+                            { title: 'Costo total', input: `${decimal(item.rowQuantity, 0)} x ${money(item.costoUnitario)}`, operation: 'Cantidad x costo con merma.', result: money(item.costTotal), next: 'Margen' },
+                            { title: 'Margen', input: `${decimal(item.rowMargin, 1)}%`, operation: 'Costo interno real x margen = precio cliente', result: money(item.precioCliente), next: 'Precio cliente' },
+                            { title: 'Precio cliente', input: `${decimal(item.rowQuantity, 0)} x ${money(item.precioCliente)}`, operation: 'Cantidad x precio unitario.', result: money(item.saleTotal), next: 'Resumen' },
+                          ]}
+                        />
                       </div>
                     ))}
                   </div>
@@ -3289,26 +3451,44 @@ function App() {
                 </details>
 
                 <details className="quote-accordion">
-                  <summary>6. Mano de obra</summary>
+                  <DashboardSummary number="06" title="Mano de obra" description="Servicio de fabricación e instalación." status={quote.manoObra > 0 ? 'Completo' : 'Revisar'} />
                   <div className="form-grid">
                     <Field id="manoObra" label="Mano de obra" {...guideFor('manoObra')}>{input('manoObra', 'number')}</Field>
                     <Field id="incluye" label="Incluye">{textareaInput('incluye')}</Field>
                     <Field id="entrega" label="Entrega">{input('entrega')}</Field>
                   </div>
+                  <CalculationChain
+                    title="Cadena de mano de obra"
+                    steps={[
+                      { title: 'Horas', input: 'No se capturan horas separadas.', operation: 'Se usa el monto total de mano de obra.', result: money(quote.manoObra), next: 'Costo hora' },
+                      { title: 'Costo hora', input: 'Incluido en mano de obra.', operation: 'Sin desglose de horas para no cambiar lógica.', result: money(quote.manoObra), next: 'Costo interno' },
+                      { title: 'Costo interno', input: money(quote.manoObra), operation: 'ALUXOR instala; se trata como ingreso/utilidad operativa.', result: money(quote.laborProfit), next: 'Precio cliente' },
+                      { title: 'Precio cliente', input: money(quote.manoObra), operation: 'Se suma al subtotal del cliente.', result: money(quote.manoObra), next: 'Resumen' },
+                    ]}
+                  />
                 </details>
 
                 <details className="quote-accordion">
-                  <summary>7. Ajuste de precio</summary>
+                  <DashboardSummary number="06B" title="Extras y ajustes" description="Extras, descuento, anticipo y folio." status={quote.extras > 0 || quote.descuento > 0 ? 'Revisar' : 'Completo'} />
                   <div className="form-grid">
                     <Field id="extras" label="Extras" {...guideFor('extras')}>{input('extras', 'number')}</Field>
                     <Field id="descuento" label="Descuento %" {...guideFor('descuento')}>{input('descuento', 'number')}</Field>
                     <Field id="anticipo" label="Anticipo %" {...guideFor('anticipo')}>{input('anticipo', 'number')}</Field>
                     <Field id="folioManual" label="Folio manual opcional" {...guideFor('folioManual')}>{input('folioManual')}</Field>
                   </div>
+                  <CalculationChain
+                    title="Cadena de extras"
+                    steps={[
+                      { title: 'Cantidad', input: 'Cargo único', operation: 'Se toma el monto capturado en extras.', result: money(quote.extras), next: 'Costo' },
+                      { title: 'Costo', input: money(quote.extras), operation: 'Se suma a costo interno y precio cliente.', result: money(quote.extras), next: 'Margen' },
+                      { title: 'Margen', input: 'Sin margen separado.', operation: 'No se modifica la lógica actual.', result: money(quote.extras), next: 'Precio cliente' },
+                      { title: 'Precio cliente', input: money(quote.extras), operation: 'Se suma al subtotal.', result: money(quote.extras), next: 'Resumen' },
+                    ]}
+                  />
                 </details>
 
                 <details className="quote-accordion">
-                  <summary>8. Condiciones</summary>
+                  <DashboardSummary number="08" title="Documento / PDF" description="Condiciones, vigencia, notas y estado." status={form.condiciones ? 'Completo' : 'Incompleto'} />
                   <div className="form-grid">
                     <Field id="vigencia" label="Vigencia días" {...guideFor('vigencia')}>{input('vigencia', 'number')}</Field>
                     <Field id="formaPago" label="Forma de pago" {...guideFor('formaPago')}>{input('formaPago')}</Field>
@@ -3331,7 +3511,7 @@ function App() {
                 </details>
 
                 <details className="quote-accordion">
-                  <summary>9. Advertencias</summary>
+                  <DashboardSummary number="07" title="Resumen y análisis" description="Datos faltantes y advertencias de cotización." status={dataHealth.warnings.length ? 'Revisar' : 'Completo'} />
                   <div className="data-health-panel compact-health">
                     <h4>Datos completos</h4>
                     <div className="data-health-list">
@@ -3387,8 +3567,25 @@ function App() {
                     <button type="button" className="ghost" onClick={() => openPrint('client')}><FileText size={18} /> Editar PDF</button>
                     <button type="button" className="ghost" onClick={openWhatsApp}><MessageCircle size={18} /> WhatsApp</button>
                   </div>
+                  <CalculationChain
+                    title="Cadena del resumen"
+                    defaultOpen={!floatingSummary.compact}
+                    steps={[
+                      { title: 'Materiales', input: `${quote.materialRows.length} material(es)`, operation: 'Suma de precios cliente por material.', result: money(quote.material), next: 'Herrajes' },
+                      { title: 'Herrajes', input: `${quote.accessoryRows.length} accesorio(s)`, operation: 'Suma de precios cliente por accesorio.', result: money(quote.hardwareSale), next: 'Mano de obra' },
+                      { title: 'Mano de obra', input: money(quote.manoObra), operation: 'Se suma al cliente.', result: money(quote.manoObra), next: 'Extras' },
+                      { title: 'Extras', input: money(quote.extras), operation: 'Se suma al cliente e interno.', result: money(quote.extras), next: 'Costo interno' },
+                      { title: 'Costo interno', input: `${money(quote.internalMaterialCost)} + ${money(quote.hardwareCost)} + ${money(quote.extras)}`, operation: 'Material interno + herrajes + extras.', result: money(quote.internalTotal), next: 'Precio cliente' },
+                      { title: 'Precio cliente', input: `${money(quote.subtotal)} - ${money(quote.discountAmount)}`, operation: 'Subtotal menos descuento.', result: money(quote.total), next: 'Anticipo' },
+                      { title: 'Anticipo', input: `${decimal(quote.anticipo, 1)}%`, operation: 'Total x anticipo.', result: money(quote.deposit), next: 'Saldo' },
+                      { title: 'Saldo', input: `${money(quote.total)} - ${money(quote.deposit)}`, operation: 'Total menos anticipo.', result: money(quote.rest), next: 'Documento' },
+                    ]}
+                  />
                   <details className="floating-analysis" open={!floatingSummary.compact}>
                     <summary>Análisis profesional</summary>
+                    <div className="chain-insights">
+                      {chainInsights.map((item) => <span key={item}>{item}</span>)}
+                    </div>
                     {professionalAnalysis.map((item) => (
                       <article key={item.role} className="professional-card">
                         <span>{item.role}</span>
