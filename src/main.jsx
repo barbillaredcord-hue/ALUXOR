@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 import './styles.css';
 import { registerServiceWorker } from './pwa';
-import { Pricing } from './lib/br-engine/index.js';
+import { Areas, Pricing } from './lib/br-engine/index.js';
 
 const APP_VERSION = '2026.05.39';
 const APP_VERSION_QUERY = '20260539';
@@ -457,19 +457,27 @@ function measurementItemsFromForm(data) {
 }
 
 function measureArea(item) {
-  return (positiveNumber(item.ancho) / 100) * (positiveNumber(item.alto) / 100);
+  return Areas.calcularArea(positiveNumber(item.ancho) / 100, positiveNumber(item.alto) / 100);
 }
 
 function measureLinear(item) {
-  return ((positiveNumber(item.ancho) + positiveNumber(item.alto)) * 2 / 100) * item.cantidad;
+  const perimetroMetros = ((positiveNumber(item.ancho) + positiveNumber(item.alto)) * 2) / 100;
+  return Areas.calcularMetroLineal(perimetroMetros, item.cantidad);
 }
 
 function quoteAreaTotal(data) {
-  return measurementItemsFromForm(data).reduce((sum, item) => sum + measureArea(item) * item.cantidad, 0);
+  return Areas.calcularAreaTotal(measurementItemsFromForm(data).map((item) => ({
+    ancho: positiveNumber(item.ancho) / 100,
+    alto: positiveNumber(item.alto) / 100,
+    cantidad: item.cantidad,
+  })));
 }
 
 function quoteLinearTotal(data) {
-  return measurementItemsFromForm(data).reduce((sum, item) => sum + measureLinear(item), 0);
+  return Areas.calcularMetroLinealTotal(measurementItemsFromForm(data).map((item) => ({
+    largo: ((positiveNumber(item.ancho) + positiveNumber(item.alto)) * 2) / 100,
+    cantidad: item.cantidad,
+  })));
 }
 
 function formatDimensions(data) {

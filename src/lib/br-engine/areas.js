@@ -29,7 +29,7 @@ export function calcularMetroLinealTotal(items = []) {
   }, 0);
 }
 
-export function calcularPerimetro(ancho, alto, cantidad = 1) {
+export function calcularPerímetro(ancho, alto, cantidad = 1) {
   return (toNumber(ancho) * 2 + toNumber(alto) * 2) * toNumber(cantidad);
 }
 
