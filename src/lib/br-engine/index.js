@@ -11,5 +11,6 @@ export * as Quote from './quote.js';
 export * as HistoryEngine from './history.js';
 export * as Pdf from './pdf.js';
 export * as StorageEngine from './storage.js';
+export * as PlanEngine from './plan.js';
 export * as Validation from './validation.js';
 export * as Constants from './constants.js';
