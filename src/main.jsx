@@ -29,7 +29,7 @@ import {
 } from 'lucide-react';
 import './styles.css';
 import { registerServiceWorker } from './pwa';
-import { Areas, Materials, Pricing, Summary, Report, Quote } from './lib/br-engine/index.js';
+import { Areas, Materials, Pricing, Summary, Report, Quote, HistoryEngine } from './lib/br-engine/index.js';
 
 const APP_VERSION = '2026.05.39';
 const APP_VERSION_QUERY = '20260539';
@@ -431,6 +431,13 @@ const quoteHelpers = {
   percentValue,
   money,
   decimal,
+};
+
+const historyHelpers = {
+  clean,
+  numberValue,
+  defaults,
+  historyApi: HISTORY_API,
 };
 
 function formatDimensions(data) {
@@ -989,7 +996,7 @@ function loadCatalog() {
 function loadHistory() {
   try {
     const stored = localStorage.getItem('anunciapro.history');
-    return stored ? normalizeHistory(JSON.parse(stored)) : [];
+    return stored ? HistoryEngine.normalizeHistory(JSON.parse(stored)) : [];
   } catch {
     return [];
   }
@@ -1001,123 +1008,6 @@ function loadAppLogo() {
   } catch {
     return '';
   }
-}
-
-function normalizeHistory(items) {
-  if (!Array.isArray(items)) return [];
-
-  const unique = new Map();
-
-  items.forEach((item) => {
-    if (!item?.id) return;
-
-    const createdAt = item.createdAt || Number(String(item.id).replace(/\D/g, '')) || Date.now();
-
-    unique.set(item.id, {
-      ...item,
-      createdAt,
-      updatedAt: item.updatedAt || createdAt,
-      status: item.status || 'Pendiente',
-    });
-  });
-
-  return Array.from(unique.values())
-    .sort((a, b) => Number(b.updatedAt || b.createdAt || 0) - Number(a.updatedAt || a.createdAt || 0))
-    .slice(0, 200);
-}
-
-function mergeHistoryItems(...lists) {
-  const unique = new Map();
-
-  normalizeHistory(lists.flat()).forEach((item) => {
-    const current = unique.get(item.id);
-    const currentTime = Number(current?.updatedAt || current?.createdAt || 0);
-    const nextTime = Number(item.updatedAt || item.createdAt || 0);
-
-    if (!current || nextTime >= currentTime) {
-      unique.set(item.id, item);
-    }
-  });
-
-  return normalizeHistory(Array.from(unique.values()));
-}
-function recoverLegacyHistoryFromLocalStorage() {
-  if (typeof window === 'undefined' || !window.localStorage) return [];
-
-  const recovered = [];
-  const legacyKeyPattern = /aluxor|anunciapro|historial|history|cotizacion|cotizaciones|quote|quotes/i;
-  const collectionKeys = ['history', 'historial', 'cotizaciones', 'quotes', 'items', 'data', 'records', 'results'];
-  const timestamp = (value) => {
-    if (!value) return 0;
-    if (typeof value === 'number') return value;
-    const parsed = Date.parse(value);
-    return Number.isNaN(parsed) ? 0 : parsed;
-  };
-  const firstValue = (...values) => values.find((value) => value !== undefined && value !== null && value !== '');
-  const toNumber = (...values) => numberValue(firstValue(...values) || 0);
-  const normalizeLegacyItem = (item, key, index) => {
-    if (!item || typeof item !== 'object') return null;
-
-    const form = item.form && typeof item.form === 'object' ? item.form : item;
-    const createdAt = timestamp(firstValue(item.createdAt, item.fecha, item.date, item.created_at)) || Date.now();
-    const updatedAt = timestamp(firstValue(item.updatedAt, item.updated_at, item.modificadoEn)) || createdAt;
-    const total = toNumber(item.total, item.totalCotizacion, item.precioTotal, item.monto, item.amount, form.total);
-    const anticipo = toNumber(item.anticipo, item.deposit, item.abono, form.anticipo);
-    const resto = toNumber(item.resto, item.rest, item.saldo, total - anticipo);
-
-    return {
-      id: String(firstValue(item.id, item.uuid, item.folio, `legacy-${key}-${createdAt}-${index}`)),
-      createdAt,
-      updatedAt,
-      status: firstValue(item.status, item.estado, 'Pendiente'),
-      clienteNombre: clean(firstValue(item.clienteNombre, item.cliente, item.nombreCliente, item.clientName, form.clienteNombre), 'Cliente'),
-      clienteTelefono: clean(firstValue(item.clienteTelefono, item.telefono, item.phone, item.whatsapp, form.clienteTelefono)),
-      producto: clean(firstValue(item.producto, item.proyecto, item.product, item.title, form.producto), 'Proyecto a medida'),
-      tipoTrabajo: clean(firstValue(item.tipoTrabajo, item.tipo, item.workType, form.tipoTrabajo), 'Trabajo'),
-      giro: clean(firstValue(item.giro, item.categoria, item.category, form.giro), 'Carpintería'),
-      total,
-      anticipo,
-      resto,
-      form: { ...defaults, ...form },
-      recoveredFrom: key,
-    };
-  };
-
-  for (let i = 0; i < window.localStorage.length; i += 1) {
-    const key = window.localStorage.key(i);
-    if (!key || !legacyKeyPattern.test(key)) continue;
-
-    try {
-      const raw = window.localStorage.getItem(key);
-      const parsed = JSON.parse(raw);
-      const items = Array.isArray(parsed)
-        ? parsed
-        : collectionKeys.map((name) => parsed?.[name]).find(Array.isArray) || [];
-
-      if (Array.isArray(items)) {
-        recovered.push(...items.map((item, index) => normalizeLegacyItem(item, key, index)).filter(Boolean));
-      }
-    } catch {
-      // Ignorar llaves viejas que no sean JSON.
-    }
-  }
-
-  return normalizeHistory(recovered);
-}
-async function requestHistory(options = {}) {
-  const response = await fetch(HISTORY_API, {
-    cache: 'no-store',
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      ...(options.headers || {}),
-    },
-  });
-
-  if (!response.ok) throw new Error('No se pudo sincronizar el historial');
-  const data = await response.json();
-  return normalizeHistory(data.history || []);
 }
 
 function quotePrintHtml(data, quote, materials, mode = 'client', doc = null, logo = '') {
@@ -1563,19 +1453,19 @@ function App() {
 
       setSyncStatus('Sincronizando historial...');
 
-      const recoveredLegacyHistory = recoverLegacyHistoryFromLocalStorage();
+      const recoveredLegacyHistory = HistoryEngine.recoverLegacyHistoryFromLocalStorage(historyHelpers);
       if (recoveredLegacyHistory.length > 0) {
         setLegacyRecoveredCount(recoveredLegacyHistory.length);
       }
       const local = loadHistory();
-      const remote = await requestHistory();
-      const merged = mergeHistoryItems(recoveredLegacyHistory, local, history, remote);
+      const remote = await HistoryEngine.requestHistory({}, historyHelpers);
+      const merged = HistoryEngine.mergeHistoryItems(recoveredLegacyHistory, local, history, remote);
 
       if (uploadLocal || merged.length !== remote.length) {
-        const saved = await requestHistory({
+        const saved = await HistoryEngine.requestHistory({
           method: 'PUT',
           body: JSON.stringify({ history: merged }),
-        });
+        }, historyHelpers);
 
         setHistory(saved);
       } else {
@@ -1602,10 +1492,10 @@ function App() {
       return;
     }
 
-    requestHistory({
+    HistoryEngine.requestHistory({
       method: 'PUT',
       body: JSON.stringify({ history: nextHistory }),
-    })
+    }, historyHelpers)
       .then((saved) => {
         setHistory(saved);
         setLastSyncAt(
@@ -2040,7 +1930,7 @@ function App() {
     const m = String(today.getMonth() + 1).padStart(2, '0');
     const d = String(today.getDate()).padStart(2, '0');
     const prefix = `ALX-${y}${m}${d}`;
-    const count = normalizeHistory(historyItems).filter((item) => String(item.folio || '').startsWith(prefix)).length + 1;
+    const count = HistoryEngine.normalizeHistory(historyItems).filter((item) => String(item.folio || '').startsWith(prefix)).length + 1;
 
     return `${prefix}-${String(count).padStart(3, '0')}`;
   }
@@ -2068,7 +1958,7 @@ function App() {
       form,
     };
 
-    const nextHistory = mergeHistoryItems([item], history);
+    const nextHistory = HistoryEngine.mergeHistoryItems([item], history);
     setHistory(nextHistory);
     saveHistoryRemote(nextHistory);
     setSyncStatus('Cotización guardada en historial');
@@ -2082,7 +1972,7 @@ function App() {
   }
 
   function removeHistoryItem(id) {
-    const nextHistory = normalizeHistory(history.filter((item) => item.id !== id));
+    const nextHistory = HistoryEngine.normalizeHistory(history.filter((item) => item.id !== id));
     setHistory(nextHistory);
     saveHistoryRemote(nextHistory);
   }
@@ -2115,7 +2005,7 @@ function App() {
         const parsed = JSON.parse(reader.result);
         const importedHistory = Array.isArray(parsed) ? parsed : parsed?.history;
         if (!Array.isArray(importedHistory)) throw new Error('Formato de respaldo inválido');
-        const nextHistory = mergeHistoryItems(importedHistory, history);
+        const nextHistory = HistoryEngine.mergeHistoryItems(importedHistory, history);
         setHistory(nextHistory);
         saveHistoryRemote(nextHistory);
         setSyncStatus('Respaldo de historial importado');
@@ -2134,7 +2024,7 @@ function App() {
 
   function updateHistoryStatus(id, status) {
     const now = Date.now();
-    const nextHistory = normalizeHistory(history.map((item) => (
+    const nextHistory = HistoryEngine.normalizeHistory(history.map((item) => (
       item.id === id ? { ...item, status, updatedAt: now } : item
     )));
     setHistory(nextHistory);
