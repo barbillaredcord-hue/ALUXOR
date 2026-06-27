@@ -1015,14 +1015,23 @@ function calculateQuote(data) {
     const rowQuantity = Math.max(1, positiveNumber(item.cantidad) || 1);
     const rowMerma = percentValue(item.merma);
     const rowMargin = item.margen === '' ? margenMaterial : positiveNumber(item.margen);
-    const unitCost = positiveNumber(item.costoUnitario);
-    const baseCost = rowQuantity * unitCost;
-    const costTotal = baseCost * (1 + rowMerma / 100);
-    const suggestedSaleTotal = Pricing.aplicarMargenSobreCosto(costTotal, rowMargin);
+    const accessoryCalc = Materials.calcularMaterial({
+      tipoCompra: item.tipoCompra || item.tipo || 'pieza',
+      cantidad: rowQuantity,
+      precioUnidad: positiveNumber(item.costoUnitario),
+      costoInterno: positiveNumber(item.costoUnitario),
+      merma: rowMerma,
+      margen: rowMargin,
+      precioManual: rowQuantity * positiveNumber(item.precioUnitario),
+      usarPrecioManual: Boolean(item.precioManual),
+    });
+    const baseCost = rowQuantity * positiveNumber(item.costoUnitario);
+    const costTotal = accessoryCalc.costoInterno || 0;
+    const suggestedSaleTotal = accessoryCalc.precioSugerido || accessoryCalc.precioCliente || 0;
     const suggestedUnit = rowQuantity > 0 ? suggestedSaleTotal / rowQuantity : 0;
-    const saleTotal = item.precioManual ? rowQuantity * positiveNumber(item.precioUnitario) : suggestedSaleTotal;
+    const saleTotal = accessoryCalc.precioCliente || 0;
     const unitPrice = rowQuantity > 0 ? saleTotal / rowQuantity : 0;
-    const marginAmount = Pricing.calcularUtilidad(saleTotal, costTotal);
+    const marginAmount = accessoryCalc.utilidad || 0;
     const marginPercent = Pricing.calcularUtilidadSobreCosto(marginAmount, costTotal);
     const marginPercentOverSale = Pricing.calcularUtilidadSobreVenta(marginAmount, saleTotal);
     return {
