@@ -85,6 +85,7 @@ export function calcularResumenCotizacion({
   const internalTotal = internalMaterialCost + hardwareCost + positiveNumber(extras);
   const profit = total - internalTotal;
   const profitPercent = total > 0 ? (profit / total) * 100 : 0;
+  const profitPercentCost = internalTotal > 0 ? (profit / internalTotal) * 100 : 0;
   const deposit = total * (positiveNumber(anticipo) / 100);
   const rest = total - deposit;
 
@@ -102,6 +103,7 @@ export function calcularResumenCotizacion({
     internalTotal,
     profit,
     profitPercent,
+    profitPercentCost,
     deposit,
     rest,
   };

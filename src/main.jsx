@@ -1070,6 +1070,7 @@ function calculateQuote(data) {
     internalTotal,
     profit,
     profitPercent,
+    profitPercentCost,
     deposit,
     rest,
   } = summary;
@@ -1145,7 +1146,7 @@ function calculateQuote(data) {
         {
           label: profit >= 0 ? 'Ganancia estimada' : 'Pérdida estimada',
           amount: money(profit),
-          detail: `Total cliente ${money(total)} - costo interno real ${money(internalTotal)} = ${money(profit)}. Margen sobre venta: ${decimal(profitPercent, 1)}%.`,
+          detail: `Total cliente ${money(total)} - costo interno real ${money(internalTotal)} = ${money(profit)}. Utilidad sobre costo: ${decimal(profitPercentCost, 1)}%. Utilidad sobre venta: ${decimal(profitPercent, 1)}%.`,
         },
       ],
     },
@@ -1182,6 +1183,7 @@ function calculateQuote(data) {
     internalTotal,
     profit,
     profitPercent,
+    profitPercentCost,
     breakdown,
     total,
     deposit,
