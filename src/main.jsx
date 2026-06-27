@@ -617,13 +617,6 @@ function materialCalcLabel(item) {
   return 'cantidad manual';
 }
 
-function priceRule(costoUnitario, merma, margen) {
-  const costoBase = positiveNumber(costoUnitario);
-  const costoConMerma = costoBase * (1 + percentValue(merma) / 100);
-  const precioCliente = costoConMerma * (1 + positiveNumber(margen) / 100);
-  return { costoBase, costoConMerma, precioCliente };
-}
-
 function normalizePlanItem(item, index = 0) {
   return {
     id: item?.id || `plano-${Date.now()}-${index}`,
@@ -2261,7 +2254,13 @@ function App() {
   const quickCostoM2 = quickArea > 0 ? positiveNumber(quickCalc.precioTotal) / quickArea : 0;
   const quickCostoLineal = quickLinear > 0 ? positiveNumber(quickCalc.precioTotal) / quickLinear : 0;
   const quickCostoUnitario = quickCalc.tipoCompra === 'lineal' ? quickCostoLineal : quickCalc.tipoCompra === 'pieza' || quickCalc.tipoCompra === 'manual' ? quickPrecioUnidadCompra : quickCostoM2;
-  const quickPricing = priceRule(quickCostoUnitario, quickCalc.merma, quickCalc.margen);
+  const quickCostoBase = positiveNumber(quickCostoUnitario);
+  const quickCostoConMerma = quickCostoBase * (1 + percentValue(quickCalc.merma) / 100);
+  const quickPricing = {
+    costoBase: quickCostoBase,
+    costoConMerma: quickCostoConMerma,
+    precioCliente: Pricing.aplicarMargenSobreCosto(quickCostoConMerma, quickCalc.margen),
+  };
   const quickAreaNecesaria = quickCalc.baseUso === 'manual' ? positiveNumber(quickCalc.areaManual) : quote.areaTotal;
   const quickLinealNecesario = quickCalc.baseUso === 'manual' ? positiveNumber(quickCalc.linealManual) : quote.linearTotal;
   const quickCantidadNecesaria = quickCalc.baseUso === 'manual' ? Math.max(1, positiveNumber(quickCalc.cantidadManual) || 1) : Math.max(1, quote.cantidad || 1);
@@ -2493,7 +2492,10 @@ function App() {
         if (field === 'unidad' && value === 'm²') next.calculo = 'area';
         if (field === 'precioUnitario') next.precioManual = true;
         if (['costoUnitario', 'merma', 'margen'].includes(field) && !next.precioManual) {
-          next.precioUnitario = Math.round(priceRule(next.costoUnitario, next.merma, next.margen || current.margenMaterial).precioCliente);
+          next.precioUnitario = Math.round(Pricing.aplicarMargenSobreCosto(
+            positiveNumber(next.costoUnitario) * (1 + percentValue(next.merma) / 100),
+            next.margen || current.margenMaterial
+          ));
         }
         return next;
       });
@@ -2591,7 +2593,10 @@ function App() {
           ...(field === 'precioUnitario' ? { precioManual: true } : {}),
         };
         if (['costoUnitario', 'merma', 'margen'].includes(field) && !next.precioManual) {
-          next.precioUnitario = Math.round(priceRule(next.costoUnitario, next.merma, next.margen || current.margenMaterial).precioCliente);
+          next.precioUnitario = Math.round(Pricing.aplicarMargenSobreCosto(
+            positiveNumber(next.costoUnitario) * (1 + percentValue(next.merma) / 100),
+            next.margen || current.margenMaterial
+          ));
         }
         return next;
       }),
