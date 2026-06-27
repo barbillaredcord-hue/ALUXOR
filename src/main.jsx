@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 import './styles.css';
 import { registerServiceWorker } from './pwa';
-import { Areas, Materials, Pricing } from './lib/br-engine/index.js';
+import { Areas, Materials, Pricing, Summary } from './lib/br-engine/index.js';
 
 const APP_VERSION = '2026.05.39';
 const APP_VERSION_QUERY = '20260539';
@@ -1048,27 +1048,37 @@ function calculateQuote(data) {
     };
   });
 
-  const material = materialRows.reduce((sum, item) => sum + item.saleTotal, 0);
-  const materialBaseCost = materialRows.reduce((sum, item) => sum + item.baseCost, 0);
-  const wasteCost = materialRows.reduce((sum, item) => sum + item.wasteCost, 0);
-  const internalMaterialCost = materialBaseCost + wasteCost;
-  const hardwareSale = accessoryRows.reduce((sum, item) => sum + item.saleTotal, 0);
-  const hardwareCost = accessoryRows.reduce((sum, item) => sum + item.costTotal, 0);
+  const summary = Summary.calcularResumenCotizacion({
+    materialRows,
+    accessoryRows,
+    manoObra,
+    extras,
+    descuento,
+    anticipo,
+  });
+  const {
+    material,
+    materialBaseCost,
+    wasteCost,
+    internalMaterialCost,
+    hardwareSale,
+    hardwareCost,
+    subtotal,
+    discountAmount,
+    total,
+    laborProfit,
+    internalTotal,
+    profit,
+    profitPercent,
+    deposit,
+    rest,
+  } = summary;
   const primaryMaterialCost = materialRows[0]?.costoUnitario ?? numberValue(data.costoMaterialM2);
   const primaryMaterialWaste = materialRows[0]?.merma ?? merma;
   const suggestedMaterialTotal = materialRows.reduce((sum, item) => sum + item.suggestedSaleTotal, 0);
   const suggestedPriceM2 = areaTotal > 0
     ? suggestedMaterialTotal / areaTotal
     : positiveNumber(primaryMaterialCost) * (1 + percentValue(primaryMaterialWaste) / 100) * (1 + margenMaterial / 100);
-  const subtotal = material + hardwareSale + manoObra + extras;
-  const discountAmount = subtotal * (descuento / 100);
-  const total = subtotal - discountAmount;
-  const laborProfit = manoObra;
-  const internalTotal = internalMaterialCost + hardwareCost + extras;
-  const profit = total - internalTotal;
-  const profitPercent = total > 0 ? (profit / total) * 100 : 0;
-  const deposit = total * (anticipo / 100);
-  const rest = total - deposit;
   const breakdown = [
     {
       title: 'Medidas',
