@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 import './styles.css';
 import { registerServiceWorker } from './pwa';
-import { Areas, Pricing } from './lib/br-engine/index.js';
+import { Areas, Materials, Pricing } from './lib/br-engine/index.js';
 
 const APP_VERSION = '2026.05.39';
 const APP_VERSION_QUERY = '20260539';
@@ -925,20 +925,20 @@ function calculateQuote(data) {
     const rowMerma = percentValue(item.merma);
     const rowMargin = item.margen === '' ? margenMaterial : positiveNumber(item.margen);
     const tipoCompra = clean(item.tipoCompra || item.calculo, 'manual');
-    const areaHoja = (positiveNumber(item.ancho) / 100) * (positiveNumber(item.alto) / 100);
+    const areaHoja = Materials.calcularAreaUnidad(positiveNumber(item.ancho) / 100, positiveNumber(item.alto) / 100);
     const largoUnidad = positiveNumber(item.largo) / 100;
     const areaNecesaria = ['hoja', 'area'].includes(tipoCompra) ? rowQuantity : 0;
     const largoNecesario = tipoCompra === 'lineal' ? rowQuantity : 0;
     const cantidadNecesaria = ['pieza', 'manual'].includes(tipoCompra) ? Math.max(0, rowQuantity) : 0;
     const factorMerma = 1 + rowMerma / 100;
-    const areaConMerma = areaNecesaria * factorMerma;
-    const largoConMerma = largoNecesario * factorMerma;
-    const cantidadConMerma = cantidadNecesaria * factorMerma;
-    const hojasNecesarias = tipoCompra === 'hoja' && areaHoja > 0 ? Math.ceil(areaConMerma / areaHoja) : 0;
+    const areaConMerma = Materials.calcularAreaConMerma(areaNecesaria, rowMerma);
+    const largoConMerma = Materials.calcularLinealConMerma(largoNecesario, rowMerma);
+    const cantidadConMerma = Materials.calcularCantidadConMerma(cantidadNecesaria, rowMerma);
+    const hojasNecesarias = tipoCompra === 'hoja' ? Materials.calcularHojasNecesarias(areaNecesaria, areaHoja, rowMerma) : 0;
     const metrosNecesarios = tipoCompra === 'lineal' ? largoConMerma : 0;
-    const piezasNecesarias = ['pieza', 'manual'].includes(tipoCompra) ? Math.ceil(cantidadConMerma) : 0;
+    const piezasNecesarias = ['pieza', 'manual'].includes(tipoCompra) ? Materials.calcularPiezasNecesarias(cantidadNecesaria, rowMerma) : 0;
     const costoUnitario = positiveNumber(item.costoUnitario);
-    const costoMetroCuadrado = tipoCompra === 'hoja' && areaHoja > 0 ? costoUnitario / areaHoja : costoUnitario;
+    const costoMetroCuadrado = tipoCompra === 'hoja' ? Materials.calcularCostoMetroCuadrado(costoUnitario, positiveNumber(item.ancho) / 100, positiveNumber(item.alto) / 100) : costoUnitario;
     const costoMetroLineal = tipoCompra === 'lineal' ? costoUnitario : 0;
     let costTotal = rowQuantity * costoUnitario * factorMerma;
     if (tipoCompra === 'hoja') costTotal = hojasNecesarias * costoUnitario;
