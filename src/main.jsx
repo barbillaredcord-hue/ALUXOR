@@ -925,34 +925,46 @@ function calculateQuote(data) {
     const rowMerma = percentValue(item.merma);
     const rowMargin = item.margen === '' ? margenMaterial : positiveNumber(item.margen);
     const tipoCompra = clean(item.tipoCompra || item.calculo, 'manual');
-    const areaHoja = Materials.calcularAreaUnidad(positiveNumber(item.ancho) / 100, positiveNumber(item.alto) / 100);
     const largoUnidad = positiveNumber(item.largo) / 100;
     const areaNecesaria = ['hoja', 'area'].includes(tipoCompra) ? rowQuantity : 0;
     const largoNecesario = tipoCompra === 'lineal' ? rowQuantity : 0;
     const cantidadNecesaria = ['pieza', 'manual'].includes(tipoCompra) ? Math.max(0, rowQuantity) : 0;
-    const factorMerma = 1 + rowMerma / 100;
-    const areaConMerma = Materials.calcularAreaConMerma(areaNecesaria, rowMerma);
-    const largoConMerma = Materials.calcularLinealConMerma(largoNecesario, rowMerma);
-    const cantidadConMerma = Materials.calcularCantidadConMerma(cantidadNecesaria, rowMerma);
-    const hojasNecesarias = tipoCompra === 'hoja' ? Materials.calcularHojasNecesarias(areaNecesaria, areaHoja, rowMerma) : 0;
-    const metrosNecesarios = tipoCompra === 'lineal' ? largoConMerma : 0;
-    const piezasNecesarias = ['pieza', 'manual'].includes(tipoCompra) ? Materials.calcularPiezasNecesarias(cantidadNecesaria, rowMerma) : 0;
     const costoUnitario = positiveNumber(item.costoUnitario);
-    const costoMetroCuadrado = tipoCompra === 'hoja' ? Materials.calcularCostoMetroCuadrado(costoUnitario, positiveNumber(item.ancho) / 100, positiveNumber(item.alto) / 100) : costoUnitario;
-    const costoMetroLineal = tipoCompra === 'lineal' ? costoUnitario : 0;
-    let costTotal = rowQuantity * costoUnitario * factorMerma;
-    if (tipoCompra === 'hoja') costTotal = hojasNecesarias * costoUnitario;
-    if (tipoCompra === 'lineal') costTotal = metrosNecesarios * costoUnitario;
-    if (['pieza', 'manual'].includes(tipoCompra)) costTotal = piezasNecesarias * costoUnitario;
-    const baseCost = tipoCompra === 'hoja' ? areaNecesaria * costoMetroCuadrado : rowQuantity * costoUnitario;
-    const wasteCost = Math.max(0, costTotal - baseCost);
-    const suggestedSaleTotal = Pricing.aplicarMargenSobreCosto(costTotal, rowMargin);
-    const suggestedUnit = rowQuantity > 0 ? suggestedSaleTotal / rowQuantity : 0;
-    const saleTotal = item.precioManual ? rowQuantity * positiveNumber(item.precioUnitario) : suggestedSaleTotal;
+    const materialCalc = Materials.calcularMaterial({
+      tipoCompra,
+      areaNecesaria,
+      linealNecesario: largoNecesario,
+      cantidad: cantidadNecesaria,
+      ancho: positiveNumber(item.ancho) / 100,
+      alto: positiveNumber(item.alto) / 100,
+      precioUnidad: costoUnitario,
+      precioMetroCuadrado: costoUnitario,
+      precioMetroLineal: costoUnitario,
+      costoInterno: costoUnitario,
+      merma: rowMerma,
+      margen: rowMargin,
+      precioManual: rowQuantity * positiveNumber(item.precioUnitario),
+      usarPrecioManual: Boolean(item.precioManual),
+    });
+    const areaHoja = materialCalc.areaUnidad || 0;
+    const areaConMerma = materialCalc.areaConMerma || 0;
+    const largoConMerma = materialCalc.linealConMerma || 0;
+    const cantidadConMerma = materialCalc.cantidadConMerma || 0;
+    const hojasNecesarias = materialCalc.unidadesNecesarias || 0;
+    const metrosNecesarios = materialCalc.linealConMerma || 0;
+    const piezasNecesarias = materialCalc.unidadesNecesarias || 0;
+    const costoMetroCuadrado = materialCalc.costoMetroCuadrado || costoUnitario;
+    const costoMetroLineal = materialCalc.costoMetroLineal || 0;
+    const costTotal = materialCalc.costoInterno || 0;
+    const saleTotal = materialCalc.precioCliente || 0;
+    const suggestedSaleTotal = materialCalc.precioSugerido || saleTotal;
     const unitPrice = rowQuantity > 0 ? saleTotal / rowQuantity : 0;
-    const marginAmount = Pricing.calcularUtilidad(saleTotal, costTotal);
+    const suggestedUnit = rowQuantity > 0 ? suggestedSaleTotal / rowQuantity : 0;
+    const marginAmount = materialCalc.utilidad || 0;
     const marginPercent = Pricing.calcularUtilidadSobreCosto(marginAmount, costTotal);
     const marginPercentOverSale = Pricing.calcularUtilidadSobreVenta(marginAmount, saleTotal);
+    const baseCost = tipoCompra === 'hoja' ? areaNecesaria * costoMetroCuadrado : rowQuantity * costoUnitario;
+    const wasteCost = Math.max(0, costTotal - baseCost);
     return {
       ...item,
       tipoCompra,
