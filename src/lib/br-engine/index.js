@@ -7,5 +7,6 @@ export * as Waste from './waste.js';
 export * as Profit from './profit.js';
 export * as Summary from './summary.js';
 export * as Report from './report.js';
+export * as Quote from './quote.js';
 export * as Validation from './validation.js';
 export * as Constants from './constants.js';

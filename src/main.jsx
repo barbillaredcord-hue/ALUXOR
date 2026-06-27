@@ -29,7 +29,7 @@ import {
 } from 'lucide-react';
 import './styles.css';
 import { registerServiceWorker } from './pwa';
-import { Areas, Materials, Pricing, Summary, Report } from './lib/br-engine/index.js';
+import { Areas, Materials, Pricing, Summary, Report, Quote } from './lib/br-engine/index.js';
 
 const APP_VERSION = '2026.05.39';
 const APP_VERSION_QUERY = '20260539';
@@ -424,63 +424,17 @@ function percentValue(value) {
   return Math.min(100, Math.max(0, numberValue(value)));
 }
 
-function normalizeMeasureItem(item, index = 0, data = {}) {
-  return {
-    id: item?.id || `med-${Date.now()}-${index}`,
-    nombre: clean(item?.nombre, index === 0 ? 'Medida principal' : `Medida ${index + 1}`),
-    ancho: positiveNumber(item?.ancho ?? data.ancho),
-    alto: positiveNumber(item?.alto ?? data.alto),
-    fondo: positiveNumber(item?.fondo ?? data.fondo),
-    grosorMaterial: positiveNumber(item?.grosorMaterial ?? data.grosorMaterial),
-    cantidad: Math.max(1, positiveNumber(item?.cantidad ?? data.cantidad) || 1),
-    nota: clean(item?.nota),
-  };
-}
-
-function measurementItemsFromForm(data) {
-  const items = Array.isArray(data.measureItems) ? data.measureItems : [];
-  const source = items.length ? items : [{
-    id: 'med-principal',
-    nombre: 'Medida principal',
-    ancho: data.ancho,
-    alto: data.alto,
-    fondo: data.fondo,
-    grosorMaterial: data.grosorMaterial,
-    cantidad: data.cantidad,
-    nota: '',
-  }];
-
-  return source
-    .map((item, index) => normalizeMeasureItem(item, index, data))
-    .filter((item) => item.ancho > 0 || item.alto > 0 || item.cantidad > 0);
-}
-
-function measureArea(item) {
-  return Areas.calcularArea(positiveNumber(item.ancho) / 100, positiveNumber(item.alto) / 100);
-}
-
-function measureLinear(item) {
-  const perimetroMetros = ((positiveNumber(item.ancho) + positiveNumber(item.alto)) * 2) / 100;
-  return Areas.calcularMetroLineal(perimetroMetros, item.cantidad);
-}
-
-function quoteAreaTotal(data) {
-  return Areas.calcularAreaTotal(measurementItemsFromForm(data).map((item) => ({
-    ancho: positiveNumber(item.ancho) / 100,
-    alto: positiveNumber(item.alto) / 100,
-    cantidad: item.cantidad,
-  })));
-}
-
-function quoteLinearTotal(data) {
-  return Areas.calcularMetroLinealTotal(measurementItemsFromForm(data).map((item) => ({
-    largo: ((positiveNumber(item.ancho) + positiveNumber(item.alto)) * 2) / 100,
-    cantidad: item.cantidad,
-  })));
-}
+const quoteHelpers = {
+  clean,
+  numberValue,
+  positiveNumber,
+  percentValue,
+  money,
+  decimal,
+};
 
 function formatDimensions(data) {
-  const rows = measurementItemsFromForm(data);
+  const rows = Quote.measurementItemsFromForm(data, quoteHelpers);
   const parts = rows.map((item) => [
     item.nombre,
     item.ancho > 0 ? `${item.ancho} cm ancho` : null,
@@ -512,108 +466,6 @@ function loadTypeDetails() {
   } catch {
     return defaultTypeDetails;
   }
-}
-
-function normalizeMaterialItem(item, index = 0, data = {}) {
-  const unidad = clean(item?.unidad, 'm²');
-  const fallbackCalculo = item?.usarArea
-    ? (unidad === 'metro lineal' ? 'lineal' : 'area')
-    : 'manual';
-  const calculo = clean(item?.calculo || item?.tipoCompra, fallbackCalculo);
-  return {
-    id: item?.id || `mat-${Date.now()}-${index}`,
-    nombre: clean(item?.nombre, clean(data.materialCotizacion, 'Material')),
-    unidad,
-    usarArea: Boolean(item?.usarArea),
-    calculo,
-    categoria: clean(item?.categoria, clean(data.giro, 'Material')),
-    tipoCompra: clean(item?.tipoCompra, calculo),
-    baseCalculo: clean(item?.baseCalculo, calculo === 'lineal' ? 'lineal' : calculo === 'manual' || calculo === 'pieza' ? 'manual_qty' : 'medidas_area'),
-    cantidad: item?.cantidad === '' ? '' : positiveNumber(item?.cantidad),
-    ancho: item?.ancho === '' ? '' : positiveNumber(item?.ancho),
-    alto: item?.alto === '' ? '' : positiveNumber(item?.alto),
-    largo: item?.largo === '' ? '' : positiveNumber(item?.largo),
-    grosor: item?.grosor === '' ? '' : positiveNumber(item?.grosor ?? data.grosorMaterial),
-    costoUnitario: item?.costoUnitario === '' ? '' : positiveNumber(item?.costoUnitario ?? data.costoMaterialM2),
-    precioUnitario: item?.precioUnitario === '' ? '' : positiveNumber(item?.precioUnitario ?? data.precioM2),
-    merma: item?.merma === '' ? '' : percentValue(item?.merma ?? data.merma),
-    margen: item?.margen === '' ? '' : positiveNumber(item?.margen ?? data.margenMaterial),
-    precioManual: Boolean(item?.precioManual),
-    nota: clean(item?.nota),
-  };
-}
-
-function materialItemsFromForm(data, areaTotal = 0) {
-  const items = Array.isArray(data.materialItems) ? data.materialItems : [];
-  const source = items.length ? items : [{
-    id: 'mat-principal',
-    nombre: data.materialCotizacion,
-    unidad: 'm²',
-    usarArea: true,
-    calculo: 'area',
-    cantidad: areaTotal,
-    grosor: data.grosorMaterial,
-    costoUnitario: data.costoMaterialM2,
-    precioUnitario: data.precioM2,
-    merma: data.merma,
-    margen: data.margenMaterial,
-    nota: 'Material principal',
-  }];
-
-  return source
-    .map((item, index) => normalizeMaterialItem(item, index, data))
-    .filter((item) => item.nombre || numberValue(item.precioUnitario) > 0);
-}
-
-function normalizeAccessoryItem(item, index = 0, data = {}) {
-  return {
-    id: item?.id || `acc-${Date.now()}-${index}`,
-    nombre: clean(item?.nombre, clean(data.herrajes, 'Accesorio')),
-    tipoCompra: clean(item?.tipoCompra, 'pieza'),
-    cantidad: item?.cantidad === '' ? '' : Math.max(1, positiveNumber(item?.cantidad) || 1),
-    costoUnitario: item?.costoUnitario === '' ? '' : positiveNumber(item?.costoUnitario ?? data.costoHerrajes),
-    precioUnitario: item?.precioUnitario === '' ? '' : positiveNumber(item?.precioUnitario ?? data.precioHerrajes),
-    merma: item?.merma === '' ? '' : percentValue(item?.merma ?? 0),
-    margen: item?.margen === '' ? '' : positiveNumber(item?.margen ?? data.margenMaterial),
-    precioManual: Boolean(item?.precioManual),
-    nota: clean(item?.nota),
-  };
-}
-
-function accessoryItemsFromForm(data) {
-  const items = Array.isArray(data.accessoryItems) ? data.accessoryItems : [];
-  const source = items.length ? items : [{
-    id: 'acc-principal',
-    nombre: data.herrajes,
-    cantidad: Math.max(1, numberValue(data.cantidad) || 1),
-    costoUnitario: data.costoHerrajes,
-    precioUnitario: data.precioHerrajes,
-    nota: 'Herrajes principales',
-  }];
-
-  return source
-    .map((item, index) => normalizeAccessoryItem(item, index, data))
-    .filter((item) => item.nombre && item.nombre !== 'Sin herrajes');
-}
-
-function materialItemQuantity(item, quoteBasis = {}) {
-  const baseCalculo = clean(item.baseCalculo, item.usarArea ? 'medidas_area' : 'manual_qty');
-  const cantidad = Math.max(1, positiveNumber(item.cantidad) || 1);
-  const itemArea = (positiveNumber(item.ancho) / 100) * (positiveNumber(item.alto) / 100) * cantidad;
-  const itemLineal = (positiveNumber(item.largo) / 100) * cantidad;
-  if (baseCalculo === 'medidas_area') return positiveNumber(quoteBasis.areaTotal);
-  if (baseCalculo === 'manual_area') return itemArea;
-  if (baseCalculo === 'lineal') return itemLineal > 0 ? itemLineal : positiveNumber(quoteBasis.linearTotal);
-  return positiveNumber(item.cantidad);
-}
-
-function materialCalcLabel(item) {
-  const calculo = clean(item.calculo || item.tipoCompra, item.usarArea ? 'area' : 'manual');
-  if (calculo === 'area') return 'm²';
-  if (calculo === 'hoja') return 'hoja / placa';
-  if (calculo === 'lineal') return 'metro lineal';
-  if (calculo === 'pieza') return 'pieza';
-  return 'cantidad manual';
 }
 
 function normalizePlanItem(item, index = 0) {
@@ -879,318 +731,6 @@ function hashtags(data) {
   const product = normalizeHash(data.producto);
   const type = normalizeHash(data.tipoTrabajo);
   return [...base, city ? `#${city}` : null, type ? `#${type}` : null, product ? `#${product}` : null].filter(Boolean).join(' ');
-}
-
-function calculateQuote(data) {
-  const measureRows = measurementItemsFromForm(data).map((item) => {
-    const area = measureArea(item);
-    const areaTotal = area * item.cantidad;
-    const linearTotal = measureLinear(item);
-    return {
-      ...item,
-      area,
-      areaTotal,
-      linearTotal,
-    };
-  });
-  const primaryMeasure = measureRows[0] || normalizeMeasureItem({}, 0, data);
-  const ancho = primaryMeasure.ancho;
-  const alto = primaryMeasure.alto;
-  const fondo = primaryMeasure.fondo;
-  const grosorMaterial = primaryMeasure.grosorMaterial;
-  const cantidad = measureRows.reduce((sum, item) => sum + item.cantidad, 0) || Math.max(1, positiveNumber(data.cantidad) || 1);
-  const merma = percentValue(data.merma);
-  const margenMaterial = positiveNumber(data.margenMaterial);
-  const manoObra = positiveNumber(data.manoObra);
-  const extras = positiveNumber(data.extras);
-  const descuento = percentValue(data.descuento);
-  const anticipo = percentValue(data.anticipo);
-  const area = measureRows.reduce((sum, item) => sum + item.area, 0);
-  const areaTotal = measureRows.reduce((sum, item) => sum + item.areaTotal, 0);
-  const linearTotal = measureRows.reduce((sum, item) => sum + item.linearTotal, 0);
-  const quoteBasis = { areaTotal, linearTotal };
-
-  const materialRows = materialItemsFromForm(data, areaTotal).map((item) => {
-    const rowQuantity = materialItemQuantity(item, quoteBasis);
-    const itemAreaTotal = (positiveNumber(item.ancho) / 100) * (positiveNumber(item.alto) / 100) * Math.max(1, positiveNumber(item.cantidad) || 1);
-    const itemLinearTotal = (positiveNumber(item.largo) / 100) * Math.max(1, positiveNumber(item.cantidad) || 1);
-    const rowMerma = percentValue(item.merma);
-    const rowMargin = item.margen === '' ? margenMaterial : positiveNumber(item.margen);
-    const tipoCompra = clean(item.tipoCompra || item.calculo, 'manual');
-    const largoUnidad = positiveNumber(item.largo) / 100;
-    const areaNecesaria = ['hoja', 'area'].includes(tipoCompra) ? rowQuantity : 0;
-    const largoNecesario = tipoCompra === 'lineal' ? rowQuantity : 0;
-    const cantidadNecesaria = ['pieza', 'manual'].includes(tipoCompra) ? Math.max(0, rowQuantity) : 0;
-    const costoUnitario = positiveNumber(item.costoUnitario);
-    const materialCalc = Materials.calcularMaterial({
-      tipoCompra,
-      areaNecesaria,
-      linealNecesario: largoNecesario,
-      cantidad: cantidadNecesaria,
-      ancho: positiveNumber(item.ancho) / 100,
-      alto: positiveNumber(item.alto) / 100,
-      precioUnidad: costoUnitario,
-      precioMetroCuadrado: costoUnitario,
-      precioMetroLineal: costoUnitario,
-      costoInterno: costoUnitario,
-      merma: rowMerma,
-      margen: rowMargin,
-      precioManual: rowQuantity * positiveNumber(item.precioUnitario),
-      usarPrecioManual: Boolean(item.precioManual),
-    });
-    const areaHoja = materialCalc.areaUnidad || 0;
-    const areaConMerma = materialCalc.areaConMerma || 0;
-    const largoConMerma = materialCalc.linealConMerma || 0;
-    const cantidadConMerma = materialCalc.cantidadConMerma || 0;
-    const hojasNecesarias = materialCalc.unidadesNecesarias || 0;
-    const metrosNecesarios = materialCalc.linealConMerma || 0;
-    const piezasNecesarias = materialCalc.unidadesNecesarias || 0;
-    const costoMetroCuadrado = materialCalc.costoMetroCuadrado || costoUnitario;
-    const costoMetroLineal = materialCalc.costoMetroLineal || 0;
-    const costTotal = materialCalc.costoInterno || 0;
-    const saleTotal = materialCalc.precioCliente || 0;
-    const suggestedSaleTotal = materialCalc.precioSugerido || saleTotal;
-    const unitPrice = rowQuantity > 0 ? saleTotal / rowQuantity : 0;
-    const suggestedUnit = rowQuantity > 0 ? suggestedSaleTotal / rowQuantity : 0;
-    const marginAmount = materialCalc.utilidad || 0;
-    const marginPercent = Pricing.calcularUtilidadSobreCosto(marginAmount, costTotal);
-    const marginPercentOverSale = Pricing.calcularUtilidadSobreVenta(marginAmount, saleTotal);
-    const baseCost = tipoCompra === 'hoja' ? areaNecesaria * costoMetroCuadrado : rowQuantity * costoUnitario;
-    const wasteCost = Math.max(0, costTotal - baseCost);
-    return {
-      ...item,
-      tipoCompra,
-      rowQuantity,
-      rowMargin,
-      calcLabel: materialCalcLabel(item),
-      areaTotal: itemAreaTotal || (['area', 'hoja'].includes(item.calculo) ? rowQuantity : 0),
-      largoTotal: itemLinearTotal || (item.calculo === 'lineal' ? rowQuantity : 0),
-      areaHoja,
-      areaNecesaria,
-      areaConMerma,
-      hojasNecesarias,
-      largoNecesario,
-      largoConMerma,
-      metrosNecesarios,
-      cantidadNecesaria,
-      cantidadConMerma,
-      piezasNecesarias,
-      costoMetroCuadrado,
-      costoMetroLineal,
-      baseCost,
-      wasteCost,
-      costTotal,
-      costoConMerma: rowQuantity > 0 ? costTotal / rowQuantity : 0,
-      precioCliente: unitPrice,
-      saleTotal,
-      suggestedUnit,
-      suggestedSaleTotal,
-      marginAmount,
-      marginPercent,
-      marginPercentOverSale,
-      calculationSteps: [
-        tipoCompra === 'hoja' ? `Área hoja: ${decimal(areaHoja)} m².` : null,
-        tipoCompra === 'hoja' ? `Costo m² real: ${money(costoMetroCuadrado)}.` : null,
-        `Base usada: ${decimal(rowQuantity)} ${tipoCompra === 'lineal' ? 'm lineales' : ['hoja', 'area'].includes(tipoCompra) ? 'm²' : 'pza(s)'}.`,
-        tipoCompra === 'hoja' ? `Área con merma: ${decimal(areaConMerma)} m².` : null,
-        tipoCompra === 'hoja' ? `Hojas completas: ${hojasNecesarias}.` : null,
-        tipoCompra === 'lineal' ? `Metro lineal con merma: ${decimal(largoConMerma)} m.` : null,
-        ['pieza', 'manual'].includes(tipoCompra) ? `Piezas con merma: ${piezasNecesarias}.` : null,
-        `Costo interno real: ${money(costTotal)}.`,
-        `Precio cliente: ${money(saleTotal)}.`,
-        `Utilidad: ${money(marginAmount)}.`,
-      ].filter(Boolean),
-    };
-  });
-
-  const accessoryRows = accessoryItemsFromForm(data).map((item) => {
-    const rowQuantity = Math.max(1, positiveNumber(item.cantidad) || 1);
-    const rowMerma = percentValue(item.merma);
-    const rowMargin = item.margen === '' ? margenMaterial : positiveNumber(item.margen);
-    const accessoryCalc = Materials.calcularMaterial({
-      tipoCompra: item.tipoCompra || item.tipo || 'pieza',
-      cantidad: rowQuantity,
-      precioUnidad: positiveNumber(item.costoUnitario),
-      costoInterno: positiveNumber(item.costoUnitario),
-      merma: rowMerma,
-      margen: rowMargin,
-      precioManual: rowQuantity * positiveNumber(item.precioUnitario),
-      usarPrecioManual: Boolean(item.precioManual),
-    });
-    const baseCost = rowQuantity * positiveNumber(item.costoUnitario);
-    const costTotal = accessoryCalc.costoInterno || 0;
-    const suggestedSaleTotal = accessoryCalc.precioSugerido || accessoryCalc.precioCliente || 0;
-    const suggestedUnit = rowQuantity > 0 ? suggestedSaleTotal / rowQuantity : 0;
-    const saleTotal = accessoryCalc.precioCliente || 0;
-    const unitPrice = rowQuantity > 0 ? saleTotal / rowQuantity : 0;
-    const marginAmount = accessoryCalc.utilidad || 0;
-    const marginPercent = Pricing.calcularUtilidadSobreCosto(marginAmount, costTotal);
-    const marginPercentOverSale = Pricing.calcularUtilidadSobreVenta(marginAmount, saleTotal);
-    return {
-      ...item,
-      rowQuantity,
-      tipoCompra: clean(item.tipoCompra, 'pieza'),
-      rowMerma,
-      rowMargin,
-      areaTotal: rowQuantity,
-      baseCost,
-      wasteCost: costTotal - baseCost,
-      costTotal,
-      costoConMerma: rowQuantity > 0 ? costTotal / rowQuantity : 0,
-      precioCliente: unitPrice,
-      saleTotal,
-      suggestedUnit,
-      suggestedSaleTotal,
-      marginAmount,
-      marginPercent,
-      marginPercentOverSale,
-    };
-  });
-
-  const summary = Summary.calcularResumenCotizacion({
-    materialRows,
-    accessoryRows,
-    manoObra,
-    extras,
-    descuento,
-    anticipo,
-  });
-  const {
-    material,
-    materialBaseCost,
-    wasteCost,
-    internalMaterialCost,
-    hardwareSale,
-    hardwareCost,
-    subtotal,
-    discountAmount,
-    total,
-    laborProfit,
-    internalTotal,
-    profit,
-    profitPercent,
-    profitPercentCost,
-    deposit,
-    rest,
-  } = summary;
-  const primaryMaterialCost = materialRows[0]?.costoUnitario ?? numberValue(data.costoMaterialM2);
-  const primaryMaterialWaste = materialRows[0]?.merma ?? merma;
-  const suggestedMaterialTotal = materialRows.reduce((sum, item) => sum + item.suggestedSaleTotal, 0);
-  const suggestedPriceM2 = areaTotal > 0
-    ? suggestedMaterialTotal / areaTotal
-    : positiveNumber(primaryMaterialCost) * (1 + percentValue(primaryMaterialWaste) / 100) * (1 + margenMaterial / 100);
-  const breakdown = [
-    {
-      title: 'Medidas',
-      lines: measureRows.map((item) => ({
-        label: item.nombre,
-        amount: `${decimal(item.areaTotal)} m² / ${decimal(item.linearTotal)} m`,
-        detail: `Área: (${item.ancho} cm ÷ 100) x (${item.alto} cm ÷ 100) x ${item.cantidad} = ${decimal(item.areaTotal)} m². Lineal: (${item.ancho} + ${item.alto}) x 2 ÷ 100 x ${item.cantidad} = ${decimal(item.linearTotal)} m.`,
-      })),
-    },
-    {
-      title: 'Materiales',
-      lines: materialRows.map((item) => ({
-        label: item.nombre,
-        amount: money(item.saleTotal),
-        detail: `${decimal(item.rowQuantity)} ${item.unidad} por ${item.calcLabel}. ${(item.calculationSteps || []).join(' ')}`,
-      })),
-    },
-    {
-      title: 'Herrajes y accesorios',
-      lines: accessoryRows.map((item) => ({
-        label: item.nombre,
-        amount: money(item.saleTotal),
-        detail: `${decimal(item.rowQuantity, 0)} pieza(s). Costo interno: ${decimal(item.rowQuantity, 0)} x ${money(item.costoUnitario)} = ${money(item.costTotal)}. Precio cliente: ${decimal(item.rowQuantity, 0)} x ${money(item.precioUnitario)} = ${money(item.saleTotal)}.`,
-      })),
-    },
-    {
-      title: 'Totales del cliente',
-      lines: [
-        {
-          label: 'Subtotal',
-          amount: money(subtotal),
-          detail: `Materiales ${money(material)} + herrajes ${money(hardwareSale)} + mano de obra ${money(manoObra)} + extras ${money(extras)} = ${money(subtotal)}.`,
-        },
-        {
-          label: 'Descuento',
-          amount: `-${money(discountAmount)}`,
-          detail: `${descuento}% de ${money(subtotal)} = ${money(discountAmount)}.`,
-        },
-        {
-          label: 'Total cliente',
-          amount: money(total),
-          detail: `${money(subtotal)} - ${money(discountAmount)} = ${money(total)}.`,
-        },
-        {
-          label: 'Anticipo y resto',
-          amount: `${money(deposit)} / ${money(rest)}`,
-          detail: `Anticipo ${anticipo}% de ${money(total)} = ${money(deposit)}. Resto: ${money(total)} - ${money(deposit)} = ${money(rest)}.`,
-        },
-      ],
-    },
-    {
-      title: 'Ganancia ALUXOR',
-      lines: [
-        {
-          label: 'Costo interno real',
-          amount: money(internalTotal),
-          detail: `Material base ${money(materialBaseCost)} + merma ${money(wasteCost)} + herrajes ${money(hardwareCost)} + extras ${money(extras)} = ${money(internalTotal)}. La mano de obra no se resta porque ALUXOR instala y queda como ingreso del negocio.`,
-        },
-        {
-          label: 'Mano de obra como ganancia',
-          amount: money(laborProfit),
-          detail: `Mano de obra cobrada al cliente: ${money(laborProfit)}. Como la instalación la hace el negocio, se suma dentro de la utilidad en vez de tratarse como gasto externo.`,
-        },
-        {
-          label: profit >= 0 ? 'Ganancia estimada' : 'Pérdida estimada',
-          amount: money(profit),
-          detail: `Total cliente ${money(total)} - costo interno real ${money(internalTotal)} = ${money(profit)}. Utilidad sobre costo: ${decimal(profitPercentCost, 1)}%. Utilidad sobre venta: ${decimal(profitPercent, 1)}%.`,
-        },
-      ],
-    },
-  ].map((group) => ({
-    ...group,
-    lines: group.lines.filter((line) => line.label && line.detail),
-  })).filter((group) => group.lines.length > 0);
-
-  return {
-    area,
-    areaTotal,
-    linearTotal,
-    measureRows,
-    material,
-    grosorMaterial,
-    materialRows,
-    accessoryRows,
-    costoMaterialM2: primaryMaterialCost,
-    merma,
-    margenMaterial,
-    materialBaseCost,
-    wasteCost,
-    internalMaterialCost,
-    hardwareSale,
-    hardwareCost,
-    suggestedPriceM2,
-    suggestedMaterialTotal,
-    manoObra,
-    laborProfit,
-    extras,
-    descuento,
-    discountAmount,
-    subtotal,
-    internalTotal,
-    profit,
-    profitPercent,
-    profitPercentCost,
-    breakdown,
-    total,
-    deposit,
-    rest,
-    anticipo,
-    cantidad,
-    fondo,
-  };
 }
 
 function sentenceJoin(parts) {
@@ -1944,7 +1484,7 @@ function App() {
   const [quickCalc, setQuickCalc] = useState({ materialId: '', nombre: 'Melamina', categoria: 'Madera/Melamina', tipoCompra: 'hoja', baseUso: 'medidas', ancho: 122, alto: 244, largo: 100, cantidad: 1, precioTotal: 1200, areaManual: 0, linealManual: 0, cantidadManual: 1, merma: 8, margen: 35 });
   const [pdfEditor, setPdfEditor] = useState(null);
 
-  const quote = useMemo(() => calculateQuote(form), [form]);
+  const quote = useMemo(() => Quote.calculateQuote(form, quoteHelpers), [form]);
   const dataHealth = useMemo(() => quoteDataHealth(form, quote), [form, quote]);
   const materials = useMemo(() => Report.generateMaterials(form, quote, reportHelpers), [form, quote]);
   const outputs = useMemo(() => Report.generateOutputs(form, quote, reportHelpers), [form, quote]);
@@ -2114,8 +1654,8 @@ function App() {
 
   function updateMeasure(field, value) {
     setForm((current) => {
-      const measureItems = measurementItemsFromForm(current);
-      const first = measureItems[0] || normalizeMeasureItem({}, 0, current);
+      const measureItems = Quote.measurementItemsFromForm(current, quoteHelpers);
+      const first = measureItems[0] || Quote.normalizeMeasureItem({}, 0, current, quoteHelpers);
       const nextMeasureItems = [{ ...first, [field]: value }, ...measureItems.slice(1)];
       const next = { ...current, [field]: value, measureItems: nextMeasureItems };
       return { ...next, medidas: formatDimensions(next) };
@@ -2124,10 +1664,10 @@ function App() {
 
   function updateMeasureItem(id, field, value) {
     setForm((current) => {
-      const measureItems = measurementItemsFromForm(current).map((item) => (
+      const measureItems = Quote.measurementItemsFromForm(current, quoteHelpers).map((item) => (
         item.id === id ? { ...item, [field]: value } : item
       ));
-      const first = measureItems[0] || normalizeMeasureItem({}, 0, current);
+      const first = measureItems[0] || Quote.normalizeMeasureItem({}, 0, current, quoteHelpers);
       const next = {
         ...current,
         measureItems,
@@ -2144,10 +1684,10 @@ function App() {
   function addMeasureItem() {
     setForm((current) => {
       const measureItems = [
-        ...measurementItemsFromForm(current),
+        ...Quote.measurementItemsFromForm(current, quoteHelpers),
         {
           id: `med-${Date.now()}`,
-          nombre: `Medida ${measurementItemsFromForm(current).length + 1}`,
+          nombre: `Medida ${Quote.measurementItemsFromForm(current, quoteHelpers).length + 1}`,
           ancho: current.ancho,
           alto: current.alto,
           fondo: current.fondo,
@@ -2163,8 +1703,8 @@ function App() {
 
   function removeMeasureItem(id) {
     setForm((current) => {
-      const measureItems = measurementItemsFromForm(current).filter((item) => item.id !== id);
-      const safeItems = measureItems.length ? measureItems : [normalizeMeasureItem({}, 0, current)];
+      const measureItems = Quote.measurementItemsFromForm(current, quoteHelpers).filter((item) => item.id !== id);
+      const safeItems = measureItems.length ? measureItems : [Quote.normalizeMeasureItem({}, 0, current, quoteHelpers)];
       const first = safeItems[0];
       const next = {
         ...current,
@@ -2181,8 +1721,8 @@ function App() {
 
   function updateMaterialItem(id, field, value) {
     setForm((current) => {
-      const areaTotal = quoteAreaTotal(current);
-      const materialItems = materialItemsFromForm(current, areaTotal).map((item) => {
+      const areaTotal = Quote.quoteAreaTotal(current, quoteHelpers);
+      const materialItems = Quote.materialItemsFromForm(current, areaTotal, quoteHelpers).map((item) => {
         if (item.id !== id) return item;
         const next = { ...item, [field]: value };
         if (field === 'calculo') {
@@ -2216,7 +1756,7 @@ function App() {
     setForm((current) => ({
       ...current,
       materialItems: [
-        ...materialItemsFromForm(current, quoteAreaTotal(current)),
+        ...Quote.materialItemsFromForm(current, Quote.quoteAreaTotal(current, quoteHelpers), quoteHelpers),
         {
           id: `mat-${Date.now()}`,
           nombre: 'Nuevo material',
@@ -2242,17 +1782,17 @@ function App() {
 
   function removeMaterialItem(id) {
     setForm((current) => {
-      const areaTotal = quoteAreaTotal(current);
-      const items = materialItemsFromForm(current, areaTotal).filter((item) => item.id !== id);
+      const areaTotal = Quote.quoteAreaTotal(current, quoteHelpers);
+      const items = Quote.materialItemsFromForm(current, areaTotal, quoteHelpers).filter((item) => item.id !== id);
       return { ...current, materialItems: items.length ? items : [] };
     });
   }
 
   function applySuggestedPrices() {
     setForm((current) => {
-      const areaTotal = quoteAreaTotal(current);
-      const currentQuote = calculateQuote(current);
-      const materialItems = materialItemsFromForm(current, areaTotal).map((item) => ({
+      const areaTotal = Quote.quoteAreaTotal(current, quoteHelpers);
+      const currentQuote = Quote.calculateQuote(current, quoteHelpers);
+      const materialItems = Quote.materialItemsFromForm(current, areaTotal, quoteHelpers).map((item) => ({
         ...item,
         precioUnitario: Math.round(positiveNumber(item.costoUnitario) * (1 + percentValue(item.merma) / 100) * (1 + positiveNumber(item.margen || current.margenMaterial) / 100)),
       }));
@@ -2294,7 +1834,7 @@ function App() {
   function updateAccessoryItem(id, field, value) {
     setForm((current) => ({
       ...current,
-      accessoryItems: accessoryItemsFromForm(current).map((item) => {
+      accessoryItems: Quote.accessoryItemsFromForm(current, quoteHelpers).map((item) => {
         if (item.id !== id) return item;
         const next = {
           ...item,
@@ -2316,7 +1856,7 @@ function App() {
     setForm((current) => ({
       ...current,
       accessoryItems: [
-        ...accessoryItemsFromForm(current),
+        ...Quote.accessoryItemsFromForm(current, quoteHelpers),
         {
           id: `acc-${Date.now()}`,
           nombre: 'Nuevo accesorio',
@@ -2335,7 +1875,7 @@ function App() {
 
   function removeAccessoryItem(id) {
     setForm((current) => {
-      const items = accessoryItemsFromForm(current).filter((item) => item.id !== id);
+      const items = Quote.accessoryItemsFromForm(current, quoteHelpers).filter((item) => item.id !== id);
       return { ...current, accessoryItems: items.length ? items : [] };
     });
   }
@@ -2628,8 +2168,8 @@ function App() {
 
   function applyQuickCalcToQuote() {
     setForm((current) => {
-      const measureItems = measurementItemsFromForm(current);
-      const first = measureItems[0] || normalizeMeasureItem({}, 0, current);
+      const measureItems = Quote.measurementItemsFromForm(current, quoteHelpers);
+      const first = measureItems[0] || Quote.normalizeMeasureItem({}, 0, current, quoteHelpers);
       const nextMeasure = {
         ...first,
         ancho: positiveNumber(quickCalc.ancho),
@@ -2649,11 +2189,11 @@ function App() {
 
   function applyQuickCalcToMaterial() {
     setForm((current) => {
-      const materialItems = materialItemsFromForm(current, quoteAreaTotal(current));
+      const materialItems = Quote.materialItemsFromForm(current, Quote.quoteAreaTotal(current, quoteHelpers), quoteHelpers);
       const selectedId = quickCalc.materialId;
       const target = materialItems.find((item) => item.id === selectedId);
       const nextItem = {
-        ...(target || normalizeMaterialItem({ id: `mat-${Date.now()}`, nombre: quickCalc.nombre }, materialItems.length, current)),
+        ...(target || Quote.normalizeMaterialItem({ id: `mat-${Date.now()}`, nombre: quickCalc.nombre }, materialItems.length, current, quoteHelpers)),
         nombre: clean(quickCalc.nombre, 'Material'),
         categoria: clean(quickCalc.categoria, 'Material'),
         calculo: quickCalc.tipoCompra === 'lineal' ? 'lineal' : ['pieza', 'manual'].includes(quickCalc.tipoCompra) ? 'manual' : 'area',
@@ -2942,7 +2482,7 @@ function App() {
                   <Field id="quickMaterialId" label="Material destino">
                     <select id="quickMaterialId" value={quickCalc.materialId} onChange={(event) => updateQuickCalc('materialId', event.target.value)}>
                       <option value="">Crear nuevo</option>
-                      {materialItemsFromForm(form, quote.areaTotal).map((item) => <option key={item.id} value={item.id}>{item.nombre}</option>)}
+                      {Quote.materialItemsFromForm(form, quote.areaTotal, quoteHelpers).map((item) => <option key={item.id} value={item.id}>{item.nombre}</option>)}
                     </select>
                   </Field>
                   <Field id="quickBaseUso" label="Usar base">
