@@ -29,7 +29,7 @@ import {
 } from 'lucide-react';
 import './styles.css';
 import { registerServiceWorker } from './pwa';
-import { Areas, Materials, Pricing, Summary, Report, Quote, HistoryEngine, Pdf } from './lib/br-engine/index.js';
+import { Areas, Materials, Pricing, Summary, Report, Quote, HistoryEngine, Pdf, StorageEngine } from './lib/br-engine/index.js';
 
 const APP_VERSION = '2026.05.39';
 const APP_VERSION_QUERY = '20260539';
@@ -463,16 +463,6 @@ function typeOptionsFor(giro, typeDetails = []) {
     ...(tiposPorGiro[giro] || tiposPorGiro.Carpintería),
     ...typeDetails.filter((item) => item.giro === giro).map((item) => item.tipo),
   ]);
-}
-
-function loadTypeDetails() {
-  try {
-    const stored = localStorage.getItem('anunciapro.typeDetails');
-    const items = stored ? JSON.parse(stored) : defaultTypeDetails;
-    return Array.isArray(items) ? items : defaultTypeDetails;
-  } catch {
-    return defaultTypeDetails;
-  }
 }
 
 function normalizePlanItem(item, index = 0) {
@@ -989,32 +979,12 @@ function normalizeCatalogItem(item) {
   };
 }
 
-function loadCatalog() {
-  try {
-    const stored = localStorage.getItem('anunciapro.catalog');
-    const items = stored ? JSON.parse(stored) : catalogDefaults;
-    return items.map(normalizeCatalogItem);
-  } catch {
-    return catalogDefaults.map(normalizeCatalogItem);
-  }
-}
-
-function loadHistory() {
-  try {
-    const stored = localStorage.getItem('anunciapro.history');
-    return stored ? HistoryEngine.normalizeHistory(JSON.parse(stored)) : [];
-  } catch {
-    return [];
-  }
-}
-
-function loadAppLogo() {
-  try {
-    return localStorage.getItem('anunciapro.logo') || '';
-  } catch {
-    return '';
-  }
-}
+const storageHelpers = {
+  catalogDefaults,
+  defaultTypeDetails,
+  normalizeCatalogItem,
+  normalizeHistory: HistoryEngine.normalizeHistory,
+};
 
 function Field({ id, label, children, help, why, how }) {
   return (
@@ -1256,8 +1226,8 @@ function refreshInstalledApp() {
 
 function App() {
   const [form, setForm] = useState(defaults);
-  const [catalog, setCatalog] = useState(loadCatalog);
-  const [history, setHistory] = useState(loadHistory);
+  const [catalog, setCatalog] = useState(() => StorageEngine.loadCatalog(storageHelpers));
+  const [history, setHistory] = useState(() => StorageEngine.loadHistory(storageHelpers));
   const [legacyRecoveredCount, setLegacyRecoveredCount] = useState(0);
   const [copied, setCopied] = useState('');
   const [largeText, setLargeText] = useState(false);
@@ -1267,8 +1237,8 @@ function App() {
   const [planView, setPlanView] = useState('3d');
   const [planRotation, setPlanRotation] = useState(0);
   const [planZoom, setPlanZoom] = useState(100);
-  const [typeDetails, setTypeDetails] = useState(loadTypeDetails);
-  const [appLogo, setAppLogo] = useState(loadAppLogo);
+  const [typeDetails, setTypeDetails] = useState(() => StorageEngine.loadTypeDetails(storageHelpers));
+  const [appLogo, setAppLogo] = useState(() => StorageEngine.loadAppLogo());
   const [floatingSummary, setFloatingSummary] = useState({ x: 24, y: 120, compact: false, minimized: false });
   const [quickCalc, setQuickCalc] = useState({ materialId: '', nombre: 'Melamina', categoria: 'Madera/Melamina', tipoCompra: 'hoja', baseUso: 'medidas', ancho: 122, alto: 244, largo: 100, cantidad: 1, precioTotal: 1200, areaManual: 0, linealManual: 0, cantidadManual: 1, merma: 8, margen: 35 });
   const [pdfEditor, setPdfEditor] = useState(null);
@@ -1323,24 +1293,19 @@ function App() {
   ];
 
   useEffect(() => {
-    localStorage.setItem('anunciapro.catalog', JSON.stringify(catalog));
+    StorageEngine.saveCatalog(catalog);
   }, [catalog]);
 
   useEffect(() => {
-    localStorage.setItem('anunciapro.history', JSON.stringify(history));
+    StorageEngine.saveHistory(history);
   }, [history]);
 
   useEffect(() => {
-    localStorage.setItem('anunciapro.typeDetails', JSON.stringify(typeDetails));
+    StorageEngine.saveTypeDetails(typeDetails);
   }, [typeDetails]);
 
   useEffect(() => {
-    try {
-      if (appLogo) localStorage.setItem('anunciapro.logo', appLogo);
-      else localStorage.removeItem('anunciapro.logo');
-    } catch {
-      // El logo personalizado es opcional.
-    }
+    StorageEngine.saveLogo(appLogo);
   }, [appLogo]);
 
   async function syncHistory(uploadLocal = false) {
@@ -1356,7 +1321,7 @@ function App() {
       if (recoveredLegacyHistory.length > 0) {
         setLegacyRecoveredCount(recoveredLegacyHistory.length);
       }
-      const local = loadHistory();
+      const local = StorageEngine.loadHistory(storageHelpers);
       const remote = await HistoryEngine.requestHistory({}, historyHelpers);
       const merged = HistoryEngine.mergeHistoryItems(recoveredLegacyHistory, local, history, remote);
 

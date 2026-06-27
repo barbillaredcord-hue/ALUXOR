@@ -10,5 +10,6 @@ export * as Report from './report.js';
 export * as Quote from './quote.js';
 export * as HistoryEngine from './history.js';
 export * as Pdf from './pdf.js';
+export * as StorageEngine from './storage.js';
 export * as Validation from './validation.js';
 export * as Constants from './constants.js';
