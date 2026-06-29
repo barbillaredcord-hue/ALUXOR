@@ -93,4 +93,48 @@ describe('quote.js', () => {
     const quote = Quote.calculateQuote(simpleQuote, helpers);
     expect(quote.deposit + quote.rest).toBeCloseTo(quote.total);
   });
+
+  it('calcula escritorio industrial con melamina por hoja', () => {
+    const quote = Quote.calculateQuote({
+      giro: 'Carpintería',
+      producto: 'Escritorio industrial',
+      cantidad: 1,
+      ancho: 96,
+      alto: 60,
+      fondo: 60,
+      grosorMaterial: 18,
+      merma: 0,
+      margenMaterial: 100,
+      manoObra: 800,
+      extras: 0,
+      descuento: 0,
+      anticipo: 50,
+      materialItems: [{
+        id: 'mat-melamina',
+        nombre: 'Melamina',
+        tipoCompra: 'hoja',
+        baseCalculo: 'medidas_area',
+        ancho: 122,
+        alto: 244,
+        cantidad: 1,
+        costoUnitario: 1334,
+        merma: 0,
+        margen: 100,
+      }],
+      accessoryItems: [],
+    }, helpers);
+
+    expect(quote.areaTotal).toBeCloseTo(0.576);
+    expect(quote.materialRows[0].areaHoja).toBeCloseTo(2.9768);
+    expect(quote.materialRows[0].hojasNecesarias).toBe(1);
+    expect(quote.materialRows[0].costTotal).toBe(1334);
+    expect(quote.materialRows[0].saleTotal).toBe(2668);
+    expect(quote.manoObra).toBe(800);
+    expect(quote.subtotal).toBe(3468);
+    expect(quote.total).toBe(3468);
+    expect(quote.internalTotal).toBe(1334);
+    expect(quote.profit).toBe(2134);
+    expect(quote.deposit).toBe(1734);
+    expect(quote.rest).toBe(1734);
+  });
 });

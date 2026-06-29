@@ -72,4 +72,24 @@ describe('materials.js', () => {
     expect(result.costoInterno).toBe(200);
     expect(result.precioCliente).toBe(999);
   });
+
+  it('valida hoja de quickCalc sin perdida falsa', () => {
+    const base = {
+      tipoCompra: 'hoja',
+      areaNecesaria: 0.576,
+      ancho: 1.22,
+      alto: 2.44,
+      precioUnidad: 1334,
+      merma: 0,
+    };
+    const sinMargen = Materials.calcularMaterial({ ...base, margen: 0 });
+    const conMargen = Materials.calcularMaterial({ ...base, margen: 100 });
+
+    expect(sinMargen.unidadesNecesarias).toBe(1);
+    expect(sinMargen.costoInterno).toBe(1334);
+    expect(sinMargen.precioCliente).toBe(1334);
+    expect(sinMargen.utilidad).toBe(0);
+    expect(conMargen.precioCliente).toBe(2668);
+    expect(conMargen.utilidad).toBe(1334);
+  });
 });

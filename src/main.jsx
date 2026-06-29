@@ -819,24 +819,38 @@ function App() {
   const quickCostoM2 = quickArea > 0 ? positiveNumber(quickCalc.precioTotal) / quickArea : 0;
   const quickCostoLineal = quickLinear > 0 ? positiveNumber(quickCalc.precioTotal) / quickLinear : 0;
   const quickCostoUnitario = quickCalc.tipoCompra === 'lineal' ? quickCostoLineal : quickCalc.tipoCompra === 'pieza' || quickCalc.tipoCompra === 'manual' ? quickPrecioUnidadCompra : quickCostoM2;
-  const quickCostoBase = positiveNumber(quickCostoUnitario);
-  const quickCostoConMerma = quickCostoBase * (1 + percentValue(quickCalc.merma) / 100);
-  const quickPricing = {
-    costoBase: quickCostoBase,
-    costoConMerma: quickCostoConMerma,
-    precioCliente: Pricing.aplicarMargenSobreCosto(quickCostoConMerma, quickCalc.margen),
-  };
   const quickAreaNecesaria = quickCalc.baseUso === 'manual' ? positiveNumber(quickCalc.areaManual) : quote.areaTotal;
   const quickLinealNecesario = quickCalc.baseUso === 'manual' ? positiveNumber(quickCalc.linealManual) : quote.linearTotal;
   const quickCantidadNecesaria = quickCalc.baseUso === 'manual' ? Math.max(1, positiveNumber(quickCalc.cantidadManual) || 1) : Math.max(1, quote.cantidad || 1);
+  const quickMaterialCalc = Materials.calcularMaterial({
+    tipoCompra: quickCalc.tipoCompra,
+    areaNecesaria: quickAreaNecesaria,
+    linealNecesario: quickLinealNecesario,
+    cantidad: quickCantidadNecesaria,
+    ancho: positiveNumber(quickCalc.ancho) / 100,
+    alto: positiveNumber(quickCalc.alto) / 100,
+    precioUnidad: quickPrecioUnidadCompra,
+    precioMetroCuadrado: quickCostoM2,
+    precioMetroLineal: quickCostoLineal,
+    costoInterno: quickCostoUnitario,
+    merma: percentValue(quickCalc.merma),
+    margen: positiveNumber(quickCalc.margen),
+  });
+  const quickCostoBase = positiveNumber(quickCostoUnitario);
+  const quickCostoConMerma = quickCostoBase * (1 + percentValue(quickCalc.merma) / 100);
+  const quickPricing = {
+    costoBase: quickCalc.tipoCompra === 'hoja' ? quickMaterialCalc.costoInterno : quickCostoBase,
+    costoConMerma: quickCalc.tipoCompra === 'hoja' ? quickMaterialCalc.costoInterno : quickCostoConMerma,
+    precioCliente: quickCalc.tipoCompra === 'hoja' ? quickMaterialCalc.precioCliente : Pricing.aplicarMargenSobreCosto(quickCostoConMerma, quickCalc.margen),
+  };
   const quickFactorMerma = 1 + percentValue(quickCalc.merma) / 100;
   const quickHojasComprar = quickAreaPorPieza > 0 ? Math.ceil((quickAreaNecesaria * quickFactorMerma) / quickAreaPorPieza) : 0;
   const quickPiezasComprar = Math.ceil(quickCantidadNecesaria * quickFactorMerma);
   const quickCompraSinMerma = quickCalc.tipoCompra === 'lineal' ? quickLinealNecesario * quickCostoLineal : quickCalc.tipoCompra === 'pieza' || quickCalc.tipoCompra === 'manual' ? quickCantidadNecesaria * quickCostoUnitario : quickAreaNecesaria * quickCostoM2;
-  const quickCompraConMerma = quickCalc.tipoCompra === 'hoja' ? quickHojasComprar * quickPrecioUnidadCompra : quickCalc.tipoCompra === 'lineal' ? quickLinealNecesario * quickFactorMerma * quickCostoLineal : quickPiezasComprar * quickCostoUnitario;
+  const quickCompraConMerma = quickCalc.tipoCompra === 'hoja' ? quickMaterialCalc.costoInterno : quickCalc.tipoCompra === 'lineal' ? quickLinealNecesario * quickFactorMerma * quickCostoLineal : quickPiezasComprar * quickCostoUnitario;
   const quickTotalClienteSinMargen = quickCompraSinMerma * quickFactorMerma;
-  const quickTotalClienteConMargen = quickCalc.tipoCompra === 'lineal' ? quickLinealNecesario * quickPricing.precioCliente : quickCalc.tipoCompra === 'pieza' || quickCalc.tipoCompra === 'manual' ? quickCantidadNecesaria * quickPricing.precioCliente : quickAreaNecesaria * quickPricing.precioCliente;
-  const quickProfit = quickTotalClienteConMargen - quickCompraConMerma;
+  const quickTotalClienteConMargen = quickCalc.tipoCompra === 'hoja' ? quickMaterialCalc.precioCliente : quickCalc.tipoCompra === 'lineal' ? quickLinealNecesario * quickPricing.precioCliente : quickCalc.tipoCompra === 'pieza' || quickCalc.tipoCompra === 'manual' ? quickCantidadNecesaria * quickPricing.precioCliente : quickAreaNecesaria * quickPricing.precioCliente;
+  const quickProfit = quickCalc.tipoCompra === 'hoja' ? quickMaterialCalc.utilidad : quickTotalClienteConMargen - quickCompraConMerma;
   const quickProfitPercent = quickCompraConMerma > 0 ? (quickProfit / quickCompraConMerma) * 100 : 0;
 
   const menuItems = [
@@ -1570,10 +1584,16 @@ function App() {
   }
 
   function generateProfessionalPdf(mode = 'client') {
-    const printWindow = window.open('', '_blank', 'noopener,noreferrer');
+    const html = Pdf.quotePrintHtml(form, quote, materials, mode, pdfEditor?.doc, appLogo, pdfHelpers);
+    const printWindow = window.open('', '_blank');
     if (!printWindow) return;
-    printWindow.document.write(Pdf.quotePrintHtml(form, quote, materials, mode, pdfEditor?.doc, appLogo, pdfHelpers));
+    printWindow.document.open();
+    printWindow.document.write(html);
     printWindow.document.close();
+    setTimeout(() => {
+      printWindow.focus();
+      printWindow.print();
+    }, 500);
     setPdfEditor(null);
   }
 
