@@ -46,6 +46,92 @@ body {
   padding: 26px 22px 26px 0;
 }
 
+.summary-panel {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  color: #17201b;
+  background: #f8faf8;
+  border: 1px solid #d6dfd9;
+  border-radius: 8px;
+  box-shadow: 0 18px 40px rgba(22, 35, 28, 0.09);
+}
+
+.summary-panel-head {
+  display: grid;
+  gap: 4px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #dce4df;
+}
+
+.summary-panel-head span,
+.summary-panel-head small,
+.summary-panel-metrics span,
+.summary-panel-status span {
+  color: #617068;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.summary-panel-head strong {
+  color: #17201b;
+  font-size: 22px;
+  line-height: 1.1;
+}
+
+.summary-panel-metrics {
+  display: grid;
+  gap: 10px;
+}
+
+.summary-panel-metrics div,
+.summary-panel-status {
+  padding: 12px;
+  background: #eef4f1;
+  border: 1px solid #d7e2dc;
+  border-radius: 8px;
+}
+
+.summary-panel-metrics strong,
+.summary-panel-status strong {
+  display: block;
+  margin-top: 4px;
+  color: #1d3429;
+  font-size: 19px;
+  line-height: 1.1;
+}
+
+.summary-progress {
+  height: 9px;
+  margin-top: 10px;
+  overflow: hidden;
+  background: #d9e3de;
+  border-radius: 999px;
+}
+
+.summary-progress span {
+  display: block;
+  height: 100%;
+  background: #2f6f52;
+  border-radius: inherit;
+}
+
+.summary-panel-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.summary-panel-actions button {
+  min-height: 42px;
+  color: #f6fbf7;
+  background: #20362b;
+  border: 1px solid #385646;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 950;
+}
+
 .sidebar {
   position: sticky;
   top: 0;
