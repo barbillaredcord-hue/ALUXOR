@@ -6,11 +6,9 @@ import {
   BarChart3,
   Box,
   Calculator,
-  Check,
   ClipboardList,
   Copy,
   DoorOpen,
-  Download,
   Eraser,
   FileText,
   Hammer,
@@ -24,7 +22,6 @@ import {
   Sparkles,
   Store,
   TableProperties,
-  Upload,
 } from 'lucide-react';
 import './styles.css';
 import { registerServiceWorker } from './pwa';
@@ -32,7 +29,9 @@ import CalculationChain from './components/CalculationChain.jsx';
 import DashboardSummary from './components/DashboardSummary.jsx';
 import Field from './components/Field.jsx';
 import PlanCanvas3D from './components/PlanCanvas3D.jsx';
+import CatalogSection from './sections/CatalogSection.jsx';
 import DashboardSection from './sections/DashboardSection.jsx';
+import HistorySection from './sections/HistorySection.jsx';
 import SettingsSection from './sections/SettingsSection.jsx';
 import TextSection from './sections/TextSection.jsx';
 import { Areas, Materials, Pricing, Summary, Report, Quote, HistoryEngine, Pdf, StorageEngine, PlanEngine, AnalysisEngine } from './lib/br-engine/index.js';
@@ -2242,27 +2241,14 @@ function App() {
         )}
 
         {activeSection === 'catalogo' && (
-          <section className="panel">
-            <div className="section-head">
-              <div>
-                <h2>Catálogo</h2>
-                <p>Productos rápidos para cargar precios base.</p>
-              </div>
-              <button type="button" onClick={addCatalogItem}><Package size={18} /> Agregar actual</button>
-            </div>
-            <div className="table-list">
-              {catalog.map((item) => (
-                <article key={item.id} className="catalog-row">
-                  <input value={item.nombre} onChange={(event) => updateCatalogItem(item.id, 'nombre', event.target.value)} aria-label="Nombre" />
-                  <input value={item.categoria} onChange={(event) => updateCatalogItem(item.id, 'categoria', event.target.value)} aria-label="Categoría" />
-                  <input value={item.tipoTrabajo} onChange={(event) => updateCatalogItem(item.id, 'tipoTrabajo', event.target.value)} aria-label="Tipo" />
-                  <input type="number" value={item.precio} onChange={(event) => updateCatalogItem(item.id, 'precio', numberValue(event.target.value))} aria-label="Precio" />
-                  <button type="button" onClick={() => applyCatalogItem(item)}><Check size={16} /> Usar</button>
-                  <button type="button" className="ghost" onClick={() => removeCatalogItem(item.id)}><Eraser size={16} /></button>
-                </article>
-              ))}
-            </div>
-          </section>
+          <CatalogSection
+            catalog={catalog}
+            addCatalogItem={addCatalogItem}
+            updateCatalogItem={updateCatalogItem}
+            numberValue={numberValue}
+            applyCatalogItem={applyCatalogItem}
+            removeCatalogItem={removeCatalogItem}
+          />
         )}
 
         {activeSection === 'ajustes' && (
@@ -2275,43 +2261,19 @@ function App() {
         )}
 
         {activeSection === 'historial' && (
-          <section className="panel">
-            <div className="section-head">
-              <div>
-                <h2>Historial de cotizaciones</h2>
-                <div className="history-backup-actions">
-                  <button type="button" className="ghost" onClick={exportHistoryBackup}><Download size={16} /> Exportar respaldo</button>
-                  <label className="ghost file-button">
-                    <Upload size={16} /> Importar respaldo
-                    <input type="file" accept="application/json" onChange={importHistoryBackup} />
-                  </label>
-                </div>
-                <p>{syncStatus}{lastSyncAt ? ` · ${lastSyncAt}` : ''}{legacyRecoveredCount > 0 ? ` · Recuperadas ${legacyRecoveredCount} cotizaciones antiguas` : ''}</p>
-              </div>
-              <button type="button" className="ghost" onClick={() => syncHistory(true)}><RefreshCw size={18} /> Sincronizar</button>
-            </div>
-            <div className="table-list">
-              {history.length === 0 && <p>No hay cotizaciones guardadas todavía.</p>}
-              {history.map((item) => (
-                <article key={item.id} className="history-row">
-                  <div>
-                    <strong>{item.producto}</strong>
-                    {item.folio && <span>Folio: {item.folio}</span>}
-                    <span>{item.clienteNombre} · {money(item.total)} · {new Date(item.createdAt).toLocaleDateString('es-MX')}</span>
-                  </div>
-                  <select value={item.status || 'Pendiente'} onChange={(event) => updateHistoryStatus(item.id, event.target.value)}>
-                    <option>Pendiente</option>
-                    <option>Aprobada</option>
-                    <option>En fabricación</option>
-                    <option>Instalada</option>
-                    <option>Cancelada</option>
-                  </select>
-                  <button type="button" onClick={() => loadHistoryItem(item)}>Abrir</button>
-                  <button type="button" className="ghost" onClick={() => removeHistoryItem(item.id)}><Eraser size={16} /></button>
-                </article>
-              ))}
-            </div>
-          </section>
+          <HistorySection
+            syncStatus={syncStatus}
+            lastSyncAt={lastSyncAt}
+            legacyRecoveredCount={legacyRecoveredCount}
+            exportHistoryBackup={exportHistoryBackup}
+            importHistoryBackup={importHistoryBackup}
+            syncHistory={syncHistory}
+            history={history}
+            money={money}
+            updateHistoryStatus={updateHistoryStatus}
+            loadHistoryItem={loadHistoryItem}
+            removeHistoryItem={removeHistoryItem}
+          />
         )}
 
         {activeSection === 'textos' && (
