@@ -19,6 +19,33 @@ body {
   background: #eef2ed;
 }
 
+.workspace-layout {
+  display: grid;
+  grid-template-columns: 292px minmax(0, 1fr) minmax(320px, 420px);
+  min-height: 100vh;
+  background: #eef2ed;
+}
+
+.workspace-layout-sidebar,
+.workspace-layout-content,
+.workspace-layout-inspector {
+  min-width: 0;
+}
+
+.workspace-layout-sidebar {
+  position: sticky;
+  top: 0;
+  min-height: 100vh;
+}
+
+.workspace-layout-content {
+  padding: 26px;
+}
+
+.workspace-layout-inspector {
+  padding: 26px 22px 26px 0;
+}
+
 .sidebar {
   position: sticky;
   top: 0;
