@@ -4,6 +4,24 @@ function withHelpers(helpers = {}) {
   return helpers;
 }
 
+function normalizeTipoCompraQuote(tipoCompra) {
+  const value = String(tipoCompra ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/m²/g, 'm2')
+    .replace(/[_/]+/g, ' ')
+    .replace(/-+/g, ' ')
+    .replace(/\s+/g, ' ');
+
+  if (['hoja', 'placa', 'sheet', 'panel'].includes(value)) return 'hoja';
+  if (['area', 'm2', 'metro cuadrado'].includes(value)) return 'area';
+  if (['lineal', 'metro lineal', 'ml', 'linear'].includes(value)) return 'lineal';
+  if (['pieza', 'pza', 'unidad', 'juego'].includes(value)) return 'pieza';
+  return 'manual';
+}
+
 export function normalizeMeasureItem(item, index = 0, data = {}, helpers = {}) {
   const { clean, positiveNumber } = withHelpers(helpers);
   return {
@@ -208,7 +226,7 @@ export function calculateQuote(data, helpers = {}) {
     const itemLinearTotal = (positiveNumber(item.largo) / 100) * Math.max(1, positiveNumber(item.cantidad) || 1);
     const rowMerma = percentValue(item.merma);
     const rowMargin = item.margen === '' ? margenMaterial : positiveNumber(item.margen);
-    const tipoCompra = clean(item.tipoCompra || item.calculo, 'manual');
+    const tipoCompra = normalizeTipoCompraQuote(item.tipoCompra || item.calculo);
     const largoUnidad = positiveNumber(item.largo) / 100;
     const areaNecesaria = ['hoja', 'area'].includes(tipoCompra) ? rowQuantity : 0;
     const largoNecesario = tipoCompra === 'lineal' ? rowQuantity : 0;
@@ -300,7 +318,7 @@ export function calculateQuote(data, helpers = {}) {
     const rowMerma = percentValue(item.merma);
     const rowMargin = item.margen === '' ? margenMaterial : positiveNumber(item.margen);
     const accessoryCalc = Materials.calcularMaterial({
-      tipoCompra: item.tipoCompra || item.tipo || 'pieza',
+      tipoCompra: normalizeTipoCompraQuote(item.tipoCompra || item.tipo || 'pieza'),
       cantidad: rowQuantity,
       precioUnidad: positiveNumber(item.costoUnitario),
       costoInterno: positiveNumber(item.costoUnitario),
@@ -321,7 +339,7 @@ export function calculateQuote(data, helpers = {}) {
     return {
       ...item,
       rowQuantity,
-      tipoCompra: clean(item.tipoCompra, 'pieza'),
+      tipoCompra: normalizeTipoCompraQuote(item.tipoCompra || item.tipo || 'pieza'),
       rowMerma,
       rowMargin,
       areaTotal: rowQuantity,
