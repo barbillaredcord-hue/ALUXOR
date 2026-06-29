@@ -32,7 +32,7 @@ import CalculationChain from './components/CalculationChain.jsx';
 import DashboardSummary from './components/DashboardSummary.jsx';
 import Field from './components/Field.jsx';
 import PlanCanvas3D from './components/PlanCanvas3D.jsx';
-import { Areas, Materials, Pricing, Summary, Report, Quote, HistoryEngine, Pdf, StorageEngine, PlanEngine } from './lib/br-engine/index.js';
+import { Areas, Materials, Pricing, Summary, Report, Quote, HistoryEngine, Pdf, StorageEngine, PlanEngine, AnalysisEngine } from './lib/br-engine/index.js';
 
 const APP_VERSION = '2026.05.39';
 const APP_VERSION_QUERY = '20260539';
@@ -762,24 +762,11 @@ const storageHelpers = {
   normalizeHistory: HistoryEngine.normalizeHistory,
 };
 
-function professionalChainInsights(quote) {
-  const totalInternal = Math.max(quote.internalTotal, 0);
-  const percent = (value) => totalInternal > 0 ? decimal((value / totalInternal) * 100, 0) : '0';
-  const materialShare = percent(quote.internalMaterialCost);
-  const laborShare = quote.total > 0 ? decimal((quote.manoObra / quote.total) * 100, 0) : '0';
-  const hardwareShare = percent(quote.hardwareCost);
-  const sheetsWarning = quote.materialRows.find((item) => item.hojasNecesarias > 0 && item.areaHoja > 0 && item.areaConMerma > 0 && item.hojasNecesarias - (item.areaConMerma / item.areaHoja) >= 0.25);
-  const highWaste = quote.materialRows.find((item) => percentValue(item.merma) >= 10);
-
-  return [
-    quote.wasteCost > 0 ? `✔ El incremento proviene de la merma: ${money(quote.wasteCost)}.` : '✔ No hay merma relevante capturada.',
-    `✔ El material representa ${materialShare}% del costo interno.`,
-    `✔ Mano de obra representa ${laborShare}% del precio cliente.`,
-    `✔ Herrajes representan ${hardwareShare}% del costo interno.`,
-    highWaste ? `⚠ La utilidad podría aumentar reduciendo desperdicio en ${highWaste.nombre}.` : null,
-    sheetsWarning ? `⚠ Se compran ${sheetsWarning.hojasNecesarias} hojas completas aunque se usan ${decimal(sheetsWarning.areaConMerma / sheetsWarning.areaHoja)} hojas equivalentes.` : null,
-  ].filter(Boolean);
-}
+const analysisHelpers = {
+  money,
+  decimal,
+  percentValue,
+};
 
 function refreshInstalledApp() {
   const clearCaches = 'caches' in window
@@ -819,7 +806,7 @@ function App() {
   const outputs = useMemo(() => Report.generateOutputs(form, quote, reportHelpers), [form, quote]);
   const roleCards = useMemo(() => Report.workRoleCards(form, quote, reportHelpers), [form, quote]);
   const professionalAnalysis = useMemo(() => Report.quoteProfessionalAnalysis(form, quote, reportHelpers), [form, quote]);
-  const chainInsights = useMemo(() => professionalChainInsights(quote), [quote]);
+  const chainInsights = useMemo(() => AnalysisEngine.professionalChainInsights(quote, analysisHelpers), [quote]);
   const score = countScore(form);
   const mainOutput = outputs[0];
   const quoteOutput = outputs[1];
