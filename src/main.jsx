@@ -32,6 +32,9 @@ import CalculationChain from './components/CalculationChain.jsx';
 import DashboardSummary from './components/DashboardSummary.jsx';
 import Field from './components/Field.jsx';
 import PlanCanvas3D from './components/PlanCanvas3D.jsx';
+import DashboardSection from './sections/DashboardSection.jsx';
+import SettingsSection from './sections/SettingsSection.jsx';
+import TextSection from './sections/TextSection.jsx';
 import { Areas, Materials, Pricing, Summary, Report, Quote, HistoryEngine, Pdf, StorageEngine, PlanEngine, AnalysisEngine } from './lib/br-engine/index.js';
 
 const APP_VERSION = '2026.05.39';
@@ -1680,32 +1683,13 @@ function App() {
         </header>
 
         {activeSection === 'inicio' && (
-          <section className="panel-grid">
-            {ejemplos.map(({ name, icon: Icon, data }) => (
-              <button
-                key={name}
-                type="button"
-                className="feature-card"
-                onClick={() => {
-                  setForm({ ...defaults, ...data });
-                  setActiveSection('cotizador');
-                }}
-              >
-                <Icon size={24} />
-                <strong>{name}</strong>
-                <span>Cargar ejemplo</span>
-              </button>
-            ))}
-
-            {roleCards.map((card) => (
-              <article key={card.title} className="panel">
-                <h3>{card.title}</h3>
-                <ul>
-                  {card.items.map((item) => <li key={item}>{item}</li>)}
-                </ul>
-              </article>
-            ))}
-          </section>
+          <DashboardSection
+            ejemplos={ejemplos}
+            defaults={defaults}
+            setForm={setForm}
+            setActiveSection={setActiveSection}
+            roleCards={roleCards}
+          />
         )}
 
         {activeSection === 'anuncio' && (
@@ -2282,28 +2266,12 @@ function App() {
         )}
 
         {activeSection === 'ajustes' && (
-          <section className="panel settings-panel">
-            <div className="section-head">
-              <div>
-                <h2>Ajustes</h2>
-                <p>Logo y vista de marca para sidebar, encabezado y PDF.</p>
-              </div>
-            </div>
-            <div className="settings-grid">
-              <div className="logo-preview-box">
-                {appLogo ? <img src={appLogo} alt="Vista previa del logo" /> : <div className="brand-mark">A</div>}
-                <strong>{BRAND_NAME}</strong>
-              </div>
-              <div className="actions">
-                <label htmlFor="settingsLogoUpload" className="upload-logo">
-                  Subir logo manualmente
-                  <input id="settingsLogoUpload" type="file" accept="image/*" onChange={handleLogoUpload} />
-                </label>
-                <button type="button" className="ghost" onClick={removeAppLogo}>Quitar logo</button>
-              </div>
-            </div>
-            <p className="advanced-note">El logo se guarda automáticamente en localStorage y se reutiliza al abrir la app.</p>
-          </section>
+          <SettingsSection
+            appLogo={appLogo}
+            brandName={BRAND_NAME}
+            handleLogoUpload={handleLogoUpload}
+            removeAppLogo={removeAppLogo}
+          />
         )}
 
         {activeSection === 'historial' && (
@@ -2347,21 +2315,11 @@ function App() {
         )}
 
         {activeSection === 'textos' && (
-          <section className="panel-grid two-cols">
-            {outputs.map((output) => (
-              <article key={output.name} className="panel output-card">
-                <h2>{output.name}</h2>
-                <p>{output.description}</p>
-                <textarea readOnly value={output.text} />
-                <button type="button" onClick={() => copyText(output.text, output.name)}><Copy size={18} /> Copiar</button>
-              </article>
-            ))}
-            <article className="panel output-card">
-              <h2>Cotización para cliente</h2>
-              <textarea readOnly value={quoteOutput.text} />
-              <button type="button" onClick={() => copyText(quoteOutput.text, 'Cotización')}>Copiar cotización</button>
-            </article>
-          </section>
+          <TextSection
+            outputs={outputs}
+            quoteOutput={quoteOutput}
+            copyText={copyText}
+          />
         )}
 
         {activeSection === 'plano' && (
