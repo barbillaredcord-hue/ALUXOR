@@ -1,4 +1,5 @@
 import { Areas, Materials, Pricing, Summary } from './index.js';
+import { optimizeCuts } from '../cut-optimizer/optimizer.js';
 
 function withHelpers(helpers = {}) {
   return helpers;
@@ -190,6 +191,31 @@ export function materialCalcLabel(item, helpers = {}) {
   return 'cantidad manual';
 }
 
+function cutOptimizationForMaterial(tipoCompra, item, measureRows, helpers = {}) {
+  if (tipoCompra !== 'hoja') return null;
+  const { positiveNumber } = withHelpers(helpers);
+  const sheetWidth = positiveNumber(item.ancho);
+  const sheetHeight = positiveNumber(item.alto);
+  if (sheetWidth <= 0 || sheetHeight <= 0) return null;
+  const pieces = measureRows
+    .map((measure) => ({
+      name: measure.nombre,
+      width: positiveNumber(measure.ancho),
+      height: positiveNumber(measure.alto),
+      quantity: measure.cantidad,
+    }))
+    .filter((piece) => piece.width > 0 && piece.height > 0 && piece.quantity > 0);
+  if (!pieces.length) return null;
+  return optimizeCuts({
+    sheetWidth,
+    sheetHeight,
+    allowRotation: true,
+    kerf: 0.3,
+    strategy: 'largest-first',
+    pieces,
+  });
+}
+
 export function calculateQuote(data, helpers = {}) {
   const { clean, numberValue, positiveNumber, percentValue, money, decimal } = withHelpers(helpers);
   const measureRows = measurementItemsFromForm(data, helpers).map((item) => {
@@ -232,6 +258,7 @@ export function calculateQuote(data, helpers = {}) {
     const largoNecesario = tipoCompra === 'lineal' ? rowQuantity : 0;
     const cantidadNecesaria = ['pieza', 'manual'].includes(tipoCompra) ? Math.max(0, rowQuantity) : 0;
     const costoUnitario = positiveNumber(item.costoUnitario);
+    const cutOptimization = cutOptimizationForMaterial(tipoCompra, item, measureRows, helpers);
     const materialCalc = Materials.calcularMaterial({
       tipoCompra,
       areaNecesaria,
@@ -247,6 +274,7 @@ export function calculateQuote(data, helpers = {}) {
       margen: rowMargin,
       precioManual: rowQuantity * positiveNumber(item.precioUnitario),
       usarPrecioManual: Boolean(item.precioManual),
+      optimization: cutOptimization,
     });
     const areaHoja = materialCalc.areaUnidad || 0;
     const areaConMerma = materialCalc.areaConMerma || 0;
@@ -285,6 +313,7 @@ export function calculateQuote(data, helpers = {}) {
       cantidadNecesaria,
       cantidadConMerma,
       piezasNecesarias,
+      cutOptimization,
       costoMetroCuadrado,
       costoMetroLineal,
       baseCost,

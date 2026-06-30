@@ -92,4 +92,30 @@ describe('materials.js', () => {
     expect(conMargen.precioCliente).toBe(2668);
     expect(conMargen.utilidad).toBe(1334);
   });
+
+  it('usa requiredSheets del optimizador para costo por hoja', () => {
+    const base = {
+      tipoCompra: 'hoja',
+      areaNecesaria: 0.98,
+      ancho: 1,
+      alto: 1,
+      precioUnidad: 100,
+      merma: 0,
+      margen: 100,
+    };
+    const oneSheet = Materials.calcularMaterial({
+      ...base,
+      optimization: { summary: { requiredSheets: 1, wasteArea: 200 } },
+    });
+    const twoSheets = Materials.calcularMaterial({
+      ...base,
+      optimization: { summary: { requiredSheets: 2, wasteArea: 10200 } },
+    });
+
+    expect(oneSheet.unidadesNecesarias).toBe(1);
+    expect(oneSheet.costoInterno).toBe(100);
+    expect(twoSheets.unidadesNecesarias).toBe(2);
+    expect(twoSheets.costoInterno).toBe(200);
+    expect(twoSheets.precioCliente).toBe(400);
+  });
 });

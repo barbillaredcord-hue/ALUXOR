@@ -137,4 +137,48 @@ describe('quote.js', () => {
     expect(quote.deposit).toBe(1734);
     expect(quote.rest).toBe(1734);
   });
+
+  it('usa hojas del Cut Optimizer para cambiar costo de material', () => {
+    const quote = Quote.calculateQuote({
+      giro: 'Carpintería',
+      producto: 'Cubiertas',
+      cantidad: 2,
+      ancho: 70,
+      alto: 70,
+      fondo: 60,
+      grosorMaterial: 18,
+      merma: 0,
+      margenMaterial: 0,
+      manoObra: 0,
+      extras: 0,
+      descuento: 0,
+      anticipo: 0,
+      measureItems: [{
+        id: 'med-1',
+        nombre: 'Cubierta',
+        ancho: 70,
+        alto: 70,
+        fondo: 60,
+        grosorMaterial: 18,
+        cantidad: 2,
+      }],
+      materialItems: [{
+        id: 'mat-1',
+        nombre: 'MDF',
+        tipoCompra: 'hoja',
+        baseCalculo: 'medidas_area',
+        ancho: 100,
+        alto: 100,
+        costoUnitario: 100,
+        merma: 0,
+        margen: 0,
+      }],
+      accessoryItems: [],
+    }, helpers);
+
+    expect(quote.materialRows[0].cutOptimization.summary.requiredSheets).toBe(2);
+    expect(quote.materialRows[0].hojasNecesarias).toBe(2);
+    expect(quote.materialRows[0].costTotal).toBe(200);
+    expect(quote.internalMaterialCost).toBe(200);
+  });
 });

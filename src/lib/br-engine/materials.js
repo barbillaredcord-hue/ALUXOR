@@ -74,12 +74,15 @@ export function calcularMaterialPorHoja({
   margen = 0,
   precioManual = 0,
   usarPrecioManual = false,
+  optimization = null,
 } = {}) {
   const areaUnidad = calcularAreaUnidad(ancho, alto);
   const areaConMerma = calcularAreaConMerma(areaNecesaria, merma);
-  const unidadesNecesarias = calcularHojasNecesarias(areaNecesaria, areaUnidad, merma);
+  const unidadesNecesarias = optimization?.summary?.requiredSheets ?? calcularHojasNecesarias(areaNecesaria, areaUnidad, merma);
   const areaComprada = unidadesNecesarias * areaUnidad;
-  const desperdicio = calcularDesperdicio(areaComprada, areaNecesaria);
+  const desperdicio = optimization?.summary?.wasteArea !== undefined
+    ? positiveNumber(optimization.summary.wasteArea) / 10000
+    : calcularDesperdicio(areaComprada, areaNecesaria);
   const costoMetroCuadrado = calcularCostoMetroCuadrado(precioUnidad, ancho, alto);
   const costoInterno = unidadesNecesarias * positiveNumber(precioUnidad);
   const precioSugerido = costoInterno * percentFactor(margen);
@@ -103,6 +106,7 @@ export function calcularMaterialPorHoja({
     precioCliente,
     precioClienteMetroCuadrado,
     utilidad,
+    optimization,
     margen: positiveNumber(margen),
     merma: positiveNumber(merma),
   };
@@ -115,6 +119,7 @@ export function calcularMaterialMetroCuadrado({
   margen = 0,
   precioManual = 0,
   usarPrecioManual = false,
+  optimization = null,
 } = {}) {
   const areaConMerma = calcularAreaConMerma(areaNecesaria, merma);
   const costoInterno = areaConMerma * positiveNumber(precioMetroCuadrado);
@@ -147,6 +152,7 @@ export function calcularMaterialLineal({
   margen = 0,
   precioManual = 0,
   usarPrecioManual = false,
+  optimization = null,
 } = {}) {
   const linealConMerma = calcularLinealConMerma(linealNecesario, merma);
   const costoInterno = linealConMerma * positiveNumber(precioMetroLineal);
@@ -179,6 +185,7 @@ export function calcularMaterialPorPieza({
   margen = 0,
   precioManual = 0,
   usarPrecioManual = false,
+  optimization = null,
 } = {}) {
   const cantidadConMerma = calcularCantidadConMerma(cantidad, merma);
   const unidadesNecesarias = Math.ceil(cantidadConMerma);
@@ -251,6 +258,7 @@ export function calcularMaterial({
   margen = 0,
   precioManual = 0,
   usarPrecioManual = false,
+  optimization = null,
 } = {}) {
   const tipo = normalizarTipoCompra(tipoCompra);
 
@@ -264,6 +272,7 @@ export function calcularMaterial({
       margen,
       precioManual,
       usarPrecioManual,
+      optimization,
     });
   }
 
