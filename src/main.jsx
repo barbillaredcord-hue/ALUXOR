@@ -27,6 +27,7 @@ import { registerServiceWorker } from './pwa';
 import Field from './components/Field.jsx';
 import InspectorPanel from './components/InspectorPanel.jsx';
 import PlanCanvas3D from './components/PlanCanvas3D.jsx';
+import ProjectFlow from './components/ProjectFlow.jsx';
 import SummaryPanel from './components/SummaryPanel.jsx';
 import WorkspaceLayout from './layouts/WorkspaceLayout.jsx';
 import AnnouncementSection from './sections/AnnouncementSection.jsx';
@@ -1724,6 +1725,8 @@ function App() {
             <button type="button" onClick={() => openPrint('client')}><FileText size={18} /> PDF</button>
           </div>
         </header>
+
+        <ProjectFlow activeSection={activeSection} />
 
         {activeSection === 'inicio' && (
           <DashboardSection

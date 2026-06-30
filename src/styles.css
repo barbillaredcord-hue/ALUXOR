@@ -5945,6 +5945,115 @@ body,
   }
 }
 
+.project-flow {
+  position: relative;
+  display: flex;
+  gap: 14px;
+  align-items: stretch;
+  margin: 0 0 22px;
+  padding: 14px;
+  overflow-x: auto;
+  background: rgba(255, 253, 248, 0.78);
+  border: 1px solid rgba(23, 32, 27, 0.09);
+  border-radius: 18px;
+  box-shadow: 0 16px 34px rgba(17, 25, 21, 0.08);
+}
+
+.project-flow-step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 38px minmax(100px, 1fr);
+  gap: 10px;
+  align-items: center;
+  flex: 0 0 168px;
+  min-height: 76px;
+  padding: 12px;
+  background: #f4ead9;
+  border: 1px solid #dfcfb5;
+  border-radius: 16px;
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+
+.project-flow-step:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: -15px;
+  width: 15px;
+  height: 2px;
+  background: linear-gradient(90deg, #dfcfb5, #22745f);
+}
+
+.project-flow-step:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 24px rgba(17, 25, 21, 0.1);
+}
+
+.project-flow-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  color: #1d3429;
+  background: #fffdf8;
+  border: 1px solid rgba(23, 32, 27, 0.1);
+  border-radius: 999px;
+}
+
+.project-flow-step strong,
+.project-flow-step span {
+  display: block;
+}
+
+.project-flow-step strong {
+  color: #14241c;
+  font-size: 14px;
+}
+
+.project-flow-step span {
+  width: fit-content;
+  margin-top: 4px;
+  padding: 4px 7px;
+  color: #617068;
+  background: rgba(255, 253, 248, 0.72);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 950;
+}
+
+.project-flow-completado {
+  background: #e7f1ec;
+  border-color: #b8dfca;
+}
+
+.project-flow-en-proceso {
+  background: linear-gradient(135deg, #fffdf8, #fff3cf);
+  border-color: #f0c84e;
+  box-shadow: 0 14px 28px rgba(240, 200, 78, 0.16);
+}
+
+.project-flow-en-proceso .project-flow-icon {
+  color: #14241c;
+  background: #f0c84e;
+  border-color: #f0c84e;
+}
+
+.project-flow-completado .project-flow-icon {
+  color: #f6fbf7;
+  background: #22745f;
+  border-color: #22745f;
+}
+
+.project-flow-en-proceso span {
+  color: #14241c;
+  background: #f0c84e;
+}
+
+.project-flow-completado span {
+  color: #15503d;
+  background: #dff2e8;
+}
+
 @media (max-width: 1180px) {
   .workspace-layout {
     grid-template-columns: 280px minmax(0, 1fr);
