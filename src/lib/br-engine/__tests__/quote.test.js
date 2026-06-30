@@ -177,8 +177,43 @@ describe('quote.js', () => {
     }, helpers);
 
     expect(quote.materialRows[0].cutOptimization.summary.requiredSheets).toBe(2);
+    expect(quote.materialRows[0].optimizationSummary.requiredSheets).toBe(2);
+    expect(quote.materialRows[0].optimizationStatus).toBe('optimized');
+    expect(quote.materialRows[0].optimizationLabel).toContain('Costo basado en 2 hoja(s) optimizadas');
     expect(quote.materialRows[0].hojasNecesarias).toBe(2);
     expect(quote.materialRows[0].costTotal).toBe(200);
     expect(quote.internalMaterialCost).toBe(200);
+  });
+
+  it('marca material por hoja como pendiente si no hay optimizacion valida', () => {
+    const quote = Quote.calculateQuote({
+      giro: 'Carpintería',
+      producto: 'Material incompleto',
+      cantidad: 1,
+      ancho: 70,
+      alto: 70,
+      margenMaterial: 0,
+      manoObra: 0,
+      extras: 0,
+      descuento: 0,
+      anticipo: 0,
+      materialItems: [{
+        id: 'mat-pending',
+        nombre: 'MDF',
+        tipoCompra: 'hoja',
+        baseCalculo: 'medidas_area',
+        ancho: 0,
+        alto: 0,
+        costoUnitario: 100,
+        merma: 0,
+        margen: 0,
+      }],
+      accessoryItems: [],
+    }, helpers);
+
+    expect(quote.materialRows[0].cutOptimization).toBeNull();
+    expect(quote.materialRows[0].optimizationSummary).toBeNull();
+    expect(quote.materialRows[0].optimizationStatus).toBe('pending');
+    expect(quote.materialRows[0].optimizationLabel).toBe('Pendiente de optimizar.');
   });
 });

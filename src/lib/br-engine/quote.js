@@ -295,6 +295,13 @@ export function calculateQuote(data, helpers = {}) {
     const marginPercentOverSale = Pricing.calcularUtilidadSobreVenta(marginAmount, saleTotal);
     const baseCost = tipoCompra === 'hoja' ? areaNecesaria * costoMetroCuadrado : rowQuantity * costoUnitario;
     const wasteCost = Math.max(0, costTotal - baseCost);
+    const optimizationSummary = cutOptimization?.summary || null;
+    const optimizationStatus = tipoCompra === 'hoja'
+      ? (optimizationSummary ? 'optimized' : 'pending')
+      : 'not-applicable';
+    const optimizationLabel = optimizationSummary
+      ? `Costo basado en ${optimizationSummary.requiredSheets} hoja(s) optimizadas. Aprovechamiento: ${decimal(optimizationSummary.utilization, 0)}%. Merma estimada: ${decimal(optimizationSummary.wasteArea / 10000)} m².`
+      : (tipoCompra === 'hoja' ? 'Pendiente de optimizar.' : '');
     return {
       ...item,
       tipoCompra,
@@ -314,6 +321,9 @@ export function calculateQuote(data, helpers = {}) {
       cantidadConMerma,
       piezasNecesarias,
       cutOptimization,
+      optimizationSummary,
+      optimizationStatus,
+      optimizationLabel,
       costoMetroCuadrado,
       costoMetroLineal,
       baseCost,
@@ -333,6 +343,7 @@ export function calculateQuote(data, helpers = {}) {
         `Base usada: ${decimal(rowQuantity)} ${tipoCompra === 'lineal' ? 'm lineales' : ['hoja', 'area'].includes(tipoCompra) ? 'm²' : 'pza(s)'}.`,
         tipoCompra === 'hoja' ? `Área con merma: ${decimal(areaConMerma)} m².` : null,
         tipoCompra === 'hoja' ? `Hojas completas: ${hojasNecesarias}.` : null,
+        optimizationLabel || null,
         tipoCompra === 'lineal' ? `Metro lineal con merma: ${decimal(largoConMerma)} m.` : null,
         ['pieza', 'manual'].includes(tipoCompra) ? `Piezas con merma: ${piezasNecesarias}.` : null,
         `Costo interno real: ${money(costTotal)}.`,

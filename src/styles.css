@@ -4024,6 +4024,34 @@ textarea {
   margin-bottom: 0;
 }
 
+.material-optimization-note {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 4px;
+  padding: 9px 11px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.material-optimization-note strong {
+  color: #173d34;
+}
+
+.material-optimization-note span {
+  color: #4d5c54;
+}
+
+.material-optimization-note.is-optimized {
+  background: #e7f1ec;
+  border: 1px solid #b8dfca;
+}
+
+.material-optimization-note.is-pending {
+  background: #fff3cf;
+  border: 1px solid #edcf76;
+}
+
 .chain-insights {
   display: grid;
   gap: 7px;

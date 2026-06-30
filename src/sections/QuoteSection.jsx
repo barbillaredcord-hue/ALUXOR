@@ -297,6 +297,16 @@ export default function QuoteSection({
                         <strong>{money(item.saleTotal)}</strong>
                         <strong>{money(item.marginAmount)}</strong>
                         <button type="button" className="ghost" onClick={() => removeMaterialItem(item.id)} aria-label="Eliminar material"><Eraser size={16} /></button>
+                        {item.tipoCompra === 'hoja' && (
+                          <div className={`material-optimization-note ${item.optimizationStatus === 'optimized' ? 'is-optimized' : 'is-pending'}`}>
+                            <strong>{item.optimizationStatus === 'optimized' ? 'Material calculado con optimización' : 'Pendiente de optimizar'}</strong>
+                            <span>
+                              {item.optimizationSummary
+                                ? `Costo basado en ${item.optimizationSummary.requiredSheets} hoja(s) optimizadas · Aprovechamiento ${decimal(item.optimizationSummary.utilization, 0)}% · Merma estimada ${decimal(item.optimizationSummary.wasteArea / 10000)} m²`
+                                : 'Sin métricas de optimización válidas para este material.'}
+                            </span>
+                          </div>
+                        )}
                         <CalculationChain
                           title={`Ver cálculo: ${item.nombre}`}
                           steps={[
