@@ -20,6 +20,7 @@ function isCompleteList(items = []) {
 }
 
 export function getProjectStage({ quote = {}, workflow = {} } = {}) {
+  if (workflow.proyectoCerrado) return 'Garantía';
   if (workflow.entregaFirmada) return 'Garantía';
   if (workflow.instalacionTerminada) return 'Entrega';
   if (workflow.controlAprobado) return 'Instalación';
@@ -57,13 +58,15 @@ export function getWarnings({ form = {}, quote = {}, workflow = {} } = {}) {
 export function getNextRecommendation({ form = {}, quote = {}, workflow = {} } = {}) {
   const stage = getProjectStage({ quote, workflow });
   if (stage === 'Cotización') return 'Confirmar anticipo para liberar producción';
+  if (stage === 'Producción' && hasItems(workflow.compraItems) && !isCompleteList(workflow.recepcionItems)) return 'Recibir y verificar materiales';
   if (stage === 'Producción') return quote.materialRows?.[0]?.nombre ? `Comprar ${quote.materialRows[0].nombre}` : 'Definir materiales de compra';
   if (stage === 'Recepción') return 'Registrar recepción de materiales';
   if (stage === 'Inventario') return 'Convertir materiales recibidos en existencias';
+  if (stage === 'Fabricación' && Number(workflow.fabricacionChecklist || 0) < 100) return 'Continuar fabricación y completar checklist';
   if (stage === 'Fabricación') return 'Programar corte y armado';
   if (stage === 'Control de calidad') return 'Revisar acabado y medidas finales';
   if (stage === 'Instalación') return 'Agendar instalación con cliente';
   if (stage === 'Entrega') return 'Recabar firma de entrega';
-  if (stage === 'Garantía') return 'Mantener garantía activa';
+  if (stage === 'Garantía') return workflow.proyectoCerrado || workflow.entregaFirmada ? 'Proyecto cerrado; garantía activa' : 'Mantener garantía activa';
   return form.producto ? `Revisar proyecto ${form.producto}` : 'Revisar datos del proyecto';
 }
