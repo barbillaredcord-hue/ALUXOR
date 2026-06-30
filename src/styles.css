@@ -6136,6 +6136,136 @@ body,
   }
 }
 
+.cut-section {
+  display: grid;
+  gap: 18px;
+}
+
+.cut-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 22px;
+  color: #fffdf8;
+  background:
+    linear-gradient(135deg, rgba(240, 200, 78, 0.14), transparent 34%),
+    linear-gradient(135deg, var(--aluxor-graphite), var(--aluxor-graphite-2));
+  border: 1px solid rgba(240, 200, 78, 0.22);
+  border-radius: 18px;
+}
+
+.cut-hero span {
+  color: #f0c84e;
+  font-size: 13px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.cut-hero h2 {
+  margin: 4px 0;
+  color: #fffdf8;
+  font-size: 30px;
+}
+
+.cut-hero p {
+  margin: 0;
+  color: #c6d6ce;
+  font-weight: 850;
+}
+
+.cut-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.cut-stats div,
+.cut-sheet-card {
+  padding: 16px;
+  background: rgba(255, 253, 248, 0.9);
+  border: 1px solid rgba(23, 32, 27, 0.09);
+  border-radius: 16px;
+  box-shadow: 0 14px 30px rgba(17, 25, 21, 0.08);
+}
+
+.cut-stats span {
+  color: #617068;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.cut-stats strong {
+  display: block;
+  margin-top: 5px;
+  color: #14241c;
+  font-size: 25px;
+}
+
+.cut-rerun {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 14px;
+  color: #f6fbf7;
+  background: #20362b;
+  border: 1px solid #385646;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 950;
+}
+
+.cut-sheets {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.cut-sheet-card {
+  display: grid;
+  gap: 12px;
+}
+
+.cut-sheet-card h3 {
+  margin: 0;
+  color: #1d3429;
+  font-size: 18px;
+}
+
+.cut-sheet-card svg {
+  width: 100%;
+  max-height: 520px;
+  background:
+    repeating-linear-gradient(45deg, rgba(23, 32, 27, 0.035), rgba(23, 32, 27, 0.035) 8px, transparent 8px, transparent 18px),
+    #f8faf8;
+  border: 1px solid #d7e2dc;
+  border-radius: 14px;
+}
+
+.cut-piece-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cut-piece-list span {
+  padding: 7px 9px;
+  color: #1d3429;
+  background: #e7f1ec;
+  border: 1px solid #b8dfca;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+@media (max-width: 900px) {
+  .cut-stats {
+    grid-template-columns: 1fr;
+  }
+}
+
 .project-flow {
   position: relative;
   display: flex;

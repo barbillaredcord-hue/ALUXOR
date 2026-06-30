@@ -18,6 +18,7 @@ import {
   Package,
   RefreshCw,
   Ruler,
+  Scissors,
   Sparkles,
   Store,
   TableProperties,
@@ -32,6 +33,7 @@ import SummaryPanel from './components/SummaryPanel.jsx';
 import WorkspaceLayout from './layouts/WorkspaceLayout.jsx';
 import AnnouncementSection from './sections/AnnouncementSection.jsx';
 import CatalogSection from './sections/CatalogSection.jsx';
+import CutOptimizerSection from './sections/CutOptimizerSection.jsx';
 import QuoteSection from './sections/QuoteSection.jsx';
 import DashboardSection from './sections/DashboardSection.jsx';
 import FabricationSection from './sections/FabricationSection.jsx';
@@ -872,6 +874,7 @@ function App() {
     { id: 'recepcion', label: 'Recepción', icon: DoorOpen },
     { id: 'inventario', label: 'Inventario', icon: Archive },
     { id: 'fabricacion', label: 'Fabricación', icon: Hammer },
+    { id: 'corte', label: 'Cut Optimizer', icon: Scissors },
     { id: 'catalogo', label: 'Catálogo', icon: TableProperties },
     { id: 'historial', label: 'Historial', icon: History },
     { id: 'textos', label: 'Textos', icon: Sparkles },
@@ -1923,6 +1926,13 @@ function App() {
         {activeSection === 'fabricacion' && (
           <FabricationSection
             form={form}
+            quote={quote}
+            decimal={decimal}
+          />
+        )}
+
+        {activeSection === 'corte' && (
+          <CutOptimizerSection
             quote={quote}
             decimal={decimal}
           />
