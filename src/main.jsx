@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   Accessibility,
+  Archive,
   BarChart3,
   Box,
   Calculator,
@@ -33,6 +34,7 @@ import CatalogSection from './sections/CatalogSection.jsx';
 import QuoteSection from './sections/QuoteSection.jsx';
 import DashboardSection from './sections/DashboardSection.jsx';
 import HistorySection from './sections/HistorySection.jsx';
+import InventorySection from './sections/InventorySection.jsx';
 import ProductionSection from './sections/ProductionSection.jsx';
 import PurchasesSection from './sections/PurchasesSection.jsx';
 import ReceivingSection from './sections/ReceivingSection.jsx';
@@ -866,6 +868,7 @@ function App() {
     { id: 'produccion', label: 'Producción', icon: ClipboardList },
     { id: 'compras', label: 'Compras', icon: Store },
     { id: 'recepcion', label: 'Recepción', icon: DoorOpen },
+    { id: 'inventario', label: 'Inventario', icon: Archive },
     { id: 'catalogo', label: 'Catálogo', icon: TableProperties },
     { id: 'historial', label: 'Historial', icon: History },
     { id: 'textos', label: 'Textos', icon: Sparkles },
@@ -1894,6 +1897,15 @@ function App() {
           <ReceivingSection
             form={form}
             quote={quote}
+            decimal={decimal}
+          />
+        )}
+
+        {activeSection === 'inventario' && (
+          <InventorySection
+            form={form}
+            quote={quote}
+            money={money}
             decimal={decimal}
           />
         )}
