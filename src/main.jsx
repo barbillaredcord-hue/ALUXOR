@@ -27,6 +27,7 @@ import { registerServiceWorker } from './pwa';
 import Field from './components/Field.jsx';
 import InspectorPanel from './components/InspectorPanel.jsx';
 import PlanCanvas3D from './components/PlanCanvas3D.jsx';
+import ProjectCompanion from './components/ProjectCompanion.jsx';
 import ProjectFlow from './components/ProjectFlow.jsx';
 import SummaryPanel from './components/SummaryPanel.jsx';
 import WorkspaceLayout from './layouts/WorkspaceLayout.jsx';
@@ -1727,6 +1728,13 @@ function App() {
         </header>
 
         <ProjectFlow activeSection={activeSection} />
+        <ProjectCompanion
+          form={form}
+          quote={quote}
+          dataHealth={dataHealth}
+          activeSection={activeSection}
+          decimal={decimal}
+        />
 
         {activeSection === 'inicio' && (
           <DashboardSection
