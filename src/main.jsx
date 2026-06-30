@@ -33,6 +33,7 @@ import CatalogSection from './sections/CatalogSection.jsx';
 import QuoteSection from './sections/QuoteSection.jsx';
 import DashboardSection from './sections/DashboardSection.jsx';
 import HistorySection from './sections/HistorySection.jsx';
+import ProductionSection from './sections/ProductionSection.jsx';
 import SettingsSection from './sections/SettingsSection.jsx';
 import TextSection from './sections/TextSection.jsx';
 import { Areas, Materials, Pricing, Summary, Report, Quote, HistoryEngine, Pdf, StorageEngine, PlanEngine, AnalysisEngine } from './lib/br-engine/index.js';
@@ -860,6 +861,7 @@ function App() {
     { id: 'inicio', label: 'Inicio', icon: LayoutDashboard },
     { id: 'anuncio', label: 'Anuncio', icon: Package },
     { id: 'cotizador', label: 'Cotizador', icon: Calculator },
+    { id: 'produccion', label: 'Producción', icon: ClipboardList },
     { id: 'catalogo', label: 'Catálogo', icon: TableProperties },
     { id: 'historial', label: 'Historial', icon: History },
     { id: 'textos', label: 'Textos', icon: Sparkles },
@@ -1862,6 +1864,16 @@ function App() {
             numberValue={numberValue}
             applyCatalogItem={applyCatalogItem}
             removeCatalogItem={removeCatalogItem}
+          />
+        )}
+
+        {activeSection === 'produccion' && (
+          <ProductionSection
+            form={form}
+            quote={quote}
+            money={money}
+            decimal={decimal}
+            openPrint={openPrint}
           />
         )}
 
