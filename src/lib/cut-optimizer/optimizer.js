@@ -1,27 +1,40 @@
+const DEFAULT_CONFIG = {
+  sheetWidth: 122,
+  sheetHeight: 244,
+  allowRotation: true,
+  kerf: 0.3,
+  strategy: 'largest-first',
+};
+
 function toNumber(value) {
   const number = Number(value);
   return Number.isFinite(number) ? Math.max(0, number) : 0;
 }
 
 function expandPieces(pieces = []) {
-  return pieces.flatMap((piece) => {
-    const cantidad = Math.max(1, Math.floor(toNumber(piece.cantidad) || 1));
-    return Array.from({ length: cantidad }, (_, index) => ({
-      id: `${piece.nombre || 'Pieza'}-${index}`,
-      nombre: piece.nombre || 'Pieza',
-      indice: index + 1,
-      cantidad,
-      ancho: toNumber(piece.ancho),
-      alto: toNumber(piece.alto),
+  return pieces.flatMap((piece, pieceIndex) => {
+    const quantity = Math.max(1, Math.floor(toNumber(piece.cantidad ?? piece.quantity) || 1));
+    const originalWidth = toNumber(piece.ancho ?? piece.width);
+    const originalHeight = toNumber(piece.alto ?? piece.height);
+    return Array.from({ length: quantity }, (_, index) => ({
+      id: `${piece.nombre || piece.name || 'Pieza'}-${pieceIndex}-${index}`,
+      name: piece.nombre || piece.name || 'Pieza',
+      index: index + 1,
+      quantity,
+      originalWidth,
+      originalHeight,
+      width: originalWidth,
+      height: originalHeight,
+      rotated: false,
     }));
   });
 }
 
-function createSheet(index, anchoHoja, altoHoja) {
+function createSheet(index, width, height) {
   return {
     index,
-    ancho: anchoHoja,
-    alto: altoHoja,
+    width,
+    height,
     pieces: [],
     cursorX: 0,
     cursorY: 0,
@@ -29,63 +42,137 @@ function createSheet(index, anchoHoja, altoHoja) {
   };
 }
 
-function placePiece(sheet, piece) {
-  if (piece.ancho > sheet.ancho || piece.alto > sheet.alto) return false;
-  if (sheet.cursorX + piece.ancho > sheet.ancho) {
-    sheet.cursorX = 0;
-    sheet.cursorY += sheet.shelfHeight;
-    sheet.shelfHeight = 0;
-  }
-  if (sheet.cursorY + piece.alto > sheet.alto) return false;
-  sheet.pieces.push({
-    ...piece,
-    x: sheet.cursorX,
-    y: sheet.cursorY,
-  });
-  sheet.cursorX += piece.ancho;
-  sheet.shelfHeight = Math.max(sheet.shelfHeight, piece.alto);
-  return true;
+function fitsInSheet(piece, width, height) {
+  return piece.width <= width && piece.height <= height;
 }
 
-export function optimizeCuts({ anchoHoja = 0, altoHoja = 0, piezas = [] } = {}) {
-  const sheetWidth = toNumber(anchoHoja);
-  const sheetHeight = toNumber(altoHoja);
-  const expanded = expandPieces(piezas).sort((a, b) => (b.alto * b.ancho) - (a.alto * a.ancho));
-  const sheets = [];
+function variantsFor(piece, config) {
+  const variants = [piece];
+  if (config.allowRotation && piece.originalWidth !== piece.originalHeight) {
+    variants.push({
+      ...piece,
+      width: piece.originalHeight,
+      height: piece.originalWidth,
+      rotated: true,
+    });
+  }
+  return variants;
+}
 
-  expanded.forEach((piece) => {
-    let placed = sheets.some((sheet) => placePiece(sheet, piece));
+function placePiece(sheet, piece, config) {
+  for (const variant of variantsFor(piece, config)) {
+    let x = sheet.cursorX;
+    let y = sheet.cursorY;
+    let shelfHeight = sheet.shelfHeight;
+
+    if (x > 0 && x + config.kerf + variant.width <= sheet.width) {
+      x += config.kerf;
+    }
+
+    if (x + variant.width > sheet.width) {
+      x = 0;
+      y += shelfHeight + config.kerf;
+      shelfHeight = 0;
+    }
+
+    if (x + variant.width > sheet.width) continue;
+    if (y + variant.height > sheet.height) continue;
+
+    sheet.pieces.push({ ...variant, x, y });
+    sheet.cursorX = x + variant.width;
+    sheet.cursorY = y;
+    sheet.shelfHeight = Math.max(shelfHeight, variant.height);
+    return true;
+  }
+  return false;
+}
+
+function summarizeSheet(sheet) {
+  const sheetArea = sheet.width * sheet.height;
+  const usedArea = sheet.pieces.reduce((sum, piece) => sum + piece.width * piece.height, 0);
+  const wasteArea = Math.max(0, sheetArea - usedArea);
+  const efficiencyPercent = sheetArea > 0 ? Math.min(100, (usedArea / sheetArea) * 100) : 0;
+  return {
+    ...sheet,
+    ancho: sheet.width,
+    alto: sheet.height,
+    anchoHoja: sheet.width,
+    altoHoja: sheet.height,
+    pieces: sheet.pieces.map((piece) => ({
+      ...piece,
+      nombre: piece.name,
+      ancho: piece.width,
+      alto: piece.height,
+      indice: piece.index,
+      cantidad: piece.quantity,
+    })),
+    piezasColocadas: sheet.pieces.map((piece) => ({
+      ...piece,
+      nombre: piece.name,
+      ancho: piece.width,
+      alto: piece.height,
+      indice: piece.index,
+      cantidad: piece.quantity,
+    })),
+    usedArea,
+    wasteArea,
+    efficiencyPercent,
+    areaUsada: usedArea,
+    areaDesperdiciada: wasteArea,
+    porcentajeAprovechamiento: efficiencyPercent,
+  };
+}
+
+export function optimizeCuts(input = {}) {
+  const config = {
+    ...DEFAULT_CONFIG,
+    ...input,
+    sheetWidth: toNumber(input.sheetWidth ?? input.anchoHoja ?? DEFAULT_CONFIG.sheetWidth),
+    sheetHeight: toNumber(input.sheetHeight ?? input.altoHoja ?? DEFAULT_CONFIG.sheetHeight),
+    kerf: toNumber(input.kerf ?? DEFAULT_CONFIG.kerf),
+    allowRotation: input.allowRotation ?? DEFAULT_CONFIG.allowRotation,
+    strategy: input.strategy || DEFAULT_CONFIG.strategy,
+  };
+  let pieces = expandPieces(input.piezas ?? input.pieces);
+  if (config.strategy === 'largest-first') {
+    pieces = pieces.sort((a, b) => (b.originalWidth * b.originalHeight) - (a.originalWidth * a.originalHeight));
+  }
+
+  const sheets = [];
+  const unplacedPieces = [];
+
+  pieces.forEach((piece) => {
+    if (!variantsFor(piece, config).some((variant) => fitsInSheet(variant, config.sheetWidth, config.sheetHeight))) {
+      unplacedPieces.push(piece);
+      return;
+    }
+
+    const placed = sheets.some((sheet) => placePiece(sheet, piece, config));
     if (!placed) {
-      const sheet = createSheet(sheets.length + 1, sheetWidth, sheetHeight);
-      placePiece(sheet, piece);
+      const sheet = createSheet(sheets.length + 1, config.sheetWidth, config.sheetHeight);
+      placePiece(sheet, piece, config);
       sheets.push(sheet);
     }
   });
 
-  const sheetArea = sheetWidth * sheetHeight;
-  const areaUtilizada = expanded.reduce((sum, piece) => sum + piece.ancho * piece.alto, 0);
-  const areaTotal = sheetArea * sheets.length;
-  const areaDesperdiciada = Math.max(0, areaTotal - areaUtilizada);
-
-  const hojas = sheets.map(({ cursorX, cursorY, shelfHeight, ...sheet }) => {
-    const areaUsada = sheet.pieces.reduce((sum, piece) => sum + piece.ancho * piece.alto, 0);
-    const areaDesperdiciada = Math.max(0, sheetArea - areaUsada);
-    return {
-      ...sheet,
-      anchoHoja: sheet.ancho,
-      altoHoja: sheet.alto,
-      piezasColocadas: sheet.pieces,
-      areaUsada,
-      areaDesperdiciada,
-      porcentajeAprovechamiento: sheetArea > 0 ? (areaUsada / sheetArea) * 100 : 0,
-    };
-  });
+  const summarizedSheets = sheets.map(summarizeSheet);
+  const totalUsedArea = summarizedSheets.reduce((sum, sheet) => sum + sheet.usedArea, 0);
+  const totalSheetArea = config.sheetWidth * config.sheetHeight * summarizedSheets.length;
+  const totalWasteArea = Math.max(0, totalSheetArea - totalUsedArea);
+  const efficiencyPercent = totalSheetArea > 0 ? Math.min(100, (totalUsedArea / totalSheetArea) * 100) : 0;
 
   return {
-    cantidadHojas: sheets.length,
-    hojas,
-    areaUtilizada,
-    areaDesperdiciada,
-    porcentajeAprovechamiento: areaTotal > 0 ? (areaUtilizada / areaTotal) * 100 : 0,
+    config,
+    sheets: summarizedSheets,
+    hojas: summarizedSheets,
+    unplacedPieces,
+    totalUsedArea,
+    totalWasteArea,
+    efficiencyPercent,
+    sheetCount: summarizedSheets.length,
+    cantidadHojas: summarizedSheets.length,
+    areaUtilizada: totalUsedArea,
+    areaDesperdiciada: totalWasteArea,
+    porcentajeAprovechamiento: efficiencyPercent,
   };
 }

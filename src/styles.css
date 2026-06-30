@@ -6217,6 +6217,70 @@ body,
   font-weight: 950;
 }
 
+.cut-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.2fr;
+  gap: 12px;
+  padding: 14px;
+  background: rgba(255, 253, 248, 0.86);
+  border: 1px solid rgba(23, 32, 27, 0.09);
+  border-radius: 16px;
+}
+
+.cut-controls label {
+  display: grid;
+  gap: 7px;
+  color: #4d5c54;
+  font-size: 12px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.cut-controls input,
+.cut-controls select {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 11px;
+  color: #14241c;
+  background: #fffdf8;
+  border: 1px solid #d7e2dc;
+  border-radius: 12px;
+  font: inherit;
+  text-transform: none;
+}
+
+.cut-toggle {
+  align-content: center;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  color: #14241c;
+  text-transform: none;
+}
+
+.cut-toggle input {
+  width: 18px;
+  min-height: 18px;
+  accent-color: #22745f;
+}
+
+.cut-alert {
+  display: grid;
+  gap: 5px;
+  padding: 13px 15px;
+  color: #6f3f08;
+  background: #fff3cf;
+  border: 1px solid #edcf76;
+  border-radius: 14px;
+}
+
+.cut-alert strong {
+  color: #5b3307;
+}
+
+.cut-alert span {
+  font-weight: 850;
+}
+
 .cut-sheets {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
@@ -6275,7 +6339,8 @@ body,
 }
 
 @media (max-width: 900px) {
-  .cut-stats {
+  .cut-stats,
+  .cut-controls {
     grid-template-columns: 1fr;
   }
 }

@@ -3,28 +3,86 @@ import { optimizeCuts } from '../optimizer.js';
 
 describe('cut optimizer', () => {
   it('acomoda una pieza en una hoja', () => {
-    const result = optimizeCuts({ anchoHoja: 100, altoHoja: 100, piezas: [{ nombre: 'A', ancho: 50, alto: 50, cantidad: 1 }] });
-    expect(result.cantidadHojas).toBe(1);
-    expect(result.hojas[0].piezasColocadas).toHaveLength(1);
-    expect(result.hojas[0].piezasColocadas[0]).toMatchObject({ x: 0, y: 0, ancho: 50, alto: 50 });
+    const result = optimizeCuts({ sheetWidth: 100, sheetHeight: 100, kerf: 0, pieces: [{ name: 'A', width: 50, height: 50, quantity: 1 }] });
+    expect(result.sheetCount).toBe(1);
+    expect(result.sheets[0].pieces).toHaveLength(1);
+    expect(result.sheets[0].pieces[0]).toMatchObject({ x: 0, y: 0, width: 50, height: 50 });
   });
 
   it('acomoda varias piezas en una hoja', () => {
-    const result = optimizeCuts({ anchoHoja: 100, altoHoja: 100, piezas: [{ nombre: 'A', ancho: 50, alto: 50, cantidad: 4 }] });
-    expect(result.cantidadHojas).toBe(1);
-    expect(result.hojas[0].piezasColocadas).toHaveLength(4);
+    const result = optimizeCuts({ sheetWidth: 100, sheetHeight: 100, kerf: 0, pieces: [{ name: 'A', width: 50, height: 50, quantity: 4 }] });
+    expect(result.sheetCount).toBe(1);
+    expect(result.sheets[0].pieces).toHaveLength(4);
   });
 
   it('crea otra hoja si no caben', () => {
-    const result = optimizeCuts({ anchoHoja: 100, altoHoja: 100, piezas: [{ nombre: 'A', ancho: 70, alto: 70, cantidad: 2 }] });
-    expect(result.cantidadHojas).toBe(2);
+    const result = optimizeCuts({ sheetWidth: 100, sheetHeight: 100, pieces: [{ name: 'A', width: 70, height: 70, quantity: 2 }] });
+    expect(result.sheetCount).toBe(2);
   });
 
   it('calcula area usada, desperdicio y aprovechamiento', () => {
-    const result = optimizeCuts({ anchoHoja: 100, altoHoja: 100, piezas: [{ nombre: 'A', ancho: 50, alto: 50, cantidad: 1 }] });
-    expect(result.areaUtilizada).toBe(2500);
-    expect(result.areaDesperdiciada).toBe(7500);
-    expect(result.porcentajeAprovechamiento).toBe(25);
-    expect(result.hojas[0].areaUsada).toBe(2500);
+    const result = optimizeCuts({ sheetWidth: 100, sheetHeight: 100, pieces: [{ name: 'A', width: 50, height: 50, quantity: 1 }] });
+    expect(result.totalUsedArea).toBe(2500);
+    expect(result.totalWasteArea).toBe(7500);
+    expect(result.efficiencyPercent).toBe(25);
+    expect(result.sheets[0].usedArea).toBe(2500);
+  });
+
+  it('nunca supera 100% de aprovechamiento ni genera merma negativa', () => {
+    const result = optimizeCuts({ sheetWidth: 100, sheetHeight: 100, kerf: 0, pieces: [{ name: 'A', width: 50, height: 50, quantity: 10 }] });
+    expect(result.efficiencyPercent).toBeLessThanOrEqual(100);
+    expect(result.totalWasteArea).toBeGreaterThanOrEqual(0);
+    result.sheets.forEach((sheet) => {
+      expect(sheet.efficiencyPercent).toBeLessThanOrEqual(100);
+      expect(sheet.wasteArea).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  it('no coloca piezas fuera de la hoja', () => {
+    const result = optimizeCuts({ sheetWidth: 100, sheetHeight: 100, pieces: [{ name: 'A', width: 60, height: 30, quantity: 5 }] });
+    result.sheets.forEach((sheet) => {
+      sheet.pieces.forEach((piece) => {
+        expect(piece.x).toBeGreaterThanOrEqual(0);
+        expect(piece.y).toBeGreaterThanOrEqual(0);
+        expect(piece.x + piece.width).toBeLessThanOrEqual(sheet.width);
+        expect(piece.y + piece.height).toBeLessThanOrEqual(sheet.height);
+      });
+    });
+  });
+
+  it('no encima piezas colocadas en la misma hoja', () => {
+    const result = optimizeCuts({ sheetWidth: 122, sheetHeight: 244, pieces: [{ name: 'A', width: 60, height: 40, quantity: 8 }] });
+    result.sheets.forEach((sheet) => {
+      sheet.pieces.forEach((piece, index) => {
+        sheet.pieces.slice(index + 1).forEach((next) => {
+          const overlaps = piece.x < next.x + next.width
+            && piece.x + piece.width > next.x
+            && piece.y < next.y + next.height
+            && piece.y + piece.height > next.y;
+          expect(overlaps).toBe(false);
+        });
+      });
+    });
+  });
+
+  it('envia piezas demasiado grandes a unplacedPieces', () => {
+    const result = optimizeCuts({ sheetWidth: 100, sheetHeight: 100, pieces: [{ name: 'Grande', width: 140, height: 120, quantity: 1 }] });
+    expect(result.sheetCount).toBe(0);
+    expect(result.unplacedPieces).toHaveLength(1);
+    expect(result.unplacedPieces[0].name).toBe('Grande');
+  });
+
+  it('la rotacion permite acomodar una pieza que sin rotacion no cabe', () => {
+    const withoutRotation = optimizeCuts({ sheetWidth: 80, sheetHeight: 100, allowRotation: false, pieces: [{ name: 'Panel', width: 90, height: 70, quantity: 1 }] });
+    const withRotation = optimizeCuts({ sheetWidth: 80, sheetHeight: 100, allowRotation: true, pieces: [{ name: 'Panel', width: 90, height: 70, quantity: 1 }] });
+    expect(withoutRotation.unplacedPieces).toHaveLength(1);
+    expect(withRotation.unplacedPieces).toHaveLength(0);
+    expect(withRotation.sheets[0].pieces[0]).toMatchObject({ width: 70, height: 90, rotated: true });
+  });
+
+  it('crea hojas adicionales con multiples piezas cuando no caben', () => {
+    const result = optimizeCuts({ sheetWidth: 100, sheetHeight: 100, pieces: [{ name: 'A', width: 70, height: 70, quantity: 3 }] });
+    expect(result.sheetCount).toBe(3);
+    expect(result.sheets.every((sheet) => sheet.pieces.length === 1)).toBe(true);
   });
 });
