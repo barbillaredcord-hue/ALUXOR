@@ -2,6 +2,11 @@ import { RefreshCw, Scissors } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { optimizeCuts } from '../lib/cut-optimizer/optimizer.js';
 
+const strategyLabels = {
+  'largest-first': 'Largest First / Mayor área',
+  'input-order': 'Orden capturado',
+};
+
 export default function CutOptimizerSection({ quote, decimal }) {
   const [run, setRun] = useState(0);
   const [config, setConfig] = useState({
@@ -17,7 +22,7 @@ export default function CutOptimizerSection({ quote, decimal }) {
     width: item.ancho,
     height: item.alto,
     quantity: item.cantidad,
-  }));
+  })).filter((piece) => piece.width > 0 && piece.height > 0 && piece.quantity > 0);
   const result = useMemo(() => optimizeCuts({
     sheetWidth,
     sheetHeight,
@@ -26,6 +31,10 @@ export default function CutOptimizerSection({ quote, decimal }) {
     strategy: config.strategy,
     pieces: piezas,
   }), [sheetWidth, sheetHeight, piezas, config.allowRotation, config.kerf, config.strategy, run]);
+  const hasPieces = piezas.length > 0;
+  const physicalUnplaced = result.unplacedPieces.filter((piece) => piece.reason === 'too-large');
+  const pendingUnplaced = result.unplacedPieces.filter((piece) => piece.reason !== 'too-large');
+  const statusText = hasPieces ? 'Resultado calculado' : 'Pendiente de optimizar';
 
   return (
     <section className="cut-section panel">
@@ -39,13 +48,17 @@ export default function CutOptimizerSection({ quote, decimal }) {
       </header>
 
       <div className="cut-stats">
-        <div><span>Hojas necesarias</span><strong>{result.sheetCount}</strong></div>
-        <div><span>Área utilizada</span><strong>{decimal(result.totalUsedArea / 10000)} m²</strong></div>
-        <div><span>Merma</span><strong>{decimal(result.totalWasteArea / 10000)} m²</strong></div>
-        <div><span>Aprovechamiento</span><strong>{decimal(result.efficiencyPercent, 0)}%</strong></div>
+        <div><span>Estado</span><strong>{statusText}</strong></div>
+        <div><span>Hojas necesarias</span><strong>{hasPieces ? result.sheetCount : '—'}</strong></div>
+        <div><span>Área utilizada</span><strong>{hasPieces ? `${decimal(result.totalUsedArea / 10000)} m²` : 'Sin calcular'}</strong></div>
+        <div><span>Aprovechamiento</span><strong>{hasPieces ? `${decimal(result.efficiencyPercent, 0)}%` : '—'}</strong></div>
       </div>
 
       <div className="cut-controls">
+        <div className="cut-controls-head">
+          <strong>Configuración del motor</strong>
+          <span>Hoja: {sheetWidth} × {sheetHeight} cm · Kerf: {decimal(config.kerf * 10, 0)} mm / {config.kerf} cm · Rotación: {config.allowRotation ? 'Sí' : 'No'} · Estrategia: {strategyLabels[config.strategy]}</span>
+        </div>
         <label className="cut-toggle">
           <input
             type="checkbox"
@@ -73,10 +86,26 @@ export default function CutOptimizerSection({ quote, decimal }) {
         </label>
       </div>
 
-      {result.unplacedPieces.length > 0 && (
-        <div className="cut-alert" role="alert">
-          <strong>Piezas sin acomodar</strong>
-          <span>{result.unplacedPieces.map((piece) => piece.name).join(', ')}</span>
+      {hasPieces && (
+        <div className={`cut-alert ${result.unplacedPieces.length === 0 ? 'is-clear' : ''}`} role="status">
+          {physicalUnplaced.length > 0 && (
+            <div>
+              <strong>No caben por tamaño físico</strong>
+              <span>{physicalUnplaced.map((piece) => `${piece.name} (${piece.originalWidth} × ${piece.originalHeight} cm)`).join(', ')}</span>
+            </div>
+          )}
+          {pendingUnplaced.length > 0 && (
+            <div>
+              <strong>Pendientes / no acomodadas</strong>
+              <span>{pendingUnplaced.map((piece) => piece.name).join(', ')}</span>
+            </div>
+          )}
+          {result.unplacedPieces.length === 0 && (
+            <div>
+              <strong>Sin piezas problemáticas</strong>
+              <span>Todas las piezas capturadas quedaron dentro del plano de corte.</span>
+            </div>
+          )}
         </div>
       )}
 

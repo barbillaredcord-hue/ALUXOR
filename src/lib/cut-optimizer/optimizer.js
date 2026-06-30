@@ -65,7 +65,7 @@ function placePiece(sheet, piece, config) {
     let y = sheet.cursorY;
     let shelfHeight = sheet.shelfHeight;
 
-    if (x > 0 && x + config.kerf + variant.width <= sheet.width) {
+    if (x > 0) {
       x += config.kerf;
     }
 
@@ -143,15 +143,18 @@ export function optimizeCuts(input = {}) {
 
   pieces.forEach((piece) => {
     if (!variantsFor(piece, config).some((variant) => fitsInSheet(variant, config.sheetWidth, config.sheetHeight))) {
-      unplacedPieces.push(piece);
+      unplacedPieces.push({ ...piece, reason: 'too-large' });
       return;
     }
 
     const placed = sheets.some((sheet) => placePiece(sheet, piece, config));
     if (!placed) {
       const sheet = createSheet(sheets.length + 1, config.sheetWidth, config.sheetHeight);
-      placePiece(sheet, piece, config);
-      sheets.push(sheet);
+      if (placePiece(sheet, piece, config)) {
+        sheets.push(sheet);
+      } else {
+        unplacedPieces.push({ ...piece, reason: 'not-placed' });
+      }
     }
   });
 

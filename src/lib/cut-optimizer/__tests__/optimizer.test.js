@@ -70,6 +70,7 @@ describe('cut optimizer', () => {
     expect(result.sheetCount).toBe(0);
     expect(result.unplacedPieces).toHaveLength(1);
     expect(result.unplacedPieces[0].name).toBe('Grande');
+    expect(result.unplacedPieces[0].reason).toBe('too-large');
   });
 
   it('la rotacion permite acomodar una pieza que sin rotacion no cabe', () => {
@@ -84,5 +85,12 @@ describe('cut optimizer', () => {
     const result = optimizeCuts({ sheetWidth: 100, sheetHeight: 100, pieces: [{ name: 'A', width: 70, height: 70, quantity: 3 }] });
     expect(result.sheetCount).toBe(3);
     expect(result.sheets.every((sheet) => sheet.pieces.length === 1)).toBe(true);
+  });
+
+  it('respeta el kerf entre piezas', () => {
+    const withoutKerf = optimizeCuts({ sheetWidth: 100, sheetHeight: 100, kerf: 0, pieces: [{ name: 'A', width: 50, height: 100, quantity: 2 }] });
+    const withKerf = optimizeCuts({ sheetWidth: 100, sheetHeight: 100, kerf: 0.3, pieces: [{ name: 'A', width: 50, height: 100, quantity: 2 }] });
+    expect(withoutKerf.sheetCount).toBe(1);
+    expect(withKerf.sheetCount).toBe(2);
   });
 });

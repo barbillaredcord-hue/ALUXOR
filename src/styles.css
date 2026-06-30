@@ -6227,6 +6227,25 @@ body,
   border-radius: 16px;
 }
 
+.cut-controls-head {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 4px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(23, 32, 27, 0.08);
+}
+
+.cut-controls-head strong {
+  color: #14241c;
+  font-size: 15px;
+}
+
+.cut-controls-head span {
+  color: #617068;
+  font-size: 13px;
+  font-weight: 850;
+}
+
 .cut-controls label {
   display: grid;
   gap: 7px;
@@ -6265,7 +6284,7 @@ body,
 
 .cut-alert {
   display: grid;
-  gap: 5px;
+  gap: 10px;
   padding: 13px 15px;
   color: #6f3f08;
   background: #fff3cf;
@@ -6273,8 +6292,23 @@ body,
   border-radius: 14px;
 }
 
+.cut-alert.is-clear {
+  color: #1d5f4a;
+  background: #e7f1ec;
+  border-color: #b8dfca;
+}
+
+.cut-alert div {
+  display: grid;
+  gap: 4px;
+}
+
 .cut-alert strong {
   color: #5b3307;
+}
+
+.cut-alert.is-clear strong {
+  color: #174c3b;
 }
 
 .cut-alert span {
