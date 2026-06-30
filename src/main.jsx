@@ -35,6 +35,7 @@ import DashboardSection from './sections/DashboardSection.jsx';
 import HistorySection from './sections/HistorySection.jsx';
 import ProductionSection from './sections/ProductionSection.jsx';
 import PurchasesSection from './sections/PurchasesSection.jsx';
+import ReceivingSection from './sections/ReceivingSection.jsx';
 import SettingsSection from './sections/SettingsSection.jsx';
 import TextSection from './sections/TextSection.jsx';
 import { Areas, Materials, Pricing, Summary, Report, Quote, HistoryEngine, Pdf, StorageEngine, PlanEngine, AnalysisEngine } from './lib/br-engine/index.js';
@@ -864,6 +865,7 @@ function App() {
     { id: 'cotizador', label: 'Cotizador', icon: Calculator },
     { id: 'produccion', label: 'Producción', icon: ClipboardList },
     { id: 'compras', label: 'Compras', icon: Store },
+    { id: 'recepcion', label: 'Recepción', icon: DoorOpen },
     { id: 'catalogo', label: 'Catálogo', icon: TableProperties },
     { id: 'historial', label: 'Historial', icon: History },
     { id: 'textos', label: 'Textos', icon: Sparkles },
@@ -1884,6 +1886,14 @@ function App() {
             form={form}
             quote={quote}
             money={money}
+            decimal={decimal}
+          />
+        )}
+
+        {activeSection === 'recepcion' && (
+          <ReceivingSection
+            form={form}
+            quote={quote}
             decimal={decimal}
           />
         )}
