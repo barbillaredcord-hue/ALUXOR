@@ -35,6 +35,7 @@ export default function CutOptimizerSection({ quote, decimal }) {
   const physicalUnplaced = result.unplacedPieces.filter((piece) => piece.reason === 'too-large');
   const pendingUnplaced = result.unplacedPieces.filter((piece) => piece.reason !== 'too-large');
   const statusText = hasPieces ? 'Resultado calculado' : 'Pendiente de optimizar';
+  const { summary, purchasing, manufacturing, validation } = result;
 
   return (
     <section className="cut-section panel">
@@ -49,9 +50,9 @@ export default function CutOptimizerSection({ quote, decimal }) {
 
       <div className="cut-stats">
         <div><span>Estado</span><strong>{statusText}</strong></div>
-        <div><span>Hojas necesarias</span><strong>{hasPieces ? result.sheetCount : '—'}</strong></div>
-        <div><span>Área utilizada</span><strong>{hasPieces ? `${decimal(result.totalUsedArea / 10000)} m²` : 'Sin calcular'}</strong></div>
-        <div><span>Aprovechamiento</span><strong>{hasPieces ? `${decimal(result.efficiencyPercent, 0)}%` : '—'}</strong></div>
+        <div><span>Hojas necesarias</span><strong>{hasPieces ? purchasing.sheetsToBuy : '—'}</strong></div>
+        <div><span>Área utilizada</span><strong>{hasPieces ? `${decimal(summary.usedArea / 10000)} m²` : 'Sin calcular'}</strong></div>
+        <div><span>Aprovechamiento</span><strong>{hasPieces ? `${decimal(summary.utilization, 0)}%` : '—'}</strong></div>
       </div>
 
       <div className="cut-controls">
@@ -87,7 +88,7 @@ export default function CutOptimizerSection({ quote, decimal }) {
       </div>
 
       {hasPieces && (
-        <div className={`cut-alert ${result.unplacedPieces.length === 0 ? 'is-clear' : ''}`} role="status">
+        <div className={`cut-alert ${validation.isPhysicallyValid ? 'is-clear' : ''}`} role="status">
           {physicalUnplaced.length > 0 && (
             <div>
               <strong>No caben por tamaño físico</strong>
@@ -100,10 +101,16 @@ export default function CutOptimizerSection({ quote, decimal }) {
               <span>{pendingUnplaced.map((piece) => piece.name).join(', ')}</span>
             </div>
           )}
-          {result.unplacedPieces.length === 0 && (
+          {validation.isPhysicallyValid && (
             <div>
               <strong>Sin piezas problemáticas</strong>
-              <span>Todas las piezas capturadas quedaron dentro del plano de corte.</span>
+              <span>{manufacturing.totalCuts} cortes dentro del plano. Todas las piezas capturadas quedaron dentro del plano de corte.</span>
+            </div>
+          )}
+          {!validation.isPhysicallyValid && validation.warnings.length > 0 && (
+            <div>
+              <strong>Validación física</strong>
+              <span>{validation.warnings.join(' ')}</span>
             </div>
           )}
         </div>

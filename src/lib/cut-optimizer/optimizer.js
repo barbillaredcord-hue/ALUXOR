@@ -123,6 +123,37 @@ function summarizeSheet(sheet) {
   };
 }
 
+function piecesOverlap(piece, next) {
+  return piece.x < next.x + next.width
+    && piece.x + piece.width > next.x
+    && piece.y < next.y + next.height
+    && piece.y + piece.height > next.y;
+}
+
+function validateSheets(sheets, unplacedPieces, utilization, wasteArea) {
+  const warnings = [];
+  if (utilization > 100) warnings.push('Aprovechamiento mayor a 100%.');
+  if (wasteArea < 0) warnings.push('Merma negativa.');
+  sheets.forEach((sheet) => {
+    sheet.pieces.forEach((piece, index) => {
+      if (piece.x < 0 || piece.y < 0 || piece.x + piece.width > sheet.width || piece.y + piece.height > sheet.height) {
+        warnings.push(`Pieza fuera de hoja: ${piece.name}.`);
+      }
+      sheet.pieces.slice(index + 1).forEach((next) => {
+        if (piecesOverlap(piece, next)) warnings.push(`Piezas sobrepuestas: ${piece.name} / ${next.name}.`);
+      });
+    });
+  });
+  unplacedPieces.forEach((piece) => {
+    if (piece.reason === 'too-large') warnings.push(`No cabe por tamaño físico: ${piece.name}.`);
+    if (piece.reason === 'not-placed') warnings.push(`Pendiente de acomodar: ${piece.name}.`);
+  });
+  return {
+    isPhysicallyValid: warnings.length === 0,
+    warnings,
+  };
+}
+
 export function optimizeCuts(input = {}) {
   const config = {
     ...DEFAULT_CONFIG,
@@ -159,23 +190,43 @@ export function optimizeCuts(input = {}) {
   });
 
   const summarizedSheets = sheets.map(summarizeSheet);
-  const totalUsedArea = summarizedSheets.reduce((sum, sheet) => sum + sheet.usedArea, 0);
+  const placedPieces = summarizedSheets.flatMap((sheet) => sheet.pieces.map((piece) => ({ ...piece, sheetIndex: sheet.index })));
+  const usedArea = summarizedSheets.reduce((sum, sheet) => sum + sheet.usedArea, 0);
   const totalSheetArea = config.sheetWidth * config.sheetHeight * summarizedSheets.length;
-  const totalWasteArea = Math.max(0, totalSheetArea - totalUsedArea);
-  const efficiencyPercent = totalSheetArea > 0 ? Math.min(100, (totalUsedArea / totalSheetArea) * 100) : 0;
+  const wasteArea = Math.max(0, totalSheetArea - usedArea);
+  const utilization = totalSheetArea > 0 ? Math.min(100, (usedArea / totalSheetArea) * 100) : 0;
+  const summary = {
+    requiredSheets: summarizedSheets.length,
+    totalSheetArea,
+    usedArea,
+    wasteArea,
+    utilization,
+  };
+  const purchasing = {
+    sheetsToBuy: summary.requiredSheets,
+  };
+  const manufacturing = {
+    totalCuts: placedPieces.length,
+  };
+  const validation = validateSheets(summarizedSheets, unplacedPieces, summary.utilization, summary.wasteArea);
 
   return {
     config,
     sheets: summarizedSheets,
+    placedPieces,
     hojas: summarizedSheets,
     unplacedPieces,
-    totalUsedArea,
-    totalWasteArea,
-    efficiencyPercent,
-    sheetCount: summarizedSheets.length,
-    cantidadHojas: summarizedSheets.length,
-    areaUtilizada: totalUsedArea,
-    areaDesperdiciada: totalWasteArea,
-    porcentajeAprovechamiento: efficiencyPercent,
+    summary,
+    purchasing,
+    manufacturing,
+    validation,
+    totalUsedArea: summary.usedArea,
+    totalWasteArea: summary.wasteArea,
+    efficiencyPercent: summary.utilization,
+    sheetCount: summary.requiredSheets,
+    cantidadHojas: summary.requiredSheets,
+    areaUtilizada: summary.usedArea,
+    areaDesperdiciada: summary.wasteArea,
+    porcentajeAprovechamiento: summary.utilization,
   };
 }

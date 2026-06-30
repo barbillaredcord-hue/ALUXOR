@@ -28,6 +28,22 @@ describe('cut optimizer', () => {
     expect(result.sheets[0].usedArea).toBe(2500);
   });
 
+  it('expone salida estandar para compras, fabricacion y validacion', () => {
+    const result = optimizeCuts({ sheetWidth: 100, sheetHeight: 100, kerf: 0, pieces: [{ name: 'A', width: 50, height: 50, quantity: 2 }] });
+    expect(result.summary).toMatchObject({
+      requiredSheets: 1,
+      totalSheetArea: 10000,
+      usedArea: 5000,
+      wasteArea: 5000,
+      utilization: 50,
+    });
+    expect(result.purchasing.sheetsToBuy).toBe(1);
+    expect(result.manufacturing.totalCuts).toBe(2);
+    expect(result.validation.isPhysicallyValid).toBe(true);
+    expect(result.validation.warnings).toEqual([]);
+    expect(result.placedPieces).toHaveLength(2);
+  });
+
   it('nunca supera 100% de aprovechamiento ni genera merma negativa', () => {
     const result = optimizeCuts({ sheetWidth: 100, sheetHeight: 100, kerf: 0, pieces: [{ name: 'A', width: 50, height: 50, quantity: 10 }] });
     expect(result.efficiencyPercent).toBeLessThanOrEqual(100);
@@ -71,6 +87,10 @@ describe('cut optimizer', () => {
     expect(result.unplacedPieces).toHaveLength(1);
     expect(result.unplacedPieces[0].name).toBe('Grande');
     expect(result.unplacedPieces[0].reason).toBe('too-large');
+    expect(result.summary.requiredSheets).toBe(0);
+    expect(result.purchasing.sheetsToBuy).toBe(0);
+    expect(result.validation.isPhysicallyValid).toBe(false);
+    expect(result.validation.warnings[0]).toContain('No cabe por tamaño físico');
   });
 
   it('la rotacion permite acomodar una pieza que sin rotacion no cabe', () => {
