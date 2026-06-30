@@ -25,6 +25,8 @@ import './styles.css';
 import { registerServiceWorker } from './pwa';
 import Field from './components/Field.jsx';
 import PlanCanvas3D from './components/PlanCanvas3D.jsx';
+import SummaryPanel from './components/SummaryPanel.jsx';
+import WorkspaceLayout from './layouts/WorkspaceLayout.jsx';
 import AnnouncementSection from './sections/AnnouncementSection.jsx';
 import CatalogSection from './sections/CatalogSection.jsx';
 import QuoteSection from './sections/QuoteSection.jsx';
@@ -1628,8 +1630,10 @@ function App() {
   );
 
   return (
-    <main className={largeText ? 'app large-text' : 'app'}>
-      <aside className="sidebar">
+    <main className={largeText ? 'workspace-shell large-text' : 'workspace-shell'}>
+      <WorkspaceLayout
+        sidebar={(
+          <div className="workspace-sidebar-stack">
         <div className="brand-card">
           {appLogo ? <img src={appLogo} alt="Logo ALUXOR" className="brand-logo" /> : <div className="brand-mark">A</div>}
           <div>
@@ -1637,6 +1641,22 @@ function App() {
             <span>Cotizador profesional</span>
           </div>
         </div>
+
+        <SummaryPanel
+          proyecto={form.producto || 'Proyecto sin nombre'}
+          cliente={form.clienteNombre || 'Cliente pendiente'}
+          totalCliente={money(quote.total)}
+          costoInterno={money(quote.internalTotal)}
+          utilidad={money(quote.profit)}
+          anticipo={money(quote.deposit)}
+          saldo={money(quote.rest)}
+          estadoProyecto={form.estadoCotizacion || 'Pendiente'}
+          progreso={dataHealth.score}
+          onWhatsApp={openWhatsApp}
+          onPdf={() => openPrint('client')}
+          onGuardar={saveToHistory}
+          onHistorial={() => setActiveSection('historial')}
+        />
 
         <nav className="menu" aria-label="Secciones principales">
           {menuItems.map(({ id, label, icon: Icon }) => (
@@ -1656,12 +1676,6 @@ function App() {
           </button>
         </nav>
 
-        <div className="sidebar-total">
-          <span>Total estimado</span>
-          <strong>{money(quote.total)}</strong>
-          <small>Utilidad: {money(quote.profit)}</small>
-        </div>
-
         <div className="sync-card">
           <RefreshCw size={18} />
           <div>
@@ -1678,8 +1692,10 @@ function App() {
           <RefreshCw size={18} />
           Actualizar app
         </button>
-      </aside>
+          </div>
+        )}
 
+        content={(
       <section className="content">
         <header className="hero">
           <div>
@@ -1967,6 +1983,27 @@ function App() {
           {copied && <strong>{copied}</strong>}
         </footer>
       </section>
+        )}
+        inspector={(
+          <div className="workspace-temp-inspector panel">
+            <div className="section-head">
+              <div>
+                <h2>Inspector</h2>
+                <p>Vista rápida del proyecto activo.</p>
+              </div>
+            </div>
+            <div className="live-summary-grid">
+              <div className="live-summary-item"><span>Total cliente</span><strong>{money(quote.total)}</strong></div>
+              <div className="live-summary-item"><span>Utilidad</span><strong>{money(quote.profit)}</strong></div>
+              <div className="live-summary-item"><span>Área total</span><strong>{decimal(quote.areaTotal)} m²</strong></div>
+            </div>
+            <div className="actions compact">
+              <button type="button" className="ghost" onClick={() => openPrint('client')}><FileText size={18} /> PDF</button>
+              <button type="button" onClick={openWhatsApp}><MessageCircle size={18} /> WhatsApp</button>
+            </div>
+          </div>
+        )}
+      />
     </main>
   );
 }

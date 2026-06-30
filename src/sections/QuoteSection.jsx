@@ -1,4 +1,18 @@
-import { Copy, Eraser, FileText, MessageCircle, Save } from 'lucide-react';
+import {
+  Activity,
+  Copy,
+  DraftingCompass,
+  Eraser,
+  FileText,
+  Hammer,
+  Layers,
+  MessageCircle,
+  Ruler,
+  Save,
+  SlidersHorizontal,
+  UserRound,
+  Wrench,
+} from 'lucide-react';
 import CalculationChain from '../components/CalculationChain.jsx';
 import DashboardSummary from '../components/DashboardSummary.jsx';
 import Field from '../components/Field.jsx';
@@ -156,7 +170,7 @@ export default function QuoteSection({
 
               <div className="quote-accordion-list">
                 <details className="quote-accordion" open>
-                  <DashboardSummary number="01" title="Cliente y proyecto" description="Datos básicos para identificar la cotización." status={form.clienteNombre ? 'Completo' : 'Incompleto'} />
+                <DashboardSummary number="01" icon={UserRound} title="Cliente y proyecto" description="Datos básicos para identificar la cotización." status={form.clienteNombre ? 'Completo' : 'Incompleto'} />
                   <div className="form-grid">
                     <Field id="clienteNombre" label="Cliente" {...guideFor('clienteNombre')}>{input('clienteNombre')}</Field>
                     <Field id="clienteTelefono" label="Teléfono" {...guideFor('clienteTelefono')}>{input('clienteTelefono')}</Field>
@@ -166,7 +180,7 @@ export default function QuoteSection({
                 </details>
 
                 <details className="quote-accordion">
-                  <DashboardSummary number="01B" title="Proyecto / diseño" description="Producto, tipo de trabajo y acabado." status={form.producto ? 'Completo' : 'Revisar'} />
+                  <DashboardSummary number="01B" icon={DraftingCompass} title="Proyecto / diseño" description="Producto, tipo de trabajo y acabado." status={form.producto ? 'Completo' : 'Revisar'} />
                   <div className="form-grid">
                     <Field id="giro" label="Giro">{input('giro')}</Field>
                     <Field id="tipoTrabajo" label="Tipo de trabajo">
@@ -182,7 +196,7 @@ export default function QuoteSection({
                 </details>
 
                 <details className="quote-accordion" open>
-                  <DashboardSummary number="02" title="Medidas del trabajo" description="Área, metro lineal y piezas del proyecto." status={quote.areaTotal > 0 ? 'Completo' : 'Revisar'} highlight />
+                  <DashboardSummary number="02" icon={Ruler} title="Medidas del trabajo" description="Área, metro lineal y piezas del proyecto." status={quote.areaTotal > 0 ? 'Completo' : 'Revisar'} highlight />
                   <div className="quick-results measure-totals">
                     <div><span>Área total del proyecto</span><strong>{decimal(quote.areaTotal)} m²</strong></div>
                     <div><span>Metro lineal total</span><strong>{decimal(quote.linearTotal)} m</strong></div>
@@ -225,7 +239,7 @@ export default function QuoteSection({
                 </details>
 
                 <details className="quote-accordion" open>
-                  <DashboardSummary number="04" title="Materiales de cotización" description="Compra, merma, margen y utilidad por material." status={quote.material > 0 ? 'Completo' : 'Revisar'} highlight />
+                  <DashboardSummary number="04" icon={Layers} title="Materiales de cotización" description="Compra, merma, margen y utilidad por material." status={quote.material > 0 ? 'Completo' : 'Revisar'} highlight />
                   <div className="form-grid material-base-grid">
                     <Field id="materialCotizacion" label="Material cotización" {...guideFor('materialCotizacion')}>{input('materialCotizacion')}</Field>
                     <Field id="precioM2" label="Precio m²" {...guideFor('precioM2')}>{input('precioM2', 'number')}</Field>
@@ -303,7 +317,7 @@ export default function QuoteSection({
                 </details>
 
                 <details className="quote-accordion">
-                  <DashboardSummary number="05" title="Herrajes y accesorios" description="Accesorios, juegos, piezas y margen." status={quote.hardwareSale > 0 ? 'Completo' : 'Revisar'} />
+                  <DashboardSummary number="05" icon={Wrench} title="Herrajes y accesorios" description="Accesorios, juegos, piezas y margen." status={quote.hardwareSale > 0 ? 'Completo' : 'Revisar'} />
                   <div className="quote-table quote-accessories-table">
                     <div className="quote-table-header">Accesorio</div>
                     <div className="quote-table-header">Tipo</div>
@@ -348,7 +362,7 @@ export default function QuoteSection({
                 </details>
 
                 <details className="quote-accordion">
-                  <DashboardSummary number="06" title="Mano de obra" description="Servicio de fabricación e instalación." status={quote.manoObra > 0 ? 'Completo' : 'Revisar'} />
+                  <DashboardSummary number="06" icon={Hammer} title="Mano de obra" description="Servicio de fabricación e instalación." status={quote.manoObra > 0 ? 'Completo' : 'Revisar'} />
                   <div className="form-grid">
                     <Field id="manoObra" label="Mano de obra" {...guideFor('manoObra')}>{input('manoObra', 'number')}</Field>
                     <Field id="incluye" label="Incluye">{textareaInput('incluye')}</Field>
@@ -366,7 +380,7 @@ export default function QuoteSection({
                 </details>
 
                 <details className="quote-accordion">
-                  <DashboardSummary number="06B" title="Extras y ajustes" description="Extras, descuento, anticipo y folio." status={quote.extras > 0 || quote.descuento > 0 ? 'Revisar' : 'Completo'} />
+                  <DashboardSummary number="06B" icon={SlidersHorizontal} title="Extras y ajustes" description="Extras, descuento, anticipo y folio." status={quote.extras > 0 || quote.descuento > 0 ? 'Revisar' : 'Completo'} />
                   <div className="form-grid">
                     <Field id="extras" label="Extras" {...guideFor('extras')}>{input('extras', 'number')}</Field>
                     <Field id="descuento" label="Descuento %" {...guideFor('descuento')}>{input('descuento', 'number')}</Field>
@@ -385,7 +399,7 @@ export default function QuoteSection({
                 </details>
 
                 <details className="quote-accordion">
-                  <DashboardSummary number="08" title="Documento / PDF" description="Condiciones, vigencia, notas y estado." status={form.condiciones ? 'Completo' : 'Incompleto'} />
+                  <DashboardSummary number="08" icon={FileText} title="Documento / PDF" description="Condiciones, vigencia, notas y estado." status={form.condiciones ? 'Completo' : 'Incompleto'} />
                   <div className="form-grid">
                     <Field id="vigencia" label="Vigencia días" {...guideFor('vigencia')}>{input('vigencia', 'number')}</Field>
                     <Field id="formaPago" label="Forma de pago" {...guideFor('formaPago')}>{input('formaPago')}</Field>
@@ -408,7 +422,7 @@ export default function QuoteSection({
                 </details>
 
                 <details className="quote-accordion">
-                  <DashboardSummary number="07" title="Resumen y análisis" description="Datos faltantes y advertencias de cotización." status={dataHealth.warnings.length ? 'Revisar' : 'Completo'} />
+                  <DashboardSummary number="07" icon={Activity} title="Resumen y análisis" description="Datos faltantes y advertencias de cotización." status={dataHealth.warnings.length ? 'Revisar' : 'Completo'} />
                   <div className="data-health-panel compact-health">
                     <h4>Datos completos</h4>
                     <div className="data-health-list">
