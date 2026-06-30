@@ -18,8 +18,11 @@ export default function FabricationSection({ form, quote, decimal }) {
   const [pieceStatus, setPieceStatus] = useState({});
   const [notes, setNotes] = useState('');
   const material = quote.materialRows?.[0];
-  const estimatedHours = Math.max(2, Math.ceil((quote.measureRows.length || 1) * 1.5));
-  const remainingHours = Math.max(1, estimatedHours - 1);
+  const optimization = material?.cutOptimization || null;
+  const optimizationSummary = optimization?.summary || null;
+  const optimizationValidation = optimization?.validation || null;
+  const placedPieces = optimization?.placedPieces || [];
+  const unplacedPieces = optimization?.unplacedPieces || [];
 
   return (
     <section className="fabrication-section panel">
@@ -37,8 +40,8 @@ export default function FabricationSection({ form, quote, decimal }) {
         <div><span>Estado</span><strong>{form.estadoCotizacion || 'Pendiente'}</strong></div>
         <div><span>Responsable</span><strong>Taller ALUXOR</strong></div>
         <div><span>Fecha compromiso</span><strong>{form.entrega || 'Por definir'}</strong></div>
-        <div><span>Tiempo estimado</span><strong>{estimatedHours} h</strong></div>
-        <div><span>Tiempo restante</span><strong>{remainingHours} h</strong></div>
+        <div><span>Plan de corte</span><strong>{optimizationSummary ? `${optimizationSummary.requiredSheets} hoja(s)` : 'Optimización pendiente'}</strong></div>
+        <div><span>Piezas de corte</span><strong>{optimization ? `${placedPieces.length} listas / ${unplacedPieces.length} pendientes` : 'Sin calcular'}</strong></div>
       </div>
 
       <div className="fabrication-layout">
@@ -65,14 +68,29 @@ export default function FabricationSection({ form, quote, decimal }) {
         <article className="fabrication-card">
           <h3><Ruler size={18} /> Orden de corte</h3>
           <div className="cut-list">
-            {quote.measureRows.map((item) => (
-              <div key={item.id}>
-                <strong>{material?.nombre || 'Material'}</strong>
-                <span>{item.ancho} x {item.alto}</span>
-                <em>{item.cantidad} pieza(s)</em>
+            {optimization ? placedPieces.map((piece) => (
+              <div key={`${piece.sheetIndex}-${piece.id}`}>
+                <strong>Hoja {piece.sheetIndex} · {piece.name}</strong>
+                <span>{piece.width} x {piece.height} cm{piece.rotated ? ' · rotada' : ''}</span>
+                <em>x {piece.index}</em>
               </div>
-            ))}
+            )) : (
+              <div className="fabrication-empty">
+                <strong>Optimización pendiente</strong>
+                <span>La orden de corte se llenará con el plan generado por el Cut Optimizer.</span>
+              </div>
+            )}
           </div>
+          {optimization && (
+            <div className={`fabrication-cut-status ${optimizationValidation?.isPhysicallyValid ? 'is-valid' : 'has-warnings'}`}>
+              <strong>{optimizationValidation?.isPhysicallyValid ? 'Plan físicamente válido' : 'Advertencias físicas'}</strong>
+              <span>
+                {optimizationValidation?.warnings?.length
+                  ? optimizationValidation.warnings.join(' ')
+                  : `Aprovechamiento ${decimal(optimizationSummary.utilization, 0)}% · merma ${decimal(optimizationSummary.wasteArea / 10000)} m².`}
+              </span>
+            </div>
+          )}
         </article>
 
         <article className="fabrication-card">

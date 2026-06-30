@@ -6115,6 +6115,38 @@ body,
   font-style: normal;
 }
 
+.fabrication-empty {
+  color: #617068;
+  background: #fff8df;
+  border-color: #edcf76;
+}
+
+.fabrication-cut-status {
+  display: grid;
+  gap: 4px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.fabrication-cut-status.is-valid {
+  color: #174c3b;
+  background: #e7f1ec;
+  border: 1px solid #b8dfca;
+}
+
+.fabrication-cut-status.has-warnings {
+  color: #6f3f08;
+  background: #fff3cf;
+  border: 1px solid #edcf76;
+}
+
+.fabrication-cut-status span {
+  color: inherit;
+}
+
 .fabrication-checklist {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
