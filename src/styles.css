@@ -6228,10 +6228,24 @@ body,
   gap: 12px;
 }
 
+.cut-sheet-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .cut-sheet-card h3 {
   margin: 0;
   color: #1d3429;
   font-size: 18px;
+}
+
+.cut-sheet-head span {
+  color: #617068;
+  font-size: 13px;
+  font-weight: 850;
+  text-align: right;
 }
 
 .cut-sheet-card svg {

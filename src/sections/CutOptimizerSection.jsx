@@ -36,20 +36,35 @@ export default function CutOptimizerSection({ quote, decimal }) {
       <button type="button" className="cut-rerun" onClick={() => setRun((value) => value + 1)}><RefreshCw size={18} /> Optimizar nuevamente</button>
 
       <div className="cut-sheets">
-        {result.hojas.map((sheet) => (
+        {result.hojas.filter((sheet) => sheet.piezasColocadas.length > 0).map((sheet) => (
           <article key={sheet.index} className="cut-sheet-card">
-            <h3>Hoja {sheet.index}</h3>
-            <svg viewBox={`0 0 ${sheet.ancho} ${sheet.alto}`} role="img" aria-label={`Hoja ${sheet.index}`}>
-              <rect x="0" y="0" width={sheet.ancho} height={sheet.alto} rx="2" fill="#fffdf8" stroke="#20362b" strokeWidth="1.5" />
-              {sheet.pieces.map((piece) => (
+            <div className="cut-sheet-head">
+              <h3>Hoja {sheet.index}</h3>
+              <span>{decimal(sheet.porcentajeAprovechamiento, 0)}% aprovechado · merma {decimal(sheet.areaDesperdiciada / 10000)} m²</span>
+            </div>
+            <svg viewBox={`0 0 ${sheet.anchoHoja} ${sheet.altoHoja}`} role="img" aria-label={`Hoja ${sheet.index}`}>
+              <defs>
+                <pattern id={`waste-${sheet.index}`} width="8" height="8" patternUnits="userSpaceOnUse">
+                  <path d="M0 8 L8 0" stroke="#dfcfb5" strokeWidth="1" opacity="0.55" />
+                </pattern>
+              </defs>
+              <rect x="0" y="0" width={sheet.anchoHoja} height={sheet.altoHoja} rx="2" fill={`url(#waste-${sheet.index})`} stroke="#20362b" strokeWidth="1.5" />
+              {sheet.piezasColocadas.map((piece) => {
+                const labelFits = piece.ancho >= 34 && piece.alto >= 18;
+                return (
                 <g key={piece.id}>
                   <rect x={piece.x} y={piece.y} width={piece.ancho} height={piece.alto} fill="#e7f1ec" stroke="#22745f" strokeWidth="1" />
-                  <text x={piece.x + 3} y={piece.y + 10} fontSize="7" fill="#14241c">{piece.nombre}</text>
+                  {labelFits && (
+                    <>
+                      <text x={piece.x + 3} y={piece.y + 10} fontSize="7" fontWeight="700" fill="#14241c">{piece.nombre}</text>
+                      <text x={piece.x + 3} y={piece.y + 19} fontSize="6" fill="#526159">{piece.ancho} x {piece.alto}</text>
+                    </>
+                  )}
                 </g>
-              ))}
+              );})}
             </svg>
             <div className="cut-piece-list">
-              {sheet.pieces.map((piece) => <span key={piece.id}>{piece.nombre} · {piece.ancho} x {piece.alto}</span>)}
+              {sheet.piezasColocadas.map((piece) => <span key={piece.id}>{piece.nombre} #{piece.indice} · {piece.ancho} x {piece.alto}</span>)}
             </div>
           </article>
         ))}

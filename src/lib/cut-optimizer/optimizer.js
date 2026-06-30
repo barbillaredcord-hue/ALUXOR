@@ -9,6 +9,8 @@ function expandPieces(pieces = []) {
     return Array.from({ length: cantidad }, (_, index) => ({
       id: `${piece.nombre || 'Pieza'}-${index}`,
       nombre: piece.nombre || 'Pieza',
+      indice: index + 1,
+      cantidad,
       ancho: toNumber(piece.ancho),
       alto: toNumber(piece.alto),
     }));
@@ -65,9 +67,23 @@ export function optimizeCuts({ anchoHoja = 0, altoHoja = 0, piezas = [] } = {}) 
   const areaTotal = sheetArea * sheets.length;
   const areaDesperdiciada = Math.max(0, areaTotal - areaUtilizada);
 
+  const hojas = sheets.map(({ cursorX, cursorY, shelfHeight, ...sheet }) => {
+    const areaUsada = sheet.pieces.reduce((sum, piece) => sum + piece.ancho * piece.alto, 0);
+    const areaDesperdiciada = Math.max(0, sheetArea - areaUsada);
+    return {
+      ...sheet,
+      anchoHoja: sheet.ancho,
+      altoHoja: sheet.alto,
+      piezasColocadas: sheet.pieces,
+      areaUsada,
+      areaDesperdiciada,
+      porcentajeAprovechamiento: sheetArea > 0 ? (areaUsada / sheetArea) * 100 : 0,
+    };
+  });
+
   return {
     cantidadHojas: sheets.length,
-    hojas: sheets.map(({ cursorX, cursorY, shelfHeight, ...sheet }) => sheet),
+    hojas,
     areaUtilizada,
     areaDesperdiciada,
     porcentajeAprovechamiento: areaTotal > 0 ? (areaUtilizada / areaTotal) * 100 : 0,
