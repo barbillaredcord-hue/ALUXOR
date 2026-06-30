@@ -14,15 +14,24 @@ const fabricationChecklist = [
 
 const progressSteps = ['Pendiente', 'Corte', 'Armado', 'Control de calidad', 'Listo para instalar'];
 
+export function getFabricationCutPlan(material) {
+  const optimization = material?.cutOptimization || null;
+  return {
+    optimization,
+    summary: optimization?.summary || null,
+    validation: optimization?.validation || null,
+    placedPieces: optimization?.placedPieces || [],
+    unplacedPieces: optimization?.unplacedPieces || [],
+    status: optimization ? 'ready' : 'pending',
+  };
+}
+
 export default function FabricationSection({ form, quote, decimal }) {
   const [pieceStatus, setPieceStatus] = useState({});
   const [notes, setNotes] = useState('');
   const material = quote.materialRows?.[0];
-  const optimization = material?.cutOptimization || null;
-  const optimizationSummary = optimization?.summary || null;
-  const optimizationValidation = optimization?.validation || null;
-  const placedPieces = optimization?.placedPieces || [];
-  const unplacedPieces = optimization?.unplacedPieces || [];
+  const cutPlan = getFabricationCutPlan(material);
+  const { optimization, summary: optimizationSummary, validation: optimizationValidation, placedPieces, unplacedPieces } = cutPlan;
 
   return (
     <section className="fabrication-section panel">

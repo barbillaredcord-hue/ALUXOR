@@ -210,6 +210,7 @@ export function optimizeCuts(input = {}) {
   };
   const validation = validateSheets(summarizedSheets, unplacedPieces, summary.utilization, summary.wasteArea);
 
+  // Contrato operativo: BR Engine, Compras, Inventario y Fabricación consumen estos bloques.
   return {
     config,
     sheets: summarizedSheets,

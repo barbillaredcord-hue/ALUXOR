@@ -17,12 +17,12 @@ export default function CutOptimizerSection({ quote, decimal }) {
   const material = quote.materialRows?.[0];
   const sheetWidth = material?.ancho || 122;
   const sheetHeight = material?.alto || 244;
-  const piezas = quote.measureRows.map((item) => ({
+  const piezas = useMemo(() => quote.measureRows.map((item) => ({
     name: item.nombre,
     width: item.ancho,
     height: item.alto,
     quantity: item.cantidad,
-  })).filter((piece) => piece.width > 0 && piece.height > 0 && piece.quantity > 0);
+  })).filter((piece) => piece.width > 0 && piece.height > 0 && piece.quantity > 0), [quote.measureRows]);
   const result = useMemo(() => optimizeCuts({
     sheetWidth,
     sheetHeight,
