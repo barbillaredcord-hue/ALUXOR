@@ -6211,6 +6211,138 @@ body,
   }
 }
 
+.hero-project-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.hero-project-meta span {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  padding: 8px 10px;
+  color: #617068;
+  background: #fffdf8;
+  border: 1px solid rgba(23, 32, 27, 0.08);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.hero-project-meta strong {
+  color: #14241c;
+}
+
+.project-dashboard {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(260px, 0.9fr) minmax(260px, 0.9fr);
+  gap: 18px;
+}
+
+.project-dashboard-column {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+}
+
+.project-dashboard-card {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  background: rgba(255, 253, 248, 0.9);
+  border: 1px solid rgba(23, 32, 27, 0.09);
+  border-radius: 18px;
+  box-shadow: 0 16px 34px rgba(17, 25, 21, 0.08);
+}
+
+.project-dashboard-card h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: #1d3429;
+  font-size: 18px;
+}
+
+.project-dashboard-row {
+  padding: 12px;
+  background: #eef4f1;
+  border: 1px solid #d7e2dc;
+  border-radius: 14px;
+}
+
+.project-dashboard-row strong,
+.project-dashboard-row span {
+  display: block;
+}
+
+.project-dashboard-row span,
+.project-dashboard-card p {
+  margin: 4px 0 0;
+  color: #617068;
+  font-size: 13px;
+  font-weight: 850;
+  line-height: 1.45;
+}
+
+.project-dashboard-plan div {
+  display: grid;
+  place-items: center;
+  min-height: 180px;
+  padding: 22px;
+  text-align: center;
+  background:
+    repeating-linear-gradient(45deg, rgba(23, 32, 27, 0.04), rgba(23, 32, 27, 0.04) 8px, transparent 8px, transparent 18px),
+    #f8faf8;
+  border: 1px dashed rgba(31, 107, 82, 0.34);
+  border-radius: 16px;
+}
+
+.project-dashboard-chip,
+.project-dashboard-next span,
+.project-dashboard-alerts span {
+  width: fit-content;
+  padding: 9px 11px;
+  background: #f4ead9;
+  border: 1px solid #dfcfb5;
+  border-radius: 999px;
+  color: #1d3429;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.project-dashboard-alerts span {
+  color: #745313;
+  background: #fff3cf;
+  border-color: #ecd386;
+}
+
+.inspector-next-task strong {
+  color: #14241c;
+  font-size: 18px;
+}
+
+.inspector-risks span,
+.inspector-risks p {
+  display: block;
+  margin: 0;
+  padding: 9px 10px;
+  color: #745313;
+  background: #fff3cf;
+  border: 1px solid #ecd386;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+@media (max-width: 1100px) {
+  .project-dashboard {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 1180px) {
   .workspace-layout {
     grid-template-columns: 280px minmax(0, 1fr);

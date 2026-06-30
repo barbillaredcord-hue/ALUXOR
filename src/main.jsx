@@ -27,7 +27,6 @@ import { registerServiceWorker } from './pwa';
 import Field from './components/Field.jsx';
 import InspectorPanel from './components/InspectorPanel.jsx';
 import PlanCanvas3D from './components/PlanCanvas3D.jsx';
-import ProjectCompanion from './components/ProjectCompanion.jsx';
 import ProjectFlow from './components/ProjectFlow.jsx';
 import SummaryPanel from './components/SummaryPanel.jsx';
 import WorkspaceLayout from './layouts/WorkspaceLayout.jsx';
@@ -1711,12 +1710,17 @@ function App() {
       <section className="content">
         <header className="hero">
           <div>
-            <p className="eyebrow">Versión {APP_VERSION}</p>
+            <p className="eyebrow">Proyecto activo · Versión {APP_VERSION}</p>
             <div className="hero-brand-line">
               {appLogo ? <img src={appLogo} alt="Logo ALUXOR/BosqueReal" className="hero-logo" /> : null}
-              <h1>ALUXOR/BosqueReal</h1>
+              <h1>{form.producto || 'Proyecto sin nombre'}</h1>
             </div>
-            <p>Cotizador profesional, anuncios, catálogo, historial sincronizado, planos SVG, vista 3D y PWA móvil.</p>
+            <p>{form.clienteNombre || 'Cliente pendiente'} · {form.estadoCotizacion || 'Pendiente'} · Responsable: Taller ALUXOR</p>
+            <div className="hero-project-meta">
+              <span>Avance <strong>{decimal(dataHealth.score, 0)}%</strong></span>
+              <span>Fecha compromiso <strong>{form.entrega || 'Por definir'}</strong></span>
+              <span>Próxima acción <strong>{quote.materialRows?.[0]?.nombre ? `Comprar ${quote.materialRows[0].nombre}` : 'Revisar datos del proyecto'}</strong></span>
+            </div>
           </div>
           <div className="hero-actions">
             <button type="button" className="ghost" onClick={refreshInstalledApp}><RefreshCw size={18} /> Actualizar app</button>
@@ -1728,21 +1732,14 @@ function App() {
         </header>
 
         <ProjectFlow activeSection={activeSection} />
-        <ProjectCompanion
-          form={form}
-          quote={quote}
-          dataHealth={dataHealth}
-          activeSection={activeSection}
-          decimal={decimal}
-        />
 
         {activeSection === 'inicio' && (
           <DashboardSection
-            ejemplos={ejemplos}
-            defaults={defaults}
-            setForm={setForm}
-            setActiveSection={setActiveSection}
-            roleCards={roleCards}
+            form={form}
+            quote={quote}
+            dataHealth={dataHealth}
+            money={money}
+            decimal={decimal}
           />
         )}
 
