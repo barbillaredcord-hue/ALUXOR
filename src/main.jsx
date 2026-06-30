@@ -24,6 +24,7 @@ import {
 import './styles.css';
 import { registerServiceWorker } from './pwa';
 import Field from './components/Field.jsx';
+import InspectorPanel from './components/InspectorPanel.jsx';
 import PlanCanvas3D from './components/PlanCanvas3D.jsx';
 import SummaryPanel from './components/SummaryPanel.jsx';
 import WorkspaceLayout from './layouts/WorkspaceLayout.jsx';
@@ -1985,23 +1986,17 @@ function App() {
       </section>
         )}
         inspector={(
-          <div className="workspace-temp-inspector panel">
-            <div className="section-head">
-              <div>
-                <h2>Inspector</h2>
-                <p>Vista rápida del proyecto activo.</p>
-              </div>
-            </div>
-            <div className="live-summary-grid">
-              <div className="live-summary-item"><span>Total cliente</span><strong>{money(quote.total)}</strong></div>
-              <div className="live-summary-item"><span>Utilidad</span><strong>{money(quote.profit)}</strong></div>
-              <div className="live-summary-item"><span>Área total</span><strong>{decimal(quote.areaTotal)} m²</strong></div>
-            </div>
-            <div className="actions compact">
-              <button type="button" className="ghost" onClick={() => openPrint('client')}><FileText size={18} /> PDF</button>
-              <button type="button" onClick={openWhatsApp}><MessageCircle size={18} /> WhatsApp</button>
-            </div>
-          </div>
+          <InspectorPanel
+            form={form}
+            quote={quote}
+            dataHealth={dataHealth}
+            materials={materials}
+            money={money}
+            decimal={decimal}
+            openPrint={openPrint}
+            openWhatsApp={openWhatsApp}
+            setActiveSection={setActiveSection}
+          />
         )}
       />
     </main>
