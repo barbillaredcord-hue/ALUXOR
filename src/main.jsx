@@ -34,6 +34,7 @@ import AnnouncementSection from './sections/AnnouncementSection.jsx';
 import CatalogSection from './sections/CatalogSection.jsx';
 import QuoteSection from './sections/QuoteSection.jsx';
 import DashboardSection from './sections/DashboardSection.jsx';
+import FabricationSection from './sections/FabricationSection.jsx';
 import HistorySection from './sections/HistorySection.jsx';
 import InventorySection from './sections/InventorySection.jsx';
 import ProductionSection from './sections/ProductionSection.jsx';
@@ -870,6 +871,7 @@ function App() {
     { id: 'compras', label: 'Compras', icon: Store },
     { id: 'recepcion', label: 'Recepción', icon: DoorOpen },
     { id: 'inventario', label: 'Inventario', icon: Archive },
+    { id: 'fabricacion', label: 'Fabricación', icon: Hammer },
     { id: 'catalogo', label: 'Catálogo', icon: TableProperties },
     { id: 'historial', label: 'Historial', icon: History },
     { id: 'textos', label: 'Textos', icon: Sparkles },
@@ -1914,6 +1916,14 @@ function App() {
             form={form}
             quote={quote}
             money={money}
+            decimal={decimal}
+          />
+        )}
+
+        {activeSection === 'fabricacion' && (
+          <FabricationSection
+            form={form}
+            quote={quote}
             decimal={decimal}
           />
         )}

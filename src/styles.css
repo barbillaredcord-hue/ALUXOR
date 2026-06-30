@@ -5945,6 +5945,197 @@ body,
   }
 }
 
+.fabrication-section {
+  display: grid;
+  gap: 18px;
+}
+
+.fabrication-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 22px;
+  color: #fffdf8;
+  background:
+    linear-gradient(135deg, rgba(240, 200, 78, 0.14), transparent 34%),
+    linear-gradient(135deg, var(--aluxor-graphite), var(--aluxor-graphite-2));
+  border: 1px solid rgba(240, 200, 78, 0.22);
+  border-radius: 18px;
+}
+
+.fabrication-hero span {
+  color: #f0c84e;
+  font-size: 13px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.fabrication-hero h2 {
+  margin: 4px 0;
+  color: #fffdf8;
+  font-size: 30px;
+}
+
+.fabrication-hero p {
+  margin: 0;
+  color: #c6d6ce;
+  font-weight: 850;
+}
+
+.fabrication-dashboard {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.fabrication-dashboard > div,
+.fabrication-card {
+  padding: 16px;
+  background: rgba(255, 253, 248, 0.9);
+  border: 1px solid rgba(23, 32, 27, 0.09);
+  border-radius: 16px;
+  box-shadow: 0 14px 30px rgba(17, 25, 21, 0.08);
+}
+
+.fabrication-dashboard span,
+.fabrication-piece span,
+.cut-list span,
+.cut-list em,
+.fabrication-materials span,
+.fabrication-materials em {
+  color: #617068;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.fabrication-dashboard strong {
+  display: block;
+  margin-top: 5px;
+  color: #14241c;
+  font-size: 17px;
+}
+
+.fabrication-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(320px, 0.7fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.fabrication-card {
+  display: grid;
+  gap: 12px;
+}
+
+.fabrication-card h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: #1d3429;
+  font-size: 18px;
+}
+
+.fabrication-pieces {
+  grid-row: span 2;
+}
+
+.fabrication-piece-grid,
+.cut-list,
+.fabrication-materials,
+.fabrication-checklist {
+  display: grid;
+  gap: 10px;
+}
+
+.fabrication-piece,
+.cut-list div,
+.fabrication-materials div {
+  display: grid;
+  gap: 5px;
+  padding: 14px;
+  background: #eef4f1;
+  border: 1px solid #d7e2dc;
+  border-radius: 14px;
+}
+
+.fabrication-piece strong,
+.cut-list strong,
+.fabrication-materials strong {
+  color: #14241c;
+}
+
+.fabrication-piece select {
+  width: fit-content;
+  min-height: 38px;
+  margin-top: 4px;
+  border-radius: 10px;
+}
+
+.cut-list div,
+.fabrication-materials div {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+}
+
+.cut-list em,
+.fabrication-materials em {
+  padding: 5px 8px;
+  background: #fff3cf;
+  border-radius: 999px;
+  font-style: normal;
+}
+
+.fabrication-checklist {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.fabrication-checklist label {
+  padding: 11px;
+  background: #f4ead9;
+  border: 1px solid #dfcfb5;
+  border-radius: 12px;
+  color: #1d3429;
+  font-weight: 900;
+}
+
+.fabrication-progress {
+  display: grid;
+  gap: 8px;
+}
+
+.fabrication-progress span {
+  padding: 10px;
+  background: #f4ead9;
+  border: 1px solid #dfcfb5;
+  border-radius: 999px;
+  color: #617068;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.fabrication-progress span.active {
+  color: #14241c;
+  background: #f0c84e;
+  border-color: #f0c84e;
+}
+
+.fabrication-notes textarea {
+  min-height: 160px;
+  resize: vertical;
+  border-radius: 12px;
+}
+
+@media (max-width: 1000px) {
+  .fabrication-dashboard,
+  .fabrication-layout,
+  .cut-list div,
+  .fabrication-materials div {
+    grid-template-columns: 1fr;
+  }
+}
+
 .project-flow {
   position: relative;
   display: flex;
