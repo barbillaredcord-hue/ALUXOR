@@ -4895,17 +4895,19 @@ body,
 }
 
 .production-hero {
+  position: relative;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 18px;
-  padding: 20px;
+  padding: 22px;
   color: #fffdf8;
   background:
     linear-gradient(135deg, rgba(240, 200, 78, 0.14), transparent 34%),
     linear-gradient(135deg, var(--aluxor-graphite), var(--aluxor-graphite-2));
   border: 1px solid rgba(240, 200, 78, 0.22);
   border-radius: 18px;
+  overflow: hidden;
 }
 
 .production-hero span,
@@ -4946,10 +4948,30 @@ body,
   font-size: 13px;
 }
 
+.production-hero .production-progress {
+  position: absolute;
+  left: 22px;
+  right: 22px;
+  bottom: 16px;
+}
+
 .production-summary {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
+}
+
+.production-workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(300px, 3fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.production-main-column,
+.production-side-column {
+  display: grid;
+  gap: 16px;
 }
 
 .production-progress-card {
@@ -5011,12 +5033,6 @@ body,
   line-height: 1.1;
 }
 
-.production-board {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-}
-
 .production-card {
   display: grid;
   gap: 12px;
@@ -5051,14 +5067,42 @@ body,
   margin-top: 3px;
 }
 
+.production-material-list {
+  display: grid;
+  gap: 10px;
+}
+
 .production-material-row {
-  padding-right: 112px !important;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 14px;
+  align-items: center;
+  min-height: 82px;
+  padding: 15px;
+  background: linear-gradient(135deg, #fffdf8, #eef4f1);
+  border: 1px solid #d7e2dc;
+  border-radius: 14px;
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.production-material-row:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 24px rgba(17, 25, 21, 0.09);
+}
+
+.production-material-row strong {
+  color: #14241c;
+}
+
+.production-material-row span {
+  display: block;
+  margin-top: 4px;
+  color: #617068;
+  font-size: 13px;
+  font-weight: 900;
 }
 
 .production-badge {
-  position: absolute;
-  top: 10px;
-  right: 10px;
   padding: 5px 8px;
   border-radius: 999px;
   font-size: 11px;
@@ -5088,7 +5132,7 @@ body,
   display: grid;
   place-items: center;
   gap: 8px;
-  min-height: 220px;
+  min-height: 260px;
   padding: 22px;
   color: #526159;
   background:
@@ -5129,31 +5173,51 @@ body,
   gap: 10px;
 }
 
-.production-checklist {
-  grid-column: 1 / -1;
-}
-
-.production-task {
+.production-flow > div {
   display: grid;
-  gap: 7px;
-  min-height: 120px;
-  padding: 14px;
-  background: #f4ead9;
-  border: 1px solid #dfcfb5;
-  border-radius: 12px;
-  color: #1d3429;
+  gap: 0;
 }
 
-.production-task svg {
-  color: #22745f;
+.production-flow-node {
+  position: relative;
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 10px 0;
 }
 
-.production-task strong {
-  font-size: 15px;
+.production-flow-node:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 18px;
+  top: 48px;
+  bottom: -6px;
+  width: 2px;
+  background: linear-gradient(180deg, #22745f, #dfcfb5);
 }
 
-.production-task span {
+.production-flow-node svg {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 8px;
+  color: #f6fbf7;
+  background: #22745f;
+  border-radius: 999px;
+}
+
+.production-flow-node strong,
+.production-flow-node span {
+  display: block;
+}
+
+.production-flow-node span {
   width: fit-content;
+  margin-top: 4px;
   padding: 5px 8px;
   border-radius: 999px;
   font-size: 11px;
@@ -5175,13 +5239,38 @@ body,
   background: #22745f;
 }
 
+.production-next {
+  background: linear-gradient(135deg, #fffdf8, #fff3cf);
+  border-color: #ecd386;
+}
+
+.production-next h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.production-next-list {
+  display: grid;
+  gap: 8px;
+}
+
+.production-next-list span {
+  padding: 10px 11px;
+  color: #1d3429;
+  background: rgba(255, 253, 248, 0.72);
+  border: 1px solid rgba(23, 32, 27, 0.08);
+  border-radius: 12px;
+  font-weight: 900;
+}
+
 .production-actions {
   align-items: center;
 }
 
 @media (max-width: 900px) {
   .production-summary,
-  .production-board,
+  .production-workbench,
   .production-checklist > div {
     grid-template-columns: 1fr;
   }
