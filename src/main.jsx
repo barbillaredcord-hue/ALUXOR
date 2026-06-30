@@ -1989,6 +1989,7 @@ function App() {
           </section>
         )}
 
+        {false && (
         <section className="panel type-admin">
           <div className="section-head">
             <div>
@@ -2011,6 +2012,7 @@ function App() {
             ))}
           </div>
         </section>
+        )}
 
         <footer className="footer-bar">
           <span>Calidad de datos: {score}/12</span>
