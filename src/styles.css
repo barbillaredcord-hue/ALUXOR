@@ -4891,7 +4891,7 @@ body,
 
 .production-section {
   display: grid;
-  gap: 18px;
+  gap: 20px;
 }
 
 .production-hero {
@@ -4952,6 +4952,48 @@ body,
   gap: 12px;
 }
 
+.production-progress-card {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  background: rgba(255, 253, 248, 0.9);
+  border: 1px solid rgba(23, 32, 27, 0.09);
+  border-radius: 16px;
+  box-shadow: 0 14px 30px rgba(17, 25, 21, 0.08);
+}
+
+.production-progress-card > div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.production-progress-card span {
+  color: #617068;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.production-progress-card strong {
+  color: #14241c;
+  font-size: 22px;
+}
+
+.production-progress {
+  height: 12px;
+  overflow: hidden;
+  background: #d9e3de;
+  border-radius: 999px;
+}
+
+.production-progress span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #22745f, #f0c84e);
+  border-radius: inherit;
+}
+
 .production-summary div,
 .production-card {
   padding: 16px;
@@ -4969,7 +5011,7 @@ body,
   line-height: 1.1;
 }
 
-.production-grid {
+.production-board {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
@@ -4978,6 +5020,7 @@ body,
 .production-card {
   display: grid;
   gap: 12px;
+  align-content: start;
 }
 
 .production-card h3 {
@@ -4992,6 +5035,7 @@ body,
 }
 
 .production-list div {
+  position: relative;
   padding: 11px;
   background: #eef4f1;
   border: 1px solid #d7e2dc;
@@ -5007,28 +5051,128 @@ body,
   margin-top: 3px;
 }
 
+.production-material-row {
+  padding-right: 112px !important;
+}
+
+.production-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 950;
+}
+
+.production-badge-completo {
+  color: #15503d;
+  background: #dff2e8;
+  border: 1px solid #b8dfca;
+}
+
+.production-badge-pendiente {
+  color: #745313;
+  background: #fff3cf;
+  border: 1px solid #ecd386;
+}
+
+.production-badge-falta-material {
+  color: #7b251e;
+  background: #ffe7df;
+  border: 1px solid #ecc0b2;
+}
+
+.production-plan-placeholder {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  min-height: 220px;
+  padding: 22px;
+  color: #526159;
+  background:
+    linear-gradient(135deg, rgba(240, 200, 78, 0.12), transparent),
+    repeating-linear-gradient(45deg, rgba(23, 32, 27, 0.04), rgba(23, 32, 27, 0.04) 8px, transparent 8px, transparent 18px),
+    #f8faf8;
+  border: 1px dashed rgba(31, 107, 82, 0.34);
+  border-radius: 14px;
+  text-align: center;
+}
+
+.production-plan-placeholder strong {
+  color: #1d3429;
+  font-size: 18px;
+}
+
+.production-notes {
+  background: linear-gradient(135deg, #fffdf8, #f4ead9);
+}
+
+.production-notes h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.production-notes p,
+.production-card > p {
+  margin: 0;
+  color: #526159;
+  font-weight: 850;
+  line-height: 1.5;
+}
+
 .production-checklist > div {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
-.production-checklist label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 11px;
+.production-checklist {
+  grid-column: 1 / -1;
+}
+
+.production-task {
+  display: grid;
+  gap: 7px;
+  min-height: 120px;
+  padding: 14px;
   background: #f4ead9;
   border: 1px solid #dfcfb5;
   border-radius: 12px;
   color: #1d3429;
+}
+
+.production-task svg {
+  color: #22745f;
+}
+
+.production-task strong {
+  font-size: 15px;
+}
+
+.production-task span {
+  width: fit-content;
+  padding: 5px 8px;
+  border-radius: 999px;
+  font-size: 11px;
   font-weight: 900;
 }
 
-.production-checklist input {
-  width: 18px;
-  height: 18px;
-  accent-color: #22745f;
+.production-task-pendiente span {
+  color: #745313;
+  background: #fff3cf;
+}
+
+.production-task-en-proceso span {
+  color: #15503d;
+  background: #dff2e8;
+}
+
+.production-task-completado span {
+  color: #f6fbf7;
+  background: #22745f;
 }
 
 .production-actions {
@@ -5037,7 +5181,7 @@ body,
 
 @media (max-width: 900px) {
   .production-summary,
-  .production-grid,
+  .production-board,
   .production-checklist > div {
     grid-template-columns: 1fr;
   }
