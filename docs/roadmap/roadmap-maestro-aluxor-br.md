@@ -71,12 +71,12 @@ Este documento debe actualizarse cada vez que:
 ## Dashboard de la Era II
 
 - Era actual: Era II — ERP Operativo.
-- Fase activa: Fase 23 — Consolidación del Flujo Operativo.
-- Estado general: En ejecución de planificación.
-- Objetivo inmediato: Definir el flujo operativo mínimo del proyecto.
+- Fase activa: Fase 23 — Modelo Operativo Canónico del Proyecto.
+- Estado general: Modelo Operativo Canónico documentado; transición hacia definición del Workflow Engine.
+- Objetivo inmediato: Iniciar la implementación del Workflow Engine sobre la arquitectura existente.
 - Build: Estable.
 - Pruebas: Aprobadas (estado base).
-- Próximo hito: Iniciar implementación de la Fase 23.
+- Próximo hito: Iniciar la Fase 24 — Implementación del Workflow Engine.
 
 ## Avance del Proyecto
 
@@ -85,9 +85,9 @@ Este documento debe actualizarse cada vez que:
 | Era 0 | ✅ | 100% |
 | Era I | ✅ | 100% |
 | Fase 22 | ✅ | 100% |
-| Era II | 🟡 | 5% |
-| Fase 23 | 🟡 | 0% |
-| Fase 24 | ⏳ | 0% |
+| Era II | 🟡 | 25% |
+| Fase 23 | 🟡 | 100% |
+| Fase 24 | ⏳ | 5% |
 | Fase 25 | ⏳ | 0% |
 | Fase 26 | ⏳ | 0% |
 | Fase 27 | ⏳ | 0% |
@@ -234,13 +234,13 @@ La Era II podrá considerarse cerrada cuando:
 
 ---
 
-# 5. Fase 23 — Consolidación del Flujo Operativo
+# 5. Fase 23 — Modelo Operativo Canónico del Proyecto
 
-**Estado:** 🟡 En planificación
+**Estado:** 🟡 En ejecución
 
 ## Objetivo
 
-Definir y consolidar el flujo mínimo completo del proyecto dentro del sistema.
+Documentar el Modelo Operativo Canónico del Proyecto, estableciendo el comportamiento esperado de cada etapa del ciclo de vida del proyecto y preparando la base funcional del Workflow Engine.
 
 ## Problema que resuelve
 
@@ -283,19 +283,20 @@ Actualmente existen módulos y motores importantes, pero la prioridad es asegura
 
 ## Entregables
 
-- Mapa del flujo operativo mínimo.
-- Tabla de estados de proyecto.
-- Lista de integraciones faltantes.
-- Lista de duplicidades.
-- Checklist de transición hacia Fase 24.
+- Modelo Conceptual del ERP.
+- Modelo Operativo Canónico del Proyecto.
+- Etapas E01–E15 documentadas.
+- Estados canónicos del proyecto.
+- Lista de integraciones pendientes.
+- Lista de decisiones pendientes para Workflow Engine.
 
 ## Criterios de aceptación
 
-- El flujo completo está documentado.
-- Cada módulo tiene claro su papel dentro del proyecto.
-- Las dependencias entre módulos están identificadas.
-- No se agregan funcionalidades que rompan el Norte del Proyecto.
-- El sistema conserva build estable.
+- El Modelo Operativo Canónico está documentado.
+- Las etapas E01–E15 están definidas.
+- La relación entre módulos y motores está identificada.
+- Existe una base para el Workflow Engine.
+- El sistema conserva estabilidad documental y técnica.
 
 ---
 
@@ -466,12 +467,12 @@ ALUXOR / BR ayuda al taller a crecer hacia afuera, no solo a organizarse interna
 
 ## Prioridad crítica
 
-- Definir flujo operativo mínimo.
-- Consolidar estados de proyecto.
-- Conectar cotización con producción.
-- Conectar compras con inventario.
-- Conectar inventario con fabricación.
-- Preparar historial estructurado.
+- Implementar estados del Workflow Engine.
+- Implementar transiciones oficiales.
+- Implementar registro de eventos históricos.
+- Integrar Workflow Engine con Cotización.
+- Integrar Workflow Engine con Producción.
+- Integrar Workflow Engine con Historial.
 
 ## Prioridad alta
 
@@ -525,12 +526,11 @@ ALUXOR / BR ayuda al taller a crecer hacia afuera, no solo a organizarse interna
 
 # Decisiones Abiertas
 
-- Definición precisa de los estados del proyecto para asegurar trazabilidad confiable.
-- Implementación y reglas para reservas de inventario por proyecto.
-- Estrategias para la recepción parcial y su impacto en inventario y compras.
-- Diseño y estructura del historial de eventos para facilitar aprendizaje futuro.
-- Selección de KPIs mínimos necesarios para reportes operativos iniciales.
-- Criterios y condiciones para iniciar la fase de inteligencia artificial basada en datos reales.
+- Definir permisos por rol para ejecutar transiciones.
+- Definir qué transiciones serán automáticas, manuales o mixtas.
+- Definir la política de reversión de estados.
+- Definir la estrategia de archivado de proyectos.
+- Definir el versionado del Workflow Engine.
 
 ---
 
@@ -550,11 +550,11 @@ Antes de iniciar cualquier tarea se debe responder:
 
 # Próxima Sesión de Desarrollo
 
-- **Objetivo:** Definir y documentar el flujo operativo mínimo del proyecto para la Fase 23.
-- **Módulos afectados:** Cotización, Producción, Compras, Recepción, Inventario, Fabricación, Historial, Inspector Inteligente.
-- **Motores afectados:** BR Engine, Workflow Engine, Cut Optimizer, Project Companion.
-- **Validaciones esperadas:** Documentación completa del flujo, identificación de dependencias y duplicidades, checklist de transición.
-- **Resultado esperado:** Flujo operativo mínimo consolidado y backlog depurado para avanzar a la implementación.
+- **Objetivo:** Iniciar la implementación del Workflow Engine.
+- **Módulos afectados:** Workflow Engine, Cotización, Historial y Producción.
+- **Motores afectados:** Workflow Engine y BR Engine.
+- **Validaciones esperadas:** Estados, transiciones y eventos funcionando de forma consistente.
+- **Resultado esperado:** Primer flujo operativo ejecutándose dentro de la aplicación.
 
 ---
 
@@ -576,6 +576,4 @@ La plataforma se expande más allá de carpintería, vidrio y aluminio hacia mú
 
 # 18. Próximo Objetivo Inmediato
 
-Completar la Fase 23.
-
-La prioridad inmediata es definir el flujo operativo mínimo del proyecto, identificar integraciones faltantes y ordenar el backlog de la Era II antes de escribir nuevas funcionalidades grandes.
+Iniciar la Fase 24 — Implementación del Workflow Engine, integrando estados, transiciones y eventos históricos con los módulos existentes para convertir el Modelo Operativo Canónico en comportamiento ejecutable dentro de ALUXOR / BR.
