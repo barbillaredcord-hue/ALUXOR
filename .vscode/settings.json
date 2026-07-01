@@ -34,7 +34,27 @@
     "Vidrieria",
     "Carpinteria",
     "zoclo",
-    "metalness"
+    "metalness",
+    "entregable",
+    "entregables",
+    "planeación",
+    "Planeación",
+    "retrabajo",
+    "retrabajos",
+    "aluxor",
+    "cotizador",
+    "Rediseño",
+    "Reescritura",
+    "Multiempresa",
+    "Rediseñar",
+    "multiempresa",
+    "planeacion",
+    "recepcion",
+    "optimizacion",
+    "fabricacion",
+    "instalacion",
+    "semiterminal",
+    "semiterminales"
   ],
   "python.testing.pytestArgs": [
     "launcher"
