@@ -4688,6 +4688,7 @@ body,
     linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 22%),
     linear-gradient(180deg, var(--aluxor-graphite), #17251d 56%, #102018);
   border-right: 1px solid rgba(240, 200, 78, 0.18);
+  min-height: initial;
 }
 
 .workspace-sidebar-stack {
@@ -6860,7 +6861,7 @@ body,
 
   .workspace-layout-sidebar {
     position: static;
-    min-height: auto;
+    min-height: initial;
   }
 
   .workspace-layout-content,
@@ -6870,5 +6871,327 @@ body,
 
   .inspector-panel {
     grid-template-columns: 1fr;
+  }
+}
+
+.workspace-layout {
+  grid-template-columns: 292px minmax(0, 1fr) clamp(280px, 22vw, 360px);
+  align-items: start;
+}
+
+.workspace-layout-content,
+.content,
+.quote-editor,
+.quote-workspace,
+.panel,
+.quote-accordion,
+.quote-table,
+.quote-table-row {
+  min-width: 0;
+}
+
+.workspace-layout-content {
+  overflow-x: hidden;
+}
+
+.workspace-layout-inspector {
+  min-width: 0;
+  max-width: 380px;
+  width: 100%;
+  padding-right: 18px;
+}
+
+.inspector-panel,
+.workspace-temp-inspector {
+  max-width: 100%;
+}
+
+.quote-table {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.quote-table-header,
+.quote-table-row {
+  width: max-content;
+}
+
+@media (max-width: 1380px) {
+  .workspace-layout {
+    grid-template-columns: 280px minmax(0, 1fr);
+  }
+
+  .workspace-layout-inspector {
+    grid-column: 2;
+    max-width: none;
+    padding: 0 26px 26px;
+  }
+
+  .workspace-temp-inspector,
+  .inspector-panel {
+    position: static;
+  }
+}
+
+@media (max-width: 980px) {
+  .workspace-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-layout-sidebar,
+  .workspace-layout-content,
+  .workspace-layout-inspector {
+    grid-column: 1;
+  }
+
+  .workspace-layout-sidebar {
+    position: static;
+    min-height: initial;
+  }
+
+  .workspace-layout-content,
+  .workspace-layout-inspector {
+    padding: 16px;
+  }
+}
+/* Fase 23.5 — Cotizador operativo sin panel flotante invasivo */
+.quote-operational-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+  gap: 18px;
+  align-items: start;
+  width: 100%;
+}
+
+.quote-main-editor {
+  min-width: 0;
+}
+
+.quote-summary-dock {
+  position: sticky;
+  top: 22px;
+  z-index: 4;
+  width: 100%;
+  max-height: calc(100vh - 44px);
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(255, 253, 248, 0.98), rgba(231, 241, 243, 0.96));
+  border: 1px solid rgba(34, 116, 95, 0.24);
+  border-radius: 14px;
+  box-shadow: 0 18px 46px rgba(20, 36, 28, 0.14);
+}
+
+.quote-summary-dock .quote-floating-head {
+  cursor: default;
+}
+
+.quote-summary-dock .quote-floating-body {
+  max-height: calc(100vh - 104px);
+  overflow: auto;
+  padding: 12px;
+}
+
+.quote-summary-dock .total-number {
+  font-size: 32px;
+}
+
+.quote-summary-dock.compact .live-summary-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.quote-summary-dock.compact .professional-card p:not(.professional-total),
+.quote-summary-dock.compact .professional-card ul {
+  display: none;
+}
+
+.quote-summary-dock.minimized .quote-floating-body {
+  display: none;
+}
+
+@media (max-width: 1380px) {
+  .quote-operational-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .quote-summary-dock {
+    position: static;
+    max-height: none;
+  }
+
+  .quote-summary-dock .quote-floating-body {
+    max-height: none;
+  }
+}
+/* Fase 23.5 — Cotizador compacto en escritorio */
+@media (min-width: 1100px) {
+  .quote-accordion-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+
+  .quote-accordion summary.dashboard-summary {
+    min-height: 58px;
+    padding: 10px 12px;
+    grid-template-columns: 38px minmax(0, 1fr) auto;
+  }
+
+  .dashboard-number {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    font-size: 13px;
+  }
+
+  .dashboard-title strong {
+    font-size: 15px;
+  }
+
+  .dashboard-title small {
+    font-size: 11px;
+    line-height: 1.15;
+  }
+
+  .dashboard-summary em {
+    min-width: 74px;
+    padding: 5px 8px;
+    font-size: 11px;
+  }
+
+  .quote-accordion > .form-grid,
+  .quote-accordion > .quote-table,
+  .quote-accordion > .data-health-panel,
+  .quote-accordion > .advanced-note,
+  .add-row-button {
+    margin: 0 12px 12px;
+  }
+
+  .quote-editor {
+    padding: 18px;
+  }
+}
+/* Fase 23.5 — Hero compacto de proyecto activo */
+.hero.hero-compact {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 14px;
+  padding: 14px 16px;
+}
+
+.hero-main {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.hero-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.hero-status-row .eyebrow {
+  margin: 0;
+}
+
+.hero-status-row span {
+  width: fit-content;
+  padding: 5px 9px;
+  color: #f6fbf7;
+  background: #22745f;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 950;
+}
+
+.hero-title-row {
+  align-items: center;
+  gap: 10px;
+}
+
+.hero-title-row .hero-logo {
+  width: 42px;
+  height: 42px;
+}
+
+.hero.hero-compact h1 {
+  margin: 0;
+  font-size: clamp(24px, 2.2vw, 32px);
+  line-height: 1.02;
+}
+
+.hero.hero-compact p:not(.eyebrow) {
+  margin: 4px 0 0;
+  max-width: none;
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.hero-project-meta.compact-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 0;
+}
+
+.hero-project-meta.compact-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 5px 9px;
+  background: rgba(255, 253, 248, 0.72);
+  border: 1px solid rgba(23, 32, 27, 0.08);
+  border-radius: 999px;
+  color: #526159;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.hero-project-meta.compact-meta strong {
+  color: #17201b;
+  font-size: 12px;
+}
+
+.hero-actions.hero-actions-compact {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(108px, 1fr));
+  gap: 8px;
+  max-width: 260px;
+}
+
+.hero-actions.hero-actions-compact button {
+  min-height: 38px;
+  padding: 0 10px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+@media (max-width: 1180px) {
+  .hero.hero-compact {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-actions.hero-actions-compact {
+    display: flex;
+    flex-wrap: wrap;
+    max-width: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .hero.hero-compact {
+    padding: 12px;
+  }
+
+  .hero-actions.hero-actions-compact {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .hero-actions.hero-actions-compact button {
+    width: 100%;
   }
 }

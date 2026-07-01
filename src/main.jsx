@@ -1713,26 +1713,34 @@ function App() {
 
         content={(
       <section className="content">
-        <header className="hero">
-          <div>
-            <p className="eyebrow">Proyecto activo · Versión {APP_VERSION}</p>
-            <div className="hero-brand-line">
-              {appLogo ? <img src={appLogo} alt="Logo ALUXOR/BosqueReal" className="hero-logo" /> : null}
-              <h1>{form.producto || 'Proyecto sin nombre'}</h1>
+        <header className="hero hero-compact">
+          <div className="hero-main">
+            <div className="hero-status-row">
+              <p className="eyebrow">Proyecto activo · Versión {APP_VERSION}</p>
+              <span>{form.estadoCotizacion || 'Pendiente'}</span>
             </div>
-            <p>{form.clienteNombre || 'Cliente pendiente'} · {form.estadoCotizacion || 'Pendiente'} · Responsable: Taller ALUXOR</p>
-            <div className="hero-project-meta">
+
+            <div className="hero-brand-line hero-title-row">
+              {appLogo ? <img src={appLogo} alt="Logo ALUXOR/BosqueReal" className="hero-logo" /> : null}
+              <div>
+                <h1>{form.producto || 'Proyecto sin nombre'}</h1>
+                <p>{form.clienteNombre || 'Cliente pendiente'} · Responsable: Taller ALUXOR</p>
+              </div>
+            </div>
+
+            <div className="hero-project-meta compact-meta">
               <span>Avance <strong>{decimal(dataHealth.score, 0)}%</strong></span>
-              <span>Fecha compromiso <strong>{form.entrega || 'Por definir'}</strong></span>
-              <span>Próxima acción <strong>{quote.materialRows?.[0]?.nombre ? `Comprar ${quote.materialRows[0].nombre}` : 'Revisar datos del proyecto'}</strong></span>
+              <span>Entrega <strong>{form.entrega || 'Por definir'}</strong></span>
+              <span>Próxima acción <strong>{quote.materialRows?.[0]?.nombre ? `Comprar ${quote.materialRows[0].nombre}` : 'Revisar datos'}</strong></span>
             </div>
           </div>
-          <div className="hero-actions">
-            <button type="button" className="ghost" onClick={refreshInstalledApp}><RefreshCw size={18} /> Actualizar app</button>
-            <button type="button" className="ghost" onClick={() => syncHistory(true)}><History size={18} /> Restaurar</button>
-            <button type="button" className="ghost" onClick={() => setActiveSection('textos')}><FileText size={18} /> Ver textos</button>
-            <button type="button" onClick={openWhatsApp}><MessageCircle size={18} /> WhatsApp</button>
-            <button type="button" onClick={() => openPrint('client')}><FileText size={18} /> PDF</button>
+
+          <div className="hero-actions hero-actions-compact">
+            <button type="button" className="ghost" onClick={refreshInstalledApp}><RefreshCw size={16} /> Actualizar</button>
+            <button type="button" className="ghost" onClick={() => syncHistory(true)}><History size={16} /> Restaurar</button>
+            <button type="button" className="ghost" onClick={() => setActiveSection('textos')}><FileText size={16} /> Textos</button>
+            <button type="button" onClick={openWhatsApp}><MessageCircle size={16} /> WhatsApp</button>
+            <button type="button" onClick={() => openPrint('client')}><FileText size={16} /> PDF</button>
           </div>
         </header>
 

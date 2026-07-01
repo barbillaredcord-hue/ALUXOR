@@ -69,8 +69,8 @@ export default function QuoteSection({
   professionalAnalysis,
 }) {
   return (
-          <section className="quote-workspace panel-grid two-cols">
-            <article className="panel quote-editor">
+          <section className="quote-workspace quote-operational-layout">
+            <article className="panel quote-editor quote-main-editor">
               <div className="section-head quote-head">
                 <div>
                   <h2>Cotizador profesional</h2>
@@ -85,7 +85,7 @@ export default function QuoteSection({
                 ))}
               </div>
 
-              <details className="quote-accordion quick-calculator" open>
+              <details className="quote-accordion quick-calculator">
                 <DashboardSummary number="03" title="Calculadora rápida de material" description="Herramienta de referencia, no suma hasta aplicar." status="Herramienta" highlight />
                 <div className="form-grid">
                   <Field id="quickNombre" label="Nombre del material"><input id="quickNombre" value={quickCalc.nombre} onChange={(event) => updateQuickCalc('nombre', event.target.value)} /></Field>
@@ -169,7 +169,7 @@ export default function QuoteSection({
               </details>
 
               <div className="quote-accordion-list">
-                <details className="quote-accordion" open>
+                <details className="quote-accordion">
                 <DashboardSummary number="01" icon={UserRound} title="Cliente y proyecto" description="Datos básicos para identificar la cotización." status={form.clienteNombre ? 'Completo' : 'Incompleto'} />
                   <div className="form-grid">
                     <Field id="clienteNombre" label="Cliente" {...guideFor('clienteNombre')}>{input('clienteNombre')}</Field>
@@ -238,7 +238,7 @@ export default function QuoteSection({
                   <button type="button" className="ghost add-row-button" onClick={addMeasureItem}>Agregar medida</button>
                 </details>
 
-                <details className="quote-accordion" open>
+                <details className="quote-accordion">
                   <DashboardSummary number="04" icon={Layers} title="Materiales de cotización" description="Compra, merma, margen y utilidad por material." status={quote.material > 0 ? 'Completo' : 'Revisar'} highlight />
                   <div className="form-grid material-base-grid">
                     <Field id="materialCotizacion" label="Material cotización" {...guideFor('materialCotizacion')}>{input('materialCotizacion')}</Field>
@@ -456,17 +456,15 @@ export default function QuoteSection({
             </article>
 
             <aside
-              className={`quote-floating ${floatingSummary.compact ? 'compact' : ''} ${floatingSummary.minimized ? 'minimized' : ''}`}
-              style={{ left: floatingSummary.x, top: floatingSummary.y }}
+              className={`quote-summary-dock ${floatingSummary.compact ? 'compact' : ''} ${floatingSummary.minimized ? 'minimized' : ''}`}
               aria-label="Resumen de cotización"
               aria-live="polite"
             >
-              <div className="quote-floating-head" onMouseDown={startSummaryDrag}>
+              <div className="quote-floating-head">
                 <strong>Resumen de cotización</strong>
                 <div>
                   <button type="button" onClick={() => setFloatingSummary((current) => ({ ...current, compact: !current.compact }))}>Compacta</button>
                   <button type="button" onClick={() => setFloatingSummary((current) => ({ ...current, minimized: !current.minimized }))}>{floatingSummary.minimized ? 'Abrir' : 'Cerrar'}</button>
-                  <button type="button" onClick={() => setFloatingSummary({ x: 24, y: 120, compact: false, minimized: false })}>Inicial</button>
                 </div>
               </div>
               {!floatingSummary.minimized && (

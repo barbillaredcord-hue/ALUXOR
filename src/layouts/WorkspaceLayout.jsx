@@ -1,15 +1,21 @@
 export default function WorkspaceLayout({ sidebar, content, inspector }) {
+  const hasInspector = Boolean(inspector);
+
   return (
-    <div className="workspace-layout">
-      <aside className="workspace-layout-sidebar">
+    <div className={hasInspector ? "workspace-layout" : "workspace-layout no-inspector"}>
+      <aside className="workspace-layout-sidebar" aria-label="Navegación principal">
         {sidebar}
       </aside>
-      <main className="workspace-layout-content">
+
+      <main className="workspace-layout-content" aria-label="Área principal de trabajo">
         {content}
       </main>
-      <aside className="workspace-layout-inspector">
-        {inspector}
-      </aside>
+
+      {hasInspector ? (
+        <aside className="workspace-layout-inspector" aria-label="Inspector inteligente">
+          {inspector}
+        </aside>
+      ) : null}
     </div>
   );
 }
