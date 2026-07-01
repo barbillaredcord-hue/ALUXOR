@@ -1,228 +1,137 @@
 # ALUXOR / BR
 
-# ROADMAP MAESTRO
+# ROADMAP MAESTRO DE DESARROLLO
 
-## Edición Fundadora
+## Edición Operativa
 
 ---
 
-> **Construyendo el sistema operativo para talleres de fabricación personalizada.**
+> Documento vivo para dirigir la ejecución del producto, organizar las eras de desarrollo y definir qué sigue en ALUXOR / BR.
 
-**Versión:** 1.0 (Borrador)
+**Versión:** 1.0 (Borrador operativo)
 
-**Estado del Proyecto:** Fase 22 completada
+**Estado del Proyecto:** Era II — ERP Operativo
 
 **Fecha:** Julio 2026
 
 ---
 
-## Documento Estratégico
+## Relación con el Libro Maestro
 
-Este documento concentra la visión, filosofía, arquitectura, evolución y roadmap de ALUXOR / BR.
+Este documento NO sustituye al Libro Maestro.
 
-No es únicamente documentación técnica.
+La filosofía, arquitectura, visión, principios permanentes y decisiones estratégicas de ALUXOR / BR se documentan en:
 
-Es la guía que explica por qué existe el proyecto, cómo ha evolucionado y hacia dónde se dirige.
+`docs/roadmap/libro-maestro-aluxor-br.md`
 
-Su objetivo es preservar el conocimiento del proyecto para los próximos años y servir como referencia para desarrolladores, socios, inversionistas y futuros colaboradores.
+Este archivo se utiliza para responder preguntas operativas:
 
----
-
-## Estado actual
-
-ALUXOR / BR nace a partir de la experiencia real de dos talleres:
-
-- **ALUXOR** — Taller de vidrio y aluminio.
-- **BosqueReal** — Taller de carpintería.
-
-Ambos comparten los mismos problemas de administración, fabricación y seguimiento de proyectos.
-
-La primera implementación del sistema está orientada a resolver esas necesidades reales, con la visión de evolucionar hacia una plataforma adaptable para cualquier taller de fabricación personalizada.
-
-<div class="page-break"></div>
-
-# Índice
-
-1. Carta del fundador
-2. ¿Por qué existe ALUXOR / BR?
-3. El problema de la industria
-4. Nuestra visión
-5. Nuestra misión
-6. Filosofía del producto
-7. Principios del proyecto
-8. Arquitectura general
-9. Workspace
-10. BR Engine
-11. Workflow Engine
-12. Cut Optimizer
-13. Project Companion
-14. Inspector Inteligente
-15. Flujo completo del proyecto
-16. Roadmap por Eras
-17. Estado actual
-18. Caso de estudio — Fase 22
-19. Próxima etapa — Fase 23
-20. Inteligencia Artificial
-21. Modelo de negocio
-22. Visión 2035
-23. Conclusiones
-
-<div class="page-break"></div>
-
-# Carta del fundador
-
-ALUXOR / BR no nació con la intención de convertirse en otro cotizador.
-
-Nació como respuesta a un problema que viven miles de talleres todos los días.
-
-Durante años, los talleres de carpintería, aluminio y vidrio han trabajado utilizando herramientas separadas para realizar cotizaciones, administrar materiales, controlar compras, fabricar productos y dar seguimiento a los proyectos.
-
-La información se pierde entre hojas de cálculo, mensajes, llamadas telefónicas y documentos dispersos.
-
-Cada proyecto vuelve a comenzar prácticamente desde cero.
-
-Cada empleado guarda parte del conocimiento del taller únicamente en su experiencia personal.
-
-Nuestro objetivo es cambiar esa realidad.
-
-ALUXOR / BR busca convertirse en el sistema operativo del taller moderno.
-
-Un único Workspace capaz de acompañar un proyecto desde la primera conversación con el cliente hasta la entrega final, aprendiendo continuamente de cada trabajo realizado.
-
-Este documento representa la visión fundadora del proyecto y será la base sobre la cual evolucionarán las siguientes versiones del sistema.
-
-<div class="page-break"></div>
-# ¿Por qué existe ALUXOR / BR?
-
-## El origen
-
-ALUXOR / BR no nació como una idea para desarrollar un software.
-
-Nació dentro de un taller.
-
-Durante años fue posible observar cómo la mayor parte del tiempo no se perdía fabricando muebles, canceles o cocinas. El verdadero tiempo se perdía buscando información, corrigiendo errores, preguntando medidas nuevamente, recalculando materiales y resolviendo problemas que ya habían ocurrido antes.
-
-Fue entonces cuando apareció una pregunta que cambiaría por completo la dirección del proyecto:
-
-> **¿Y si el problema no fuera la cotización, sino la forma en la que se administra todo el proyecto?**
-
-Esa pregunta marcó el inicio de ALUXOR / BR.
+- ¿Qué ya se construyó?
+- ¿Qué fase está activa?
+- ¿Qué sigue?
+- ¿Qué depende de qué?
+- ¿Qué módulos están afectados?
+- ¿Qué criterios deben cumplirse para cerrar una etapa?
 
 ---
 
-## Mucho más que un cotizador
+# 1. Propósito del Roadmap
 
-Al principio parecía lógico desarrollar únicamente un cotizador profesional.
+El Roadmap Maestro de Desarrollo es el centro de mando para continuar construyendo ALUXOR / BR.
 
-Sin embargo, conforme el proyecto avanzó quedó claro que la cotización representa solamente una pequeña parte del trabajo real de un taller.
+Su función es organizar el avance del producto desde sus primeras fases hasta la etapa actual, definiendo eras, fases, prioridades, dependencias, riesgos, backlog y criterios de cierre.
 
-Después de entregar un precio comienzan procesos mucho más complejos:
+Este documento debe actualizarse cada vez que:
 
-- Confirmación del proyecto.
-- Levantamiento de medidas.
-- Definición de materiales.
-- Optimización de cortes.
-- Compra de insumos.
-- Recepción de mercancía.
-- Fabricación.
-- Instalación.
-- Entrega.
-- Garantía.
-
-Si cualquiera de esos pasos falla, el proyecto completo se ve afectado.
-
-Por esa razón ALUXOR / BR dejó de evolucionar como un cotizador y comenzó a transformarse en un sistema capaz de acompañar todo el ciclo de vida del proyecto.
+- Se cierre una fase.
+- Cambie el objetivo de una etapa.
+- Se agregue o elimine una prioridad.
+- Se detecte una dependencia crítica.
+- Se tome una decisión que afecte el orden de desarrollo.
 
 ---
 
-## El conocimiento no debe perderse
+# 2. Estado Ejecutivo Actual
 
-Uno de los mayores problemas detectados en los talleres tradicionales es que gran parte del conocimiento permanece únicamente en la experiencia de las personas.
+| Área | Estado | Observación |
+|------|:------:|-------------|
+| Arquitectura general | 🟢 Estable | Workspace y motores principales consolidados. |
+| Cotización | 🟢 Estable | Base funcional del sistema. |
+| BR Engine | 🟢 Estable | Núcleo de reglas y cálculos. |
+| Workflow Engine | 🟢 Estable | Base del flujo de proyecto. |
+| Cut Optimizer | 🟢 Estable | Fase 22 completada con validación física. |
+| Producción | 🟡 En evolución | Requiere mayor trazabilidad. |
+| Compras | 🟡 En evolución | Requiere integración más fuerte con proyecto e inventario. |
+| Recepción | 🟡 En evolución | Requiere validaciones y evidencias. |
+| Inventario | 🟡 En evolución | Requiere reservas, movimientos y conexión por proyecto. |
+| Fabricación | 🟡 En evolución | Requiere planeación y seguimiento real. |
+| Historial | 🟡 Funcional | Debe prepararse para aprendizaje futuro. |
+| IA | 🔵 Planeada | Aún no debe ser prioridad hasta consolidar trazabilidad. |
 
-Cuando un empleado deja la empresa también se pierde información importante:
+## Dashboard de la Era II
 
-- Cómo resolvía ciertos trabajos.
-- Qué materiales prefería.
-- Qué errores evitaba.
-- Qué proveedores funcionaban mejor.
-- Cuánto tiempo tomaba realmente fabricar un proyecto.
+- Era actual: Era II — ERP Operativo.
+- Fase activa: Fase 23 — Consolidación del Flujo Operativo.
+- Estado general: En ejecución de planificación.
+- Objetivo inmediato: Definir el flujo operativo mínimo del proyecto.
+- Build: Estable.
+- Pruebas: Aprobadas (estado base).
+- Próximo hito: Iniciar implementación de la Fase 23.
 
-ALUXOR / BR busca convertir ese conocimiento en información estructurada para que el taller aprenda de cada proyecto terminado.
+## Avance del Proyecto
 
-Cada trabajo debe hacer más inteligente al siguiente.
-
----
-
-## El proyecto como centro del sistema
-
-Muchos programas están organizados alrededor de módulos independientes.
-
-ALUXOR / BR adopta una filosofía diferente.
-
-El elemento principal no es la venta.
-
-No es la cotización.
-
-No es el inventario.
-
-El verdadero protagonista es **el proyecto**.
-
-Cada módulo existe únicamente para ayudar al proyecto a avanzar desde su primera conversación con el cliente hasta su entrega final.
-
-Esa decisión define toda la arquitectura del sistema.
-
----
-
-## Nuestra convicción
-
-Creemos que los talleres pequeños y medianos merecen herramientas del mismo nivel que utilizan las grandes empresas manufactureras.
-
-No herramientas más complejas.
-
-Herramientas más inteligentes.
-
-Más simples.
-
-Más conectadas.
-
-Más útiles.
-
-ALUXOR / BR nace con ese propósito:
-
-Construir el sistema operativo que acompañe el crecimiento del taller durante muchos años, preservando su conocimiento, reduciendo errores y convirtiéndose en una plataforma capaz de evolucionar junto con la empresa.
-
-<div class="page-break"></div>
-<div class="page-break"></div>
-
-# Resumen Ejecutivo
-
-## Proyecto
-
-**ALUXOR / BR** (nombre comercial provisional)
-
-ALUXOR / BR es un ERP especializado para talleres de fabricación personalizada. Su propósito es integrar en un solo Workspace todas las actividades necesarias para administrar un proyecto desde el primer contacto con el cliente hasta su entrega e historial.
-
-La primera implementación del sistema se desarrolla a partir de la experiencia real de dos talleres:
-
-- **ALUXOR** — Especializado en vidrio y aluminio.
-- **BosqueReal** — Especializado en carpintería y fabricación de mobiliario.
-
-Aunque nace en estos dos sectores, la arquitectura del sistema está diseñada para evolucionar hacia una plataforma adaptable a cualquier taller de fabricación personalizada.
+| Elemento | Estado | Avance |
+|---|:---:|---:|
+| Era 0 | ✅ | 100% |
+| Era I | ✅ | 100% |
+| Fase 22 | ✅ | 100% |
+| Era II | 🟡 | 5% |
+| Fase 23 | 🟡 | 0% |
+| Fase 24 | ⏳ | 0% |
+| Fase 25 | ⏳ | 0% |
+| Fase 26 | ⏳ | 0% |
+| Fase 27 | ⏳ | 0% |
+| Fase 28 | ⏳ | 0% |
+| Fase 29 | ⏳ | 0% |
+| Fase 30 | ⏳ | 0% |
 
 ---
 
-# Estado actual del proyecto
+# 3. Historia del Desarrollo
 
-Durante las primeras fases de desarrollo se consolidó la arquitectura principal del sistema.
+## Era 0 — Descubrimiento
 
-Actualmente el proyecto cuenta con:
+**Estado:** ✅ Completada
 
-- Workspace unificado.
-- Dashboard principal.
-- Sistema profesional de cotizaciones.
+### Objetivo
+
+Comprender el problema real del taller.
+
+### Resultado
+
+Se descubrió que el problema principal no era únicamente cotizar, sino administrar el ciclo completo del proyecto: cliente, medidas, materiales, compras, inventario, fabricación, instalación, entrega e historial.
+
+### Decisión clave
+
+El proyecto se convirtió en el centro del sistema.
+
+---
+
+## Era I — Fundación
+
+**Estado:** ✅ Completada
+
+### Objetivo
+
+Construir la base funcional y arquitectónica de ALUXOR / BR.
+
+### Capacidades consolidadas
+
+- Workspace de tres columnas.
+- Dashboard.
+- Cotización profesional.
 - BR Engine.
 - Workflow Engine.
-- Cut Optimizer.
 - Producción.
 - Compras.
 - Recepción.
@@ -230,48 +139,443 @@ Actualmente el proyecto cuenta con:
 - Fabricación.
 - Historial.
 - Catálogo.
-- Inspector Inteligente.
 - Project Flow.
 - Project Companion.
+- Inspector Inteligente.
+- Cut Optimizer.
+- Pruebas automatizadas.
+- Build estable.
 
-La Fase 22 representa uno de los hitos más importantes del proyecto al convertir el Cut Optimizer en un motor físicamente consistente e integrado con el resto de la plataforma.
+### Resultado
 
-Entre los resultados obtenidos destacan:
+ALUXOR / BR dejó de ser un cotizador y se consolidó como la base de un ERP especializado para talleres de fabricación personalizada.
 
-- Validación física de los cortes.
-- API estable para integración.
+---
+
+## Fase 22 — Cut Optimizer
+
+**Estado:** ✅ Completada
+
+### Importancia
+
+La Fase 22 fue un hito porque convirtió el Cut Optimizer en un motor físicamente consistente, validado y conectado con fabricación.
+
+### Resultados
+
+- Validación física de cortes.
+- API estable.
 - Integración con BR Engine.
-- Impacto automático sobre costos y resumen económico.
-- Consumo directo desde Fabricación.
-- Más de 45 pruebas automatizadas.
-- Build estable para producción.
+- Render SVG.
+- Consumo desde Fabricación.
+- Impacto en costos.
+- Pruebas automatizadas pasando.
+- Build estable.
+
+### Aprendizaje
+
+Los motores deben validarse no solo en código, sino contra la realidad física del taller.
 
 ---
 
-# Nuestra visión
+# Definición del ERP Operativo
 
-No buscamos desarrollar un software más para talleres.
+El objetivo principal del ERP Operativo no es simplemente digitalizar información, sino coordinar de manera efectiva los proyectos, las personas, los materiales, el tiempo y las decisiones a lo largo del ciclo de vida de cada proyecto. Esto implica integrar procesos y módulos para que trabajen de forma sincronizada, garantizando la trazabilidad y la eficiencia operativa.
 
-Buscamos construir una plataforma que acompañe cada proyecto durante todo su ciclo de vida.
+Esta coordinación permite que cada proyecto avance con visibilidad clara en todas sus etapas, desde la cotización hasta la entrega, facilitando la toma de decisiones basada en datos confiables y actualizados. Además, busca reducir la duplicidad de información y evitar la fragmentación del sistema.
 
-Cada módulo, cada motor y cada futura integración existe para cumplir un mismo objetivo:
+El ERP Operativo también debe ser una plataforma flexible que se adapte a las necesidades cambiantes del taller, permitiendo escalar y preparar la base para futuras funcionalidades avanzadas, como la inteligencia artificial y reportes ejecutivos.
 
-> Convertir la información del taller en conocimiento permanente, reducir errores y permitir que cualquier empresa de fabricación personalizada pueda crecer sobre una base tecnológica sólida.
+En resumen, la meta es transformar ALUXOR / BR en un sistema conectado y coherente que soporte la operación diaria del taller de manera integral y eficiente.
 
 ---
 
-# Principio rector
+# 4. Era II — ERP Operativo
 
-**El proyecto es el centro del sistema.**
+**Estado:** 🟡 Actual
 
-No la cotización.
+## Objetivo general
 
-No la fabricación.
+Convertir ALUXOR / BR en un ERP operativo conectado, capaz de acompañar proyectos reales de principio a fin sin depender de módulos aislados.
 
-No el inventario.
+## Enfoque
 
-Todo gira alrededor del proyecto.
+La Era II no debe centrarse en agregar pantallas grandes.
 
-Cada motor existe para ayudar al proyecto a avanzar de forma controlada, documentada y medible.
+Debe centrarse en:
 
-<div class="page-break"></div>
+- Integrar módulos existentes.
+- Reducir duplicidad de información.
+- Fortalecer trazabilidad.
+- Consolidar flujo por proyecto.
+- Preparar historial útil para IA futura.
+- Convertir operación dispersa en operación conectada.
+
+## Objetivos Estratégicos
+
+- **OE-1 Flujo Operativo:** Definir y consolidar el flujo mínimo completo del proyecto dentro del sistema.
+- **OE-2 Trazabilidad:** Hacer visible qué ocurrió en cada proyecto, cuándo, quién intervino y qué impacto tuvo.
+- **OE-3 Inventario:** Conectar inventario con proyectos, compras, fabricación y sobrantes para un control activo.
+- **OE-4 Compras:** Integrar compras como consecuencia lógica de cotización, planeación, inventario y fabricación.
+- **OE-5 Fabricación:** Fortalecer fabricación como etapa medible, trazable y conectada al proyecto.
+- **OE-6 Reportes:** Proveer visibilidad ejecutiva sobre el desempeño del taller con métricas relevantes.
+- **OE-7 Preparación para IA:** Preparar la base de datos y procesos para futuras funcionalidades de inteligencia artificial.
+
+## Criterios para cerrar la Era II
+
+La Era II podrá considerarse cerrada cuando:
+
+- El proyecto pueda avanzar de cotización a entrega con trazabilidad básica.
+- Compras, inventario y fabricación estén conectados al proyecto.
+- Exista una lectura clara del estado operativo de cada proyecto.
+- El historial capture eventos útiles.
+- La arquitectura conserve estabilidad.
+- Build y pruebas continúen pasando.
+- El sistema esté listo para iniciar inteligencia operativa.
+
+---
+
+# 5. Fase 23 — Consolidación del Flujo Operativo
+
+**Estado:** 🟡 En planificación
+
+## Objetivo
+
+Definir y consolidar el flujo mínimo completo del proyecto dentro del sistema.
+
+## Problema que resuelve
+
+Actualmente existen módulos y motores importantes, pero la prioridad es asegurar que trabajen como un sistema conectado y no como secciones independientes.
+
+## Alcance
+
+- Revisar el flujo completo del proyecto.
+- Definir estados operativos mínimos.
+- Mapear relación entre cotización, producción, compras, recepción, inventario y fabricación.
+- Identificar datos duplicados.
+- Detectar huecos de integración.
+- Definir eventos históricos mínimos.
+- Preparar backlog depurado para Fase 24.
+
+## Fuera de alcance
+
+- IA avanzada.
+- Rediseño total de interfaz.
+- Nuevos módulos grandes.
+- Reescritura completa de motores.
+
+## Módulos afectados
+
+- Cotización.
+- Producción.
+- Compras.
+- Recepción.
+- Inventario.
+- Fabricación.
+- Historial.
+- Inspector Inteligente.
+
+## Motores afectados
+
+- BR Engine.
+- Workflow Engine.
+- Cut Optimizer.
+- Project Companion.
+
+## Entregables
+
+- Mapa del flujo operativo mínimo.
+- Tabla de estados de proyecto.
+- Lista de integraciones faltantes.
+- Lista de duplicidades.
+- Checklist de transición hacia Fase 24.
+
+## Criterios de aceptación
+
+- El flujo completo está documentado.
+- Cada módulo tiene claro su papel dentro del proyecto.
+- Las dependencias entre módulos están identificadas.
+- No se agregan funcionalidades que rompan el Norte del Proyecto.
+- El sistema conserva build estable.
+
+---
+
+# 6. Fase 24 — Trazabilidad Operativa
+
+**Estado:** ⏳ Planeada
+
+## Objetivo
+
+Hacer visible qué ocurrió en cada proyecto, cuándo ocurrió, quién intervino y qué impacto tuvo.
+
+## Alcance previsto
+
+- Eventos de proyecto.
+- Historial estructurado.
+- Registro de cambios relevantes.
+- Evidencias operativas.
+- Línea de tiempo básica.
+- Indicadores de avance.
+
+## Resultado esperado
+
+Cada proyecto debe poder entenderse sin depender de memoria, mensajes externos o explicaciones verbales.
+
+---
+
+# 7. Fase 25 — Inventario Operativo
+
+**Estado:** ⏳ Planeada
+
+## Objetivo
+
+Conectar inventario con proyectos, compras, fabricación y sobrantes.
+
+## Alcance previsto
+
+- Existencias por material.
+- Reservas por proyecto.
+- Entradas y salidas.
+- Sobrantes reutilizables.
+- Alertas básicas.
+- Relación con Cut Optimizer.
+
+## Resultado esperado
+
+El inventario deja de ser una lista aislada y se convierte en una herramienta activa de control operativo y económico.
+
+---
+
+# 8. Fase 26 — Compras y Proveedores
+
+**Estado:** ⏳ Planeada
+
+## Objetivo
+
+Convertir compras en una consecuencia lógica de cotización, planeación, inventario y fabricación.
+
+## Alcance previsto
+
+- Requisiciones por proyecto.
+- Estado de pedidos.
+- Proveedores.
+- Recepción parcial.
+- Evidencias.
+- Actualización de inventario.
+
+## Resultado esperado
+
+Reducir compras duplicadas, faltantes, errores de material y pérdidas por mala coordinación.
+
+---
+
+# 9. Fase 27 — Fabricación Operativa
+
+**Estado:** ⏳ Planeada
+
+## Objetivo
+
+Fortalecer fabricación como etapa medible, trazable y conectada al proyecto.
+
+## Alcance previsto
+
+- Órdenes de fabricación.
+- Estados internos.
+- Material asignado.
+- Tiempos estimados y reales.
+- Avance por proyecto.
+- Incidencias.
+
+## Resultado esperado
+
+El taller puede saber qué se está fabricando, qué falta y qué información debe alimentar futuros aprendizajes.
+
+---
+
+# 10. Fase 28 — Reportes Operativos
+
+**Estado:** ⏳ Planeada
+
+## Objetivo
+
+Dar visibilidad ejecutiva al desempeño del taller.
+
+## Métricas iniciales
+
+- Cotizaciones generadas.
+- Proyectos aprobados.
+- Utilidad estimada.
+- Utilidad real.
+- Desperdicio.
+- Compras por proveedor.
+- Materiales más usados.
+- Tiempos de fabricación.
+- Entregas a tiempo.
+
+## Resultado esperado
+
+El dueño del taller puede tomar decisiones con datos y no solo con intuición.
+
+---
+
+# 11. Fase 29 — Inteligencia Operativa Inicial
+
+**Estado:** ⏳ Planeada
+
+## Objetivo
+
+Introducir recomendaciones y advertencias simples basadas en datos reales.
+
+## Alcance previsto
+
+- Advertencias inteligentes.
+- Riesgos en cotización.
+- Comparación con proyectos anteriores.
+- Desviaciones de costo.
+- Desviaciones de tiempo.
+- Sugerencias de materiales frecuentes.
+
+## Condición previa
+
+No iniciar esta fase hasta que la trazabilidad de Era II sea suficiente.
+
+---
+
+# 12. Fase 30 — Crecimiento Comercial del Taller
+
+**Estado:** ⏳ Planeada
+
+## Objetivo
+
+Ayudar al taller a vender más y ser más visible.
+
+## Alcance previsto
+
+- Ideas de publicaciones.
+- Catálogo visual.
+- Promociones.
+- Apoyo para anuncios.
+- Identificación de trabajos vendibles.
+
+## Resultado esperado
+
+ALUXOR / BR ayuda al taller a crecer hacia afuera, no solo a organizarse internamente.
+
+---
+
+# 13. Backlog Priorizado
+
+## Prioridad crítica
+
+- Definir flujo operativo mínimo.
+- Consolidar estados de proyecto.
+- Conectar cotización con producción.
+- Conectar compras con inventario.
+- Conectar inventario con fabricación.
+- Preparar historial estructurado.
+
+## Prioridad alta
+
+- Reservas de inventario por proyecto.
+- Eventos de proyecto.
+- Evidencias de recepción.
+- Órdenes de fabricación.
+- Reportes operativos básicos.
+
+## Prioridad media
+
+- Comparación de proveedores.
+- Calendario operativo.
+- Indicadores ejecutivos.
+- Mejoras UX del Workspace.
+
+## Futuro
+
+- IA de cotización.
+- IA de desperdicio.
+- IA de tiempos.
+- Marketplace.
+- Multiempresa.
+- App móvil.
+
+---
+
+# 14. Dependencias
+
+| Dependencia | Impacto | Relacionada con |
+|------------|---------|-----------------|
+| Estados de proyecto claros | Sin esto no hay trazabilidad confiable. | Workflow Engine |
+| Datos consistentes de cotización | Base para compras, fabricación e IA. | BR Engine |
+| Inventario confiable | Necesario para compras y fabricación. | Inventario / Compras |
+| Historial estructurado | Base de aprendizaje futuro. | Historial / IA |
+| Integración de Cut Optimizer | Necesaria para fabricación y desperdicio. | Fabricación / BR Engine |
+
+---
+
+# 15. Riesgos Operativos
+
+| Riesgo | Impacto | Mitigación |
+|-------|---------|------------|
+| Agregar módulos antes de consolidar | Fragmentación del sistema. | Priorizar integración. |
+| Duplicar datos | Errores y mantenimiento difícil. | Definir fuente de verdad. |
+| Iniciar IA demasiado pronto | Recomendaciones poco confiables. | Esperar trazabilidad suficiente. |
+| Rediseñar sin necesidad | Retraso de la Era II. | Mejorar UX de forma incremental. |
+| No actualizar documentación | Pérdida de contexto. | Mantener roadmap vivo. |
+
+---
+
+# Decisiones Abiertas
+
+- Definición precisa de los estados del proyecto para asegurar trazabilidad confiable.
+- Implementación y reglas para reservas de inventario por proyecto.
+- Estrategias para la recepción parcial y su impacto en inventario y compras.
+- Diseño y estructura del historial de eventos para facilitar aprendizaje futuro.
+- Selección de KPIs mínimos necesarios para reportes operativos iniciales.
+- Criterios y condiciones para iniciar la fase de inteligencia artificial basada en datos reales.
+
+---
+
+# 16. Criterios de Trabajo para Próximas Sesiones
+
+Antes de iniciar cualquier tarea se debe responder:
+
+1. ¿Qué fase afecta?
+2. ¿Qué problema operativo resuelve?
+3. ¿Qué módulo toca?
+4. ¿Qué motor toca?
+5. ¿Qué riesgo introduce?
+6. ¿Qué prueba o validación necesita?
+7. ¿Actualiza el roadmap?
+
+---
+
+# Próxima Sesión de Desarrollo
+
+- **Objetivo:** Definir y documentar el flujo operativo mínimo del proyecto para la Fase 23.
+- **Módulos afectados:** Cotización, Producción, Compras, Recepción, Inventario, Fabricación, Historial, Inspector Inteligente.
+- **Motores afectados:** BR Engine, Workflow Engine, Cut Optimizer, Project Companion.
+- **Validaciones esperadas:** Documentación completa del flujo, identificación de dependencias y duplicidades, checklist de transición.
+- **Resultado esperado:** Flujo operativo mínimo consolidado y backlog depurado para avanzar a la implementación.
+
+---
+
+# 17. Definición Breve de Eras Futuras
+
+## Era III — Inteligencia Operativa
+
+La plataforma comienza a recomendar, advertir y aprender del historial real del taller.
+
+## Era IV — Ecosistema Empresarial
+
+ALUXOR / BR se conecta con proveedores, clientes, servicios externos y operaciones multiempresa.
+
+## Era V — Plataforma de Fabricación
+
+La plataforma se expande más allá de carpintería, vidrio y aluminio hacia múltiples industrias de fabricación personalizada.
+
+---
+
+# 18. Próximo Objetivo Inmediato
+
+Completar la Fase 23.
+
+La prioridad inmediata es definir el flujo operativo mínimo del proyecto, identificar integraciones faltantes y ordenar el backlog de la Era II antes de escribir nuevas funcionalidades grandes.
