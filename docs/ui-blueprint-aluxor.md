@@ -8,6 +8,8 @@
 >
 > Este documento define cómo debe verse, sentirse y comportarse la aplicación independientemente de la implementación técnica.
 
+**Estado:** Aprobado en Fase 23.5 Día 1 como referencia de experiencia para Workspace 2.0.
+
 ---
 
 # Propósito
@@ -218,11 +220,20 @@ Toda la interfaz utilizará componentes del BR Design System:
 
 ## Fase 23.5
 
-Construcción del BR Design System y UX Foundation.
+Fase puente previa a Fase 24.
+
+Día 1 cerrado y aprobado:
+
+- BR Design System aprobado.
+- UI Blueprint aprobado.
+- Project First Architecture adoptada.
+- Workspace base validado.
+
+Día 2 queda como siguiente paso: Workspace 2.0 guiado por estaciones.
 
 ## Fase 24
 
-Integración visual del Workflow Engine.
+Integración visual del Workflow Engine. Esta fase aún no ha iniciado.
 
 ## Fase 25
 

@@ -12,10 +12,10 @@
 |---|---|
 | Estado | 🟡 En planificación |
 | Avance general | 70% |
-| Fase activa | Fase 23 — Modelo Operativo Canónico del Proyecto |
+| Fase activa | Fase 23.5 — Architecture & Design Bridge |
 | Build | Estable |
 | Pruebas | Base estable |
-| Próximo objetivo | Definir transiciones oficiales entre estados |
+| Próximo objetivo | Ejecutar Día 2 — Workspace 2.0 guiado por estaciones |
 
 ---
 
@@ -953,18 +953,18 @@ El proyecto deja información útil para futuras decisiones operativas, reportes
 
 # Fase Activa
 
-## Fase 23 — Modelo Operativo Canónico del Proyecto
+## Fase 23.5 — Architecture & Design Bridge
 
 ### Objetivo
-Definir el Modelo Operativo Canónico del Proyecto, estableciendo el flujo completo del negocio, las responsabilidades, las transiciones, las validaciones y los eventos que acompañan a un proyecto desde el primer contacto con el cliente hasta el aprendizaje posterior a la entrega. Este modelo será la referencia para todos los módulos y motores del ERP durante las siguientes fases de la Era II.
+Consolidar la base arquitectónica y visual de ALUXOR antes de iniciar Fase 24, manteniendo el sistema centrado en proyectos y preparado para Workspace 2.0.
 
 ### Resultados esperados
 
-- Flujo completo documentado.
-- Estados del proyecto definidos.
-- Integraciones identificadas.
-- Duplicidades detectadas.
-- Backlog refinado para las siguientes fases.
+- BR Design System aprobado.
+- UI Blueprint aprobado.
+- Project First Architecture adoptada.
+- Workspace base validado.
+- Día 2 preparado como siguiente paso.
 
 ### Checklist de Diseño de la Fase 23
 
@@ -978,6 +978,12 @@ Definir el Modelo Operativo Canónico del Proyecto, estableciendo el flujo compl
 - [ ] Definir transiciones entre estados.
 - [x] Definir validaciones por etapa.
 - [x] Definir eventos del historial.
+
+### Estado de Fase 23.5
+
+- Día 1 cerrado y aprobado como base arquitectónica y visual.
+- Día 2 queda como siguiente paso: Workspace 2.0 guiado por estaciones.
+- Fase 24 aún no ha iniciado.
 
 ---
 

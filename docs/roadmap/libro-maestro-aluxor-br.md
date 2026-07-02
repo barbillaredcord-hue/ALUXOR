@@ -830,7 +830,7 @@ Una fase solo podrá considerarse terminada cuando:
 
 ## Próximo objetivo inmediato
 
-Completar la planificación detallada de la Fase 23 y convertir la Era II en la etapa de consolidación definitiva de la plataforma antes de iniciar capacidades avanzadas de inteligencia artificial.
+Completar la Fase 23.5 como fase puente antes de iniciar Fase 24. El Día 1 quedó cerrado y aprobado como base arquitectónica y visual; el siguiente paso es el Día 2, enfocado en Workspace 2.0 guiado por estaciones.
 
 El Libro Maestro debe mantenerse alineado con la evolución real de ALUXOR / BR, mientras que el Roadmap Maestro de Desarrollo documentará la ejecución de cada era y fase.
 
@@ -840,7 +840,7 @@ El Libro Maestro debe mantenerse alineado con la evolución real de ALUXOR / BR,
 
 ## Estado
 
-🟡 En planificación
+✅ Completada como base documental y operativa.
 
 ## Objetivo
 
@@ -893,6 +893,39 @@ La Fase 23 podrá considerarse terminada cuando:
 - No existan duplicidades críticas de información.
 - El sistema mantenga build estable y pruebas pasando.
 - El roadmap quede actualizado con el siguiente paso operativo.
+
+<div class="page-break"></div>
+
+# Fase 23.5 — Architecture & Design Bridge
+
+## Estado
+
+🟡 En ejecución.
+
+## Día 1
+
+✅ Cerrado y aprobado.
+
+## Objetivo
+
+Consolidar la base arquitectónica y visual que permitirá evolucionar ALUXOR como sistema centrado en proyectos antes de iniciar la Fase 24.
+
+## Resultados del Día 1
+
+- BR Design System aprobado.
+- UI Blueprint aprobado.
+- Project First Architecture adoptada.
+- Workspace base validado.
+- Compactación inicial validada.
+- Build estable.
+
+## Siguiente paso
+
+Ejecutar el Día 2 de la Fase 23.5: Workspace 2.0 guiado por estaciones, sin modificar el motor principal de cálculo.
+
+## Pendiente de continuidad
+
+La Fase 24 aún no ha iniciado. Su arranque queda condicionado al cierre completo de Fase 23.5.
 
 <div class="page-break"></div>
 

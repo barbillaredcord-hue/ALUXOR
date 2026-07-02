@@ -101,12 +101,12 @@ Este documento debe actualizarse cada vez que:
 ## Dashboard de la Era II
 
 - Era actual: Era II — ERP Operativo.
-- Fase activa: Fase 23 — Modelo Operativo Canónico del Proyecto.
-- Estado general: Modelo Operativo Canónico documentado; transición hacia definición del Workflow Engine.
-- Objetivo inmediato: Iniciar la implementación del Workflow Engine sobre la arquitectura existente.
+- Fase activa: Fase 23.5 — Architecture & Design Bridge.
+- Estado general: Fase 23.5 Día 1 cerrada y aprobada como base arquitectónica y visual.
+- Objetivo inmediato: Ejecutar Fase 23.5 Día 2 — Workspace 2.0 guiado por estaciones.
 - Build: Estable.
 - Pruebas: Aprobadas (estado base).
-- Próximo hito: Iniciar la Fase 24 — Implementación del Workflow Engine.
+- Próximo hito: Cerrar Fase 23.5 antes de iniciar Fase 24.
 
 ## Avance del Proyecto
 
@@ -116,8 +116,9 @@ Este documento debe actualizarse cada vez que:
 | Era I | ✅ | 100% |
 | Fase 22 | ✅ | 100% |
 | Era II | 🟡 | 25% |
-| Fase 23 | 🟡 | 100% |
-| Fase 24 | ⏳ | 5% |
+| Fase 23 | ✅ | 100% |
+| Fase 23.5 | 🟡 | Día 1 cerrado |
+| Fase 24 | ⏳ | 0% |
 | Fase 25 | ⏳ | 0% |
 | Fase 26 | ⏳ | 0% |
 | Fase 27 | ⏳ | 0% |
@@ -327,6 +328,32 @@ Actualmente existen módulos y motores importantes, pero la prioridad es asegura
 - La relación entre módulos y motores está identificada.
 - Existe una base para el Workflow Engine.
 - El sistema conserva estabilidad documental y técnica.
+
+---
+
+## Fase 23.5 — Architecture & Design Bridge
+
+**Estado:** 🟡 En ejecución
+
+**Día 1:** ✅ Cerrado y aprobado.
+
+La Fase 23.5 funciona como fase puente entre el Modelo Operativo Canónico y la implementación posterior de Fase 24. Su objetivo es asegurar que ALUXOR avance como sistema centrado en proyectos, no como suma de módulos aislados.
+
+### Resultados del Día 1
+
+- BR Design System aprobado como base visual.
+- UI Blueprint aprobado como referencia de experiencia.
+- Project First Architecture adoptada como principio rector.
+- Workspace base y compactación inicial validados.
+- Build de producción estable.
+
+### Siguiente paso
+
+Ejecutar el Día 2 de la Fase 23.5: Workspace 2.0 guiado por estaciones, sin modificar el motor principal de cálculo.
+
+### Pendiente de continuidad
+
+La Fase 24 permanece planeada y no ha iniciado. Cualquier referencia previa a iniciar Fase 24 debe entenderse como posterior al cierre completo de Fase 23.5.
 
 ---
 
@@ -580,11 +607,11 @@ Antes de iniciar cualquier tarea se debe responder:
 
 # Próxima Sesión de Desarrollo
 
-- **Objetivo:** Iniciar la implementación del Workflow Engine.
-- **Módulos afectados:** Workflow Engine, Cotización, Historial y Producción.
-- **Motores afectados:** Workflow Engine y BR Engine.
-- **Validaciones esperadas:** Estados, transiciones y eventos funcionando de forma consistente.
-- **Resultado esperado:** Primer flujo operativo ejecutándose dentro de la aplicación.
+- **Objetivo:** Ejecutar Fase 23.5 Día 2 — Workspace 2.0 guiado por estaciones.
+- **Módulos afectados:** Cotización, Producción, Historial y Project Companion.
+- **Motores afectados:** BR Engine y Project Companion.
+- **Validaciones esperadas:** Base visual estable, flujo centrado en proyecto y motor principal de cálculo sin cambios.
+- **Resultado esperado:** Workspace 2.0 preparado como cierre de la fase puente antes de iniciar Fase 24.
 
 ---
 
@@ -606,4 +633,4 @@ La plataforma se expande más allá de carpintería, vidrio y aluminio hacia mú
 
 # 18. Próximo Objetivo Inmediato
 
-Iniciar la Fase 24 — Implementación del Workflow Engine, integrando estados, transiciones y eventos históricos con los módulos existentes para convertir el Modelo Operativo Canónico en comportamiento ejecutable dentro de ALUXOR / BR.
+Ejecutar Fase 23.5 Día 2 — Workspace 2.0 guiado por estaciones, manteniendo el motor principal de cálculo estable y preparando el cierre completo de la fase puente antes de iniciar Fase 24.
