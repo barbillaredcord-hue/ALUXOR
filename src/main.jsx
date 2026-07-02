@@ -1713,6 +1713,7 @@ function App() {
 
         content={(
       <section className="content">
+        <div className="project-context-layer">
         <header className="hero hero-compact">
           <div className="hero-main">
             <div className="hero-status-row">
@@ -1743,8 +1744,13 @@ function App() {
             <button type="button" onClick={() => openPrint('client')}><FileText size={16} /> PDF</button>
           </div>
         </header>
+        </div>
 
-        <ProjectFlow activeSection={activeSection} />
+        <div className="workflow-layer">
+          <ProjectFlow activeSection={activeSection} />
+        </div>
+
+        <section className="work-layer">
 
         {activeSection === 'inicio' && (
           <DashboardSection
@@ -2062,6 +2068,7 @@ function App() {
         </section>
         )}
 
+        </section>
         <footer className="footer-bar">
           <span>Calidad de datos: {score}/12</span>
           {copied && <strong>{copied}</strong>}
