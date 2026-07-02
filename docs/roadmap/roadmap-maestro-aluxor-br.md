@@ -35,6 +35,36 @@ Este archivo se utiliza para responder preguntas operativas:
 
 ---
 
+# Principio Rector — Sistema Centrado en Proyectos
+
+ALUXOR / BR es un sistema centrado en proyectos.
+
+La unidad principal del sistema no son los módulos.
+
+La unidad principal es el proyecto.
+
+Cada proyecto evoluciona a través de estaciones operativas que representan su avance real dentro del taller:
+
+Recepción
+→ Medición
+→ Materiales
+→ Accesorios
+→ Producción
+→ Validación
+→ Instalación
+→ Entrega
+→ Garantía
+
+Los módulos representan capacidades del sistema.
+
+Las estaciones representan el estado, contexto y evolución de un proyecto.
+
+Esto significa que el usuario no debe sentir que navega entre pantallas aisladas, sino que acompaña un proyecto activo desde su primer contacto hasta su cierre operativo.
+
+Este principio debe guiar las decisiones futuras de interfaz, Workflow Engine, trazabilidad, sincronización, historial e inteligencia operativa.
+
+---
+
 # 1. Propósito del Roadmap
 
 El Roadmap Maestro de Desarrollo es el centro de mando para continuar construyendo ALUXOR / BR.

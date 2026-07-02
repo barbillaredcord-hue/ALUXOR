@@ -31,6 +31,37 @@ Cada pantalla debe ayudar al usuario a avanzar, decidir, corregir o entender alg
 Una buena interfaz no llama la atención.
 Hace que el trabajo fluya.
 
+# Diseño Orientado al Proyecto
+
+Todos los componentes del BR Design System deben diseñarse para acompañar la evolución de un proyecto, no únicamente para representar pantallas o módulos.
+
+El proyecto es la unidad principal de trabajo.
+
+Los módulos representan capacidades del sistema.
+
+La interfaz debe mantener siempre el contexto del proyecto activo y adaptar sus componentes según la estación en la que se encuentre.
+
+Esto implica que componentes como:
+
+- BRCard.
+- BRPanel.
+- BRTimeline.
+- BRProgress.
+- BRSection.
+- Project Companion.
+
+Deben comunicar continuamente:
+
+- Dónde está el proyecto.
+- Qué ya ocurrió.
+- Qué falta.
+- Qué acciones están disponibles.
+- Qué riesgos existen.
+
+El usuario debe sentir que trabaja sobre un proyecto vivo que evoluciona, no que cambia entre pantallas independientes.
+
+Este principio deberá mantenerse en todos los productos del ecosistema BR Studios que gestionen procesos, flujos o proyectos.
+
 ---
 
 # Productos contemplados
@@ -305,6 +336,131 @@ Reglas:
 - No retrasar el trabajo.
 - No animar información crítica de forma confusa.
 - Respetar usuarios con reducción de movimiento.
+
+---
+
+
+# Project First Architecture (PFA)
+
+La Project First Architecture (PFA) es la arquitectura oficial para todas las interfaces operativas desarrolladas por BR Studios.
+
+Su principio fundamental es simple:
+
+> El usuario no abre una aplicación.
+>
+> El usuario abre un proyecto.
+
+Todas las decisiones de diseño deben preservar el contexto del proyecto activo durante toda la experiencia.
+
+---
+
+## Las cinco capas de la interfaz
+
+```text
+                 CONTEXTO
+           (Proyecto Activo)
+
+                     │
+
+                  WORKFLOW
+        (Timeline · Estado · Avance)
+
+                     │
+
+             ÁREA DE TRABAJO
+      (Captura · Edición · Revisión)
+
+                     │
+
+          PROJECT COMPANION
+   (IA · Alertas · Recomendaciones)
+
+                     │
+
+          RESUMEN OPERATIVO
+(Totales · Estado · Riesgos · Próximo paso)
+```
+
+---
+
+## Capa 1 — Contexto
+
+Siempre visible.
+
+Debe responder:
+
+- ¿Qué proyecto estoy viendo?
+- ¿Quién es el cliente?
+- ¿Cuál es el estado general?
+
+---
+
+## Capa 2 — Workflow
+
+Representa el avance del proyecto mediante estaciones.
+
+Nunca debe perder el contexto del proyecto activo.
+
+---
+
+## Capa 3 — Área de trabajo
+
+Es la zona principal de la aplicación.
+
+Debe ocupar la mayor parte del espacio disponible.
+
+Solo una estación permanece activa por defecto.
+
+---
+
+## Capa 4 — Project Companion
+
+Asiste al usuario con información contextual.
+
+No reemplaza el área de trabajo.
+
+Su función es:
+
+- Explicar.
+- Recomendar.
+- Advertir.
+- Resumir.
+
+---
+
+## Capa 5 — Resumen operativo
+
+Debe permanecer fácilmente accesible.
+
+Resume:
+
+- Totales.
+- Utilidad.
+- Estado.
+- Riesgos.
+- Próxima acción.
+
+---
+
+## Responsive
+
+La PFA nunca elimina capas.
+
+Solo reorganiza su disposición:
+
+- Escritorio: tres columnas.
+- Tablet: dos columnas con paneles adaptables.
+- Móvil: una columna con Companion colapsable y una sola estación activa.
+
+El contexto del proyecto debe mantenerse en todos los tamaños de pantalla.
+
+---
+
+## Regla de oro
+
+Cada componente nuevo del BR Design System deberá responder a una de estas cinco capas.
+
+Si un componente no aporta contexto, flujo, trabajo, asistencia o resumen, debe justificarse antes de incorporarse al sistema.
 
 ---
 
