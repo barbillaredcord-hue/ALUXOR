@@ -103,7 +103,8 @@ export function recoverLegacyHistoryFromLocalStorage(helpers = {}) {
 }
 
 export async function requestHistory(options = {}, helpers = {}) {
-  const { historyApi = '/api/history' } = helpers;
+  const configuredHistoryApi = import.meta?.env?.VITE_HISTORY_API_URL;
+  const { historyApi = configuredHistoryApi || '/api/history' } = helpers;
   const response = await fetch(historyApi, {
     cache: 'no-store',
     ...options,
@@ -114,7 +115,16 @@ export async function requestHistory(options = {}, helpers = {}) {
     },
   });
 
-  if (!response.ok) throw new Error('No se pudo sincronizar el historial');
+  const contentType = response.headers.get('content-type') || '';
+
+  if (!response.ok) {
+    throw new Error('No se pudo sincronizar el historial');
+  }
+
+  if (!contentType.includes('application/json')) {
+    throw new Error('Servidor de historial no disponible; usando copia local');
+  }
+
   const data = await response.json();
   return normalizeHistory(data.history || []);
 }
