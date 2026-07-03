@@ -8,7 +8,7 @@
 >
 > Este documento define cómo debe verse, sentirse y comportarse la aplicación independientemente de la implementación técnica.
 
-**Estado:** Aprobado en Fase 23.5 Día 1 como referencia de experiencia para Workspace 2.0.
+**Estado:** Aprobado en Fase 23.5 Día 1; Día 2 iniciado y aún no cerrado; Día 3 pendiente antes de Fase 24.
 
 ---
 
@@ -229,7 +229,26 @@ Día 1 cerrado y aprobado:
 - Project First Architecture adoptada.
 - Workspace base validado.
 
-Día 2 queda como siguiente paso: Workspace 2.0 guiado por estaciones.
+Día 2 iniciado:
+
+- Workspace 2.0 guiado por estaciones.
+- Base visual del Workspace compactada.
+- Project First Architecture preservada.
+- Estado "Sin conexión / Usando copia local" ajustado.
+- Motor principal de cálculo sin cambios.
+
+Día 3 pendiente:
+
+- Revisión visual completa.
+- Validación responsive.
+- Validación de Project Companion.
+- Eliminación de duplicidades.
+- Verificación de build.
+- Actualización documental final.
+- Review final de cierre de Fase 23.5.
+- Preparación formal para iniciar Fase 24.
+
+Siguiente paso: cerrar Día 2 y ejecutar Día 3 antes de iniciar Fase 24.
 
 ## Fase 24
 

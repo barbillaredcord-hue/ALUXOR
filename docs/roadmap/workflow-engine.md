@@ -15,6 +15,12 @@ docs/roadmap/eras/era-2-erp-operativo.md
 
 La Era II define las etapas E01-E15 del proyecto. El Workflow Engine traduce esas etapas en estados técnicos, reglas de transición, validaciones mínimas y eventos históricos.
 
+**Estado actual:** especificación documental preparada para Fase 24. La implementación de Fase 24 aún no ha iniciado.
+
+**Contexto previo:** Fase 23.5 es una fase puente de tres días. Día 1 está cerrado y aprobado, Día 2 está iniciado y aún no cerrado, y Día 3 está pendiente. El historial local quedó preparado para backend remoto mediante `VITE_HISTORY_API_URL`, pero el backend remoto de historial aún no está implementado.
+
+**Condición para Fase 24:** la implementación de Workflow Engine, eventos, estados e historial remoto solo debe iniciar después de cerrar Día 3 de Fase 23.5.
+
 ## Conceptos base
 
 - Proyecto: entidad central que concentra cliente, cotización, materiales, producción, instalación, historial y resultado.

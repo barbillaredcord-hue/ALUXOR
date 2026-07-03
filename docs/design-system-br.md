@@ -6,7 +6,7 @@
 
 > Lenguaje visual, funcional y operativo compartido por los productos desarrollados por BR Studios.
 
-**Estado ALUXOR:** Aprobado en Fase 23.5 Día 1 como base visual para Workspace 2.0.
+**Estado ALUXOR:** Aprobado en Fase 23.5 Día 1; Día 2 iniciado para Workspace 2.0; Día 3 pendiente antes de Fase 24.
 
 ---
 
@@ -562,7 +562,7 @@ Es una forma distinta de trabajar.
 
 La Fase 23.5 aplica este sistema a ALUXOR como fase puente antes de Fase 24.
 
-El Día 1 quedó cerrado y aprobado como base arquitectónica y visual. El Día 2 continuará con Workspace 2.0 guiado por estaciones.
+El Día 1 quedó cerrado y aprobado como base arquitectónica y visual. El Día 2 ya inició con Workspace 2.0 guiado por estaciones. El Día 3 queda pendiente para validación, pulido y cierre antes de Fase 24.
 
 Orden de aplicación:
 
@@ -592,7 +592,12 @@ El Design System v1.0 se considera listo cuando:
 ## Estado de aceptación ALUXOR
 
 - Fase 23.5 Día 1: cerrado y aprobado.
-- Base visual aprobada para continuar con Workspace 2.0.
+- Fase 23.5 Día 2: iniciado, aún no cerrado.
+- Fase 23.5 Día 3: pendiente.
+- Base visual del Workspace compactada.
+- Project First Architecture preservada.
+- Estado "Sin conexión / Usando copia local" ajustado.
+- Backend remoto de historial aún no implementado.
 - Fase 24 aún no ha iniciado.
 
 ---

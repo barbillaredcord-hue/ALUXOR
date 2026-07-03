@@ -10,7 +10,7 @@
 
 **Versión:** 1.0 (Borrador)
 
-**Estado del Proyecto:** Era II — Integración e Inteligencia (Fase 23 en planificación)
+**Estado del Proyecto:** Era II — ERP Operativo (Fase 23.5 Día 2 en ejecución)
 
 **Fecha:** Julio 2026
 
@@ -297,6 +297,9 @@ Actualmente el proyecto cuenta con:
 - Inspector Inteligente.
 - Project Flow.
 - Project Companion.
+- Historial preparado para backend remoto mediante `VITE_HISTORY_API_URL`.
+
+El backend remoto de historial aún no está implementado.
 
 La Fase 22 representa uno de los hitos más importantes del proyecto al convertir el Cut Optimizer en un motor físicamente consistente e integrado con el resto de la plataforma.
 
@@ -830,7 +833,7 @@ Una fase solo podrá considerarse terminada cuando:
 
 ## Próximo objetivo inmediato
 
-Completar la Fase 23.5 como fase puente antes de iniciar Fase 24. El Día 1 quedó cerrado y aprobado como base arquitectónica y visual; el siguiente paso es el Día 2, enfocado en Workspace 2.0 guiado por estaciones.
+Cerrar la Fase 23.5 Día 2 y ejecutar Día 3 antes de iniciar Fase 24. El Día 1 quedó cerrado y aprobado como base arquitectónica y visual; el Día 2 ya inició y está enfocado en Workspace 2.0 guiado por estaciones; el Día 3 queda pendiente para validación, pulido y cierre.
 
 El Libro Maestro debe mantenerse alineado con la evolución real de ALUXOR / BR, mientras que el Roadmap Maestro de Desarrollo documentará la ejecución de cada era y fase.
 
@@ -906,6 +909,14 @@ La Fase 23 podrá considerarse terminada cuando:
 
 ✅ Cerrado y aprobado.
 
+## Día 2
+
+🟡 Iniciado, aún no cerrado.
+
+## Día 3
+
+⏳ Pendiente.
+
 ## Objetivo
 
 Consolidar la base arquitectónica y visual que permitirá evolucionar ALUXOR como sistema centrado en proyectos antes de iniciar la Fase 24.
@@ -919,13 +930,46 @@ Consolidar la base arquitectónica y visual que permitirá evolucionar ALUXOR co
 - Compactación inicial validada.
 - Build estable.
 
+## Día 1 — Fundamentos arquitectónicos y visuales
+
+- BR Design System.
+- UI Blueprint.
+- Project First Architecture.
+- Review de consistencia documental.
+- Base visual aprobada.
+
+## Avance del Día 2
+
+- Workspace 2.0 iniciado.
+- Workspace guiado por estaciones.
+- Compactación visual.
+- Proyecto como centro de la experiencia.
+- Base visual del Workspace compactada.
+- Project First Architecture preservada.
+- Estado "Sin conexión / Usando copia local" ajustado.
+- Historial preparado para backend remoto mediante `VITE_HISTORY_API_URL`.
+- Backend remoto de historial pendiente de implementación.
+- No modificar motor de cálculo ni BR Engine.
+- Build estable.
+
+## Día 3 — Validación, pulido y cierre
+
+- Revisión visual completa.
+- Validación responsive.
+- Validación de Project Companion.
+- Eliminación de duplicidades.
+- Verificación de build.
+- Actualización documental final.
+- Review final de cierre de Fase 23.5.
+- Preparación formal para iniciar Fase 24.
+
 ## Siguiente paso
 
-Ejecutar el Día 2 de la Fase 23.5: Workspace 2.0 guiado por estaciones, sin modificar el motor principal de cálculo.
+Cerrar el Día 2 de la Fase 23.5 y ejecutar Día 3 antes de iniciar Fase 24.
 
 ## Pendiente de continuidad
 
-La Fase 24 aún no ha iniciado. Su arranque queda condicionado al cierre completo de Fase 23.5.
+La Fase 24 aún no ha iniciado. Su arranque queda condicionado al cierre completo de Día 3 de Fase 23.5.
 
 <div class="page-break"></div>
 

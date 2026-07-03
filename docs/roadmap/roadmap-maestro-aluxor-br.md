@@ -10,7 +10,7 @@
 
 **Versión:** 1.0 (Borrador operativo)
 
-**Estado del Proyecto:** Era II — ERP Operativo
+**Estado del Proyecto:** Era II — ERP Operativo (Fase 23.5 Día 2 en ejecución)
 
 **Fecha:** Julio 2026
 
@@ -88,25 +88,25 @@ Este documento debe actualizarse cada vez que:
 | Arquitectura general | 🟢 Estable | Workspace y motores principales consolidados. |
 | Cotización | 🟢 Estable | Base funcional del sistema. |
 | BR Engine | 🟢 Estable | Núcleo de reglas y cálculos. |
-| Workflow Engine | 🟢 Estable | Base del flujo de proyecto. |
+| Workflow Engine | 🟢 Estable | Especificación documental estable; implementación de Fase 24 pendiente. |
 | Cut Optimizer | 🟢 Estable | Fase 22 completada con validación física. |
 | Producción | 🟡 En evolución | Requiere mayor trazabilidad. |
 | Compras | 🟡 En evolución | Requiere integración más fuerte con proyecto e inventario. |
 | Recepción | 🟡 En evolución | Requiere validaciones y evidencias. |
 | Inventario | 🟡 En evolución | Requiere reservas, movimientos y conexión por proyecto. |
 | Fabricación | 🟡 En evolución | Requiere planeación y seguimiento real. |
-| Historial | 🟡 Funcional | Debe prepararse para aprendizaje futuro. |
+| Historial | 🟡 Funcional | Preparado para backend remoto con `VITE_HISTORY_API_URL`; backend remoto aún no implementado. |
 | IA | 🔵 Planeada | Aún no debe ser prioridad hasta consolidar trazabilidad. |
 
 ## Dashboard de la Era II
 
 - Era actual: Era II — ERP Operativo.
 - Fase activa: Fase 23.5 — Architecture & Design Bridge.
-- Estado general: Fase 23.5 Día 1 cerrada y aprobada como base arquitectónica y visual.
-- Objetivo inmediato: Ejecutar Fase 23.5 Día 2 — Workspace 2.0 guiado por estaciones.
+- Estado general: Fase 23.5 Día 1 cerrada y aprobada; Día 2 iniciado y aún no cerrado; Día 3 pendiente.
+- Objetivo inmediato: Cerrar Fase 23.5 Día 2 y ejecutar Día 3 — Validación, pulido y cierre.
 - Build: Estable.
 - Pruebas: Aprobadas (estado base).
-- Próximo hito: Cerrar Fase 23.5 antes de iniciar Fase 24.
+- Próximo hito: Cerrar Día 3 de Fase 23.5 antes de iniciar Fase 24.
 
 ## Avance del Proyecto
 
@@ -117,7 +117,7 @@ Este documento debe actualizarse cada vez que:
 | Fase 22 | ✅ | 100% |
 | Era II | 🟡 | 25% |
 | Fase 23 | ✅ | 100% |
-| Fase 23.5 | 🟡 | Día 1 cerrado |
+| Fase 23.5 | 🟡 | Día 2 iniciado; Día 3 pendiente |
 | Fase 24 | ⏳ | 0% |
 | Fase 25 | ⏳ | 0% |
 | Fase 26 | ⏳ | 0% |
@@ -267,7 +267,7 @@ La Era II podrá considerarse cerrada cuando:
 
 # 5. Fase 23 — Modelo Operativo Canónico del Proyecto
 
-**Estado:** 🟡 En ejecución
+**Estado:** ✅ Completada
 
 ## Objetivo
 
@@ -337,7 +337,11 @@ Actualmente existen módulos y motores importantes, pero la prioridad es asegura
 
 **Día 1:** ✅ Cerrado y aprobado.
 
-La Fase 23.5 funciona como fase puente entre el Modelo Operativo Canónico y la implementación posterior de Fase 24. Su objetivo es asegurar que ALUXOR avance como sistema centrado en proyectos, no como suma de módulos aislados.
+**Día 2:** 🟡 Iniciado, aún no cerrado.
+
+**Día 3:** ⏳ Pendiente.
+
+La Fase 23.5 funciona como fase puente de tres días entre el Modelo Operativo Canónico y la implementación posterior de Fase 24. Su objetivo es asegurar que ALUXOR avance como sistema centrado en proyectos, no como suma de módulos aislados.
 
 ### Resultados del Día 1
 
@@ -347,13 +351,48 @@ La Fase 23.5 funciona como fase puente entre el Modelo Operativo Canónico y la 
 - Workspace base y compactación inicial validados.
 - Build de producción estable.
 
-### Siguiente paso
+### Día 1 — Fundamentos arquitectónicos y visuales
 
-Ejecutar el Día 2 de la Fase 23.5: Workspace 2.0 guiado por estaciones, sin modificar el motor principal de cálculo.
+- BR Design System.
+- UI Blueprint.
+- Project First Architecture.
+- Review de consistencia documental.
+- Base visual aprobada.
+
+### Avance del Día 2
+
+- Workspace 2.0 iniciado.
+- Workspace guiado por estaciones.
+- Compactación visual.
+- Proyecto como centro de la experiencia.
+- Base visual del Workspace compactada.
+- Project First Architecture preservada.
+- Estado "Sin conexión / Usando copia local" ajustado.
+- Historial preparado para backend remoto mediante `VITE_HISTORY_API_URL`.
+- Backend remoto de historial pendiente de implementación.
+- No modificar motor de cálculo ni BR Engine.
+- Build estable.
+
+### Día 3 — Validación, pulido y cierre
+
+Estado: pendiente.
+
+- Revisión visual completa.
+- Validación responsive.
+- Validación de Project Companion.
+- Eliminación de duplicidades.
+- Verificación de build.
+- Actualización documental final.
+- Review final de cierre de Fase 23.5.
+- Preparación formal para iniciar Fase 24.
+
+### Siguiente paso inmediato
+
+Cerrar el Día 2 de la Fase 23.5 y ejecutar Día 3 antes de iniciar Fase 24.
 
 ### Pendiente de continuidad
 
-La Fase 24 permanece planeada y no ha iniciado. Cualquier referencia previa a iniciar Fase 24 debe entenderse como posterior al cierre completo de Fase 23.5.
+La Fase 24 permanece planeada y no ha iniciado. Cualquier referencia a Fase 24 debe entenderse como posterior al cierre completo de Día 3 de Fase 23.5.
 
 ---
 
@@ -607,11 +646,11 @@ Antes de iniciar cualquier tarea se debe responder:
 
 # Próxima Sesión de Desarrollo
 
-- **Objetivo:** Ejecutar Fase 23.5 Día 2 — Workspace 2.0 guiado por estaciones.
+- **Objetivo:** Cerrar Fase 23.5 Día 2 y preparar Día 3 — Validación, pulido y cierre.
 - **Módulos afectados:** Cotización, Producción, Historial y Project Companion.
 - **Motores afectados:** BR Engine y Project Companion.
-- **Validaciones esperadas:** Base visual estable, flujo centrado en proyecto y motor principal de cálculo sin cambios.
-- **Resultado esperado:** Workspace 2.0 preparado como cierre de la fase puente antes de iniciar Fase 24.
+- **Validaciones esperadas:** Base visual estable, flujo centrado en proyecto, estado local/remoto claro y motor principal de cálculo sin cambios.
+- **Resultado esperado:** Workspace 2.0 cerrado y Día 3 listo para completar la fase puente antes de iniciar Fase 24.
 
 ---
 
@@ -633,4 +672,4 @@ La plataforma se expande más allá de carpintería, vidrio y aluminio hacia mú
 
 # 18. Próximo Objetivo Inmediato
 
-Ejecutar Fase 23.5 Día 2 — Workspace 2.0 guiado por estaciones, manteniendo el motor principal de cálculo estable y preparando el cierre completo de la fase puente antes de iniciar Fase 24.
+Cerrar Fase 23.5 Día 2 — Workspace 2.0 guiado por estaciones, ejecutar Día 3 — Validación, pulido y cierre, y solo después preparar el inicio de Fase 24.

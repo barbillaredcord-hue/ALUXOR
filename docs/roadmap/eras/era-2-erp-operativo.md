@@ -10,12 +10,12 @@
 
 | Campo | Valor |
 |---|---|
-| Estado | 🟡 En planificación |
+| Estado | 🟡 En ejecución |
 | Avance general | 70% |
 | Fase activa | Fase 23.5 — Architecture & Design Bridge |
 | Build | Estable |
 | Pruebas | Base estable |
-| Próximo objetivo | Ejecutar Día 2 — Workspace 2.0 guiado por estaciones |
+| Próximo objetivo | Cerrar Día 2 y ejecutar Día 3 — Validación, pulido y cierre |
 
 ---
 
@@ -964,9 +964,18 @@ Consolidar la base arquitectónica y visual de ALUXOR antes de iniciar Fase 24, 
 - UI Blueprint aprobado.
 - Project First Architecture adoptada.
 - Workspace base validado.
-- Día 2 preparado como siguiente paso.
+- Día 2 iniciado, aún no cerrado.
+- Día 3 pendiente.
+- Base visual del Workspace compactada.
+- Historial preparado para backend remoto sin backend implementado.
 
-### Checklist de Diseño de la Fase 23
+### Estructura de Fase 23.5
+
+1. Día 1 — Fundamentos arquitectónicos y visuales.
+2. Día 2 — Workspace 2.0.
+3. Día 3 — Validación, pulido y cierre.
+
+### Checklist histórico de Diseño de la Fase 23
 
 - [x] Mapear el flujo completo del proyecto.
 - [x] Definir estados mínimos.
@@ -982,7 +991,12 @@ Consolidar la base arquitectónica y visual de ALUXOR antes de iniciar Fase 24, 
 ### Estado de Fase 23.5
 
 - Día 1 cerrado y aprobado como base arquitectónica y visual.
-- Día 2 queda como siguiente paso: Workspace 2.0 guiado por estaciones.
+- Día 2 iniciado y aún no cerrado: Workspace 2.0 guiado por estaciones.
+- Estado "Sin conexión / Usando copia local" ajustado.
+- `history.js` preparado para backend remoto con `VITE_HISTORY_API_URL`.
+- Backend remoto de historial aún no implementado.
+- Build estable.
+- Día 3 pendiente: revisión visual, validación responsive, Project Companion, eliminación de duplicidades, build, documentación final y review de cierre.
 - Fase 24 aún no ha iniciado.
 
 ---
@@ -1002,6 +1016,7 @@ Consolidar la base arquitectónica y visual de ALUXOR antes de iniciar Fase 24, 
 - Reservas de inventario.
 - Recepción parcial.
 - Estructura técnica del historial de eventos.
+- Backend remoto de historial.
 - KPIs mínimos.
 - Criterios para iniciar IA.
 
