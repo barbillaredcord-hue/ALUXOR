@@ -1695,8 +1695,8 @@ function App() {
         <div className="sync-card">
           <RefreshCw size={18} />
           <div>
-            <strong>{syncStatus}</strong>
-            <span>{lastSyncAt ? `Última sincronización: ${lastSyncAt}` : 'Historial local y nube'}</span>
+            <strong>{syncStatus.includes('Sin conexión') ? 'Sin conexión' : syncStatus}</strong>
+<span>{lastSyncAt ? `Última sincronización: ${lastSyncAt}` : syncStatus.includes('Sin conexión' ) ? 'Usando copia local' : 'Local + nube'}</span>
           </div>
         </div>
 
@@ -1747,9 +1747,16 @@ function App() {
         </div>
 
         <div className="workflow-layer">
-          <ProjectFlow activeSection={activeSection} />
+          <ProjectFlow
+            activeSection={activeSection}
+            projectName={form.producto || 'Proyecto sin nombre'}
+            projectStatus={form.estadoCotizacion || 'Pendiente'}
+            customer={form.clienteNombre || 'Cliente pendiente'}
+            progress={dataHealth.score}
+            total={quote.total}
+            nextAction={quote.materialRows?.[0]?.nombre ? `Comprar ${quote.materialRows[0].nombre}` : 'Revisar datos'}
+          />
         </div>
-
         <section className="work-layer">
 
         {activeSection === 'inicio' && (
