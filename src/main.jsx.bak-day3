@@ -1424,23 +1424,6 @@ function App() {
     setActiveSection('cotizador');
   }
 
-  function startNewQuote() {
-    const confirmed = window.confirm(
-      '¿Comenzar una nueva cotización?\n\nSe limpiarán los datos de la cotización actual. Esta acción no elimina historial, catálogo, precios ni configuración.'
-    );
-
-    if (!confirmed) return;
-
-    const nextDefaults =
-      typeof structuredClone === 'function'
-        ? structuredClone(defaults)
-        : JSON.parse(JSON.stringify(defaults));
-
-    setForm(nextDefaults);
-    setActiveSection('cotizador');
-    setCopied('Nueva cotización lista');
-  }
-
   function removeHistoryItem(id) {
     const nextHistory = HistoryEngine.normalizeHistory(history.filter((item) => item.id !== id));
     setHistory(nextHistory);
@@ -1713,7 +1696,7 @@ function App() {
           <RefreshCw size={18} />
           <div>
             <strong>{syncStatus.includes('Sin conexión') ? 'Sin conexión' : syncStatus}</strong>
-            <span>{lastSyncAt ? `Última sincronización: ${lastSyncAt}` : syncStatus.includes('Sin conexión') ? 'Usando copia local' : 'Local + nube'}</span>
+<span>{lastSyncAt ? `Última sincronización: ${lastSyncAt}` : syncStatus.includes('Sin conexión' ) ? 'Usando copia local' : 'Local + nube'}</span>
           </div>
         </div>
 
@@ -1755,7 +1738,7 @@ function App() {
 
           <div className="hero-actions hero-actions-compact">
             <button type="button" className="ghost" onClick={refreshInstalledApp}><RefreshCw size={16} /> Actualizar</button>
-            <button type="button" className="ghost" onClick={startNewQuote}><History size={16} /> Nueva cotización</button>
+            <button type="button" className="ghost" onClick={() => syncHistory(true)}><History size={16} /> Restaurar</button>
             <button type="button" className="ghost" onClick={() => setActiveSection('textos')}><FileText size={16} /> Textos</button>
             <button type="button" onClick={openWhatsApp}><MessageCircle size={16} /> WhatsApp</button>
             <button type="button" onClick={() => openPrint('client')}><FileText size={16} /> PDF</button>
