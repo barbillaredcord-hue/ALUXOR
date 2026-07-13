@@ -11,3 +11,4 @@ build/
 export/
 *.zip
 !assets/*.zip
+supabase/.temp/
