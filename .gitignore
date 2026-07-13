@@ -12,3 +12,4 @@ export/
 *.zip
 !assets/*.zip
 supabase/.temp/
+supabase/.temp/
