@@ -5,6 +5,8 @@
     "start": "vite --host 127.0.0.1"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.12.1",
+    "@supabase/supabase-js": "^2.110.3",
     "@vercel/blob": "^2.4.0",
     "@vitejs/plugin-react": "latest",
     "lucide-react": "latest",
