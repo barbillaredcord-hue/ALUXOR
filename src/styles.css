@@ -7716,6 +7716,23 @@ body,
   font-weight: 750;
 }
 
+.production-cloud-status {
+  margin: 0;
+  padding: 9px 11px;
+  color: #1f5870;
+  background: #e3f2f8;
+  border: 1px solid #b9dce9;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.production-cloud-status.error {
+  color: #7b251e;
+  background: #ffe7df;
+  border-color: #ecc0b2;
+}
+
 .production-metrics {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));

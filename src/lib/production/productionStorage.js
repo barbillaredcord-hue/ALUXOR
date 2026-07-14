@@ -16,11 +16,25 @@ function orderTimestamp(order) {
 }
 
 function isNewerOrder(candidate, current) {
+  const candidateRemote = !String(candidate?.id || '').startsWith('production-');
+  const currentRemote = !String(current?.id || '').startsWith('production-');
+  if (candidateRemote !== currentRemote) return candidateRemote;
+
   const candidateTime = orderTimestamp(candidate);
   const currentTime = orderTimestamp(current);
 
   if (candidateTime === null || currentTime === null) return true;
   return candidateTime >= currentTime;
+}
+
+function normalizeStoredOrder(order) {
+  const normalized = normalizeProductionOrder(order);
+  const version = Number(order?.version);
+
+  return {
+    ...normalized,
+    ...(Number.isInteger(version) && version >= 1 ? { version } : {}),
+  };
 }
 
 function normalizeOrders(orders) {
@@ -30,19 +44,21 @@ function normalizeOrders(orders) {
   const byQuoteId = new Map();
 
   orders.forEach((order) => {
-    const normalized = normalizeProductionOrder(order);
-    if (!normalized.id || !normalized.quoteId) return;
+    const normalized = normalizeStoredOrder(order);
+    if (!normalized.id || !normalized.quoteId || !normalized.workspaceId) return;
 
-    const previousById = byId.get(normalized.id);
+    const idKey = `${normalized.workspaceId}:${normalized.id}`;
+    const previousById = byId.get(idKey);
     if (!previousById || isNewerOrder(normalized, previousById)) {
-      byId.set(normalized.id, normalized);
+      byId.set(idKey, normalized);
     }
   });
 
   Array.from(byId.values()).forEach((order) => {
-    const previousByQuote = byQuoteId.get(order.quoteId);
+    const quoteKey = `${order.workspaceId}:${order.quoteId}`;
+    const previousByQuote = byQuoteId.get(quoteKey);
     if (!previousByQuote || isNewerOrder(order, previousByQuote)) {
-      byQuoteId.set(order.quoteId, order);
+      byQuoteId.set(quoteKey, order);
     }
   });
 
@@ -71,11 +87,14 @@ export function saveProductionOrders(orders) {
 }
 
 export function addProductionOrder(order) {
-  const normalized = normalizeProductionOrder(order);
-  if (!normalized.id || !normalized.quoteId) return null;
+  const normalized = normalizeStoredOrder(order);
+  if (!normalized.id || !normalized.quoteId || !normalized.workspaceId) return null;
 
   const orders = loadProductionOrders();
-  const existing = orders.find((item) => item.quoteId === normalized.quoteId);
+  const existing = orders.find((item) => (
+    item.workspaceId === normalized.workspaceId
+    && item.quoteId === normalized.quoteId
+  ));
 
   if (existing) return existing;
 
@@ -85,11 +104,14 @@ export function addProductionOrder(order) {
 }
 
 export function updateStoredProductionOrder(order) {
-  const normalized = normalizeProductionOrder(order);
-  if (!normalized.id || !normalized.quoteId) return null;
+  const normalized = normalizeStoredOrder(order);
+  if (!normalized.id || !normalized.quoteId || !normalized.workspaceId) return null;
 
   const orders = loadProductionOrders();
-  const existing = orders.find((item) => item.id === normalized.id);
+  const existing = orders.find((item) => (
+    item.id === normalized.id
+    && item.workspaceId === normalized.workspaceId
+  ));
 
   if (!existing) return null;
 
@@ -100,7 +122,7 @@ export function updateStoredProductionOrder(order) {
 
   const saved = saveProductionOrders(
     orders.map((item) => (
-      item.id === updated.id ? updated : item
+      item.id === updated.id && item.workspaceId === updated.workspaceId ? updated : item
     ))
   );
 
@@ -123,6 +145,57 @@ export function findProductionOrderByQuoteId(quoteId) {
   return loadProductionOrders().find((order) => order.quoteId === normalizedQuoteId) || null;
 }
 
+export function replaceProductionOrder(localId, remoteOrder) {
+  const remote = normalizeStoredOrder(remoteOrder);
+  if (!localId || !remote.id || !remote.quoteId || !remote.workspaceId) return null;
+
+  const saved = saveProductionOrders([
+    ...loadProductionOrders().filter((order) => (
+      !(order.id === localId && order.workspaceId === remote.workspaceId)
+      && !(
+        order.workspaceId === remote.workspaceId
+        && order.quoteId === remote.quoteId
+      )
+    )),
+    remote,
+  ]);
+
+  return saved.find((order) => (
+    order.id === remote.id && order.workspaceId === remote.workspaceId
+  )) || remote;
+}
+
+export function mergeProductionOrders(orders) {
+  return saveProductionOrders([
+    ...loadProductionOrders(),
+    ...(Array.isArray(orders) ? orders : []),
+  ]);
+}
+
+export function findLocalProductionOrders(workspaceId) {
+  const normalizedWorkspaceId = String(workspaceId || '').trim();
+  if (!normalizedWorkspaceId) return [];
+
+  return loadProductionOrders().filter((order) => (
+    order.workspaceId === normalizedWorkspaceId
+    && order.id.startsWith('production-')
+  ));
+}
+
+export function replaceWorkspaceProductionOrders(workspaceId, orders) {
+  const normalizedWorkspaceId = String(workspaceId || '').trim();
+  if (!normalizedWorkspaceId) return loadProductionOrders();
+
+  return saveProductionOrders([
+    ...loadProductionOrders().filter((order) => (
+      order.workspaceId !== normalizedWorkspaceId
+    )),
+    ...(Array.isArray(orders)
+      ? orders.filter((order) => order?.workspaceId === normalizedWorkspaceId)
+      : []),
+  ]);
+}
+
 export const ProductionStorage = {
   loadProductionOrders,
   saveProductionOrders,
@@ -130,4 +203,8 @@ export const ProductionStorage = {
   updateStoredProductionOrder,
   removeProductionOrder,
   findProductionOrderByQuoteId,
+  replaceProductionOrder,
+  mergeProductionOrders,
+  findLocalProductionOrders,
+  replaceWorkspaceProductionOrders,
 };

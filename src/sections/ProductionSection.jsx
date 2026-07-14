@@ -36,6 +36,8 @@ export default function ProductionSection({
   selectedProductionOrderId,
   onSelectProductionOrder,
   onOpenQuote,
+  productionLoading = false,
+  productionError = '',
 }) {
   const sortedOrders = [...productionOrders].sort((a, b) => (
     dateTimestamp(b.updatedAt || b.fechaCreacion)
@@ -59,6 +61,12 @@ export default function ProductionSection({
             <h2>Producción</h2>
           </div>
         </header>
+        {productionLoading && (
+          <p className="production-cloud-status" role="status">Cargando órdenes de producción…</p>
+        )}
+        {productionError && (
+          <p className="production-cloud-status error" role="alert">{productionError}</p>
+        )}
         <div className="production-empty-state">
           <ClipboardList size={42} />
           <h3>No hay órdenes de producción todavía.</h3>
@@ -77,6 +85,13 @@ export default function ProductionSection({
           <p>Consulta las órdenes generadas desde cotizaciones aceptadas.</p>
         </div>
       </header>
+
+      {productionLoading && (
+        <p className="production-cloud-status" role="status">Cargando órdenes de producción…</p>
+      )}
+      {productionError && (
+        <p className="production-cloud-status error" role="alert">{productionError}</p>
+      )}
 
       <div className="production-metrics" aria-label="Resumen de producción">
         <article><span>Total OT</span><strong>{metrics.total}</strong></article>
