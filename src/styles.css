@@ -7669,3 +7669,23 @@ body,
   font-size: 12px;
   line-height: 1.4;
 }
+
+.history-row {
+  cursor: pointer;
+}
+
+.history-row.selected {
+  background: #f1f7f3;
+  border-color: #2f6f52;
+  box-shadow: 0 0 0 2px rgba(47, 111, 82, 0.16);
+}
+
+.summary-panel-head .summary-description,
+.summary-panel-detail strong {
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.summary-panel-detail {
+  margin-top: 10px;
+}

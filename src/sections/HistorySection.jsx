@@ -12,6 +12,8 @@ export default function HistorySection({
   updateHistoryStatus,
   loadHistoryItem,
   removeHistoryItem,
+  selectedHistoryPreview,
+  selectHistoryPreview,
 }) {
   return (
     <section className="panel">
@@ -32,21 +34,27 @@ export default function HistorySection({
       <div className="table-list">
         {history.length === 0 && <p>No hay cotizaciones guardadas todavía.</p>}
         {history.map((item) => (
-          <article key={item.id} className="history-row">
+          <article
+            key={item.id}
+            className={selectedHistoryPreview?.id === item.id ? 'history-row selected' : 'history-row'}
+            onClick={() => selectHistoryPreview(item)}
+          >
             <div>
               <strong>{item.producto}</strong>
               {item.folio && <span>Folio: {item.folio}</span>}
               <span>{item.clienteNombre} · {money(item.total)} · {new Date(item.createdAt).toLocaleDateString('es-MX')}</span>
             </div>
-            <select value={item.status || 'Pendiente'} onChange={(event) => updateHistoryStatus(item.id, event.target.value)}>
+            <select value={item.status || 'Pendiente'} onClick={(event) => event.stopPropagation()} onChange={(event) => updateHistoryStatus(item.id, event.target.value)}>
               <option>Pendiente</option>
-              <option>Aprobada</option>
+              <option>Enviada</option>
+              <option>Aceptada</option>
               <option>En fabricación</option>
-              <option>Instalada</option>
+              <option>Instalación</option>
+              <option>Terminada</option>
               <option>Cancelada</option>
             </select>
-            <button type="button" onClick={() => loadHistoryItem(item)}>Abrir</button>
-            <button type="button" className="ghost" onClick={() => removeHistoryItem(item.id)}><Eraser size={16} /></button>
+            <button type="button" onClick={(event) => { event.stopPropagation(); loadHistoryItem(item); }}>Abrir</button>
+            <button type="button" className="ghost" onClick={(event) => { event.stopPropagation(); removeHistoryItem(item.id); }}><Eraser size={16} /></button>
           </article>
         ))}
       </div>

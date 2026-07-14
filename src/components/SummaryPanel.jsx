@@ -1,12 +1,14 @@
 export default function SummaryPanel({
   proyecto,
-  cliente,
+  descripcion,
   totalCliente,
   costoInterno,
   utilidad,
   anticipo,
   saldo,
   estadoProyecto,
+  riesgos,
+  indicadores,
   progreso = 0,
   onWhatsApp,
   onPdf,
@@ -19,8 +21,10 @@ export default function SummaryPanel({
     <aside className="summary-panel" aria-label="Resumen del proyecto">
       <div className="summary-panel-head">
         <span>Resumen</span>
+        <small>Nombre</small>
         <strong>{proyecto}</strong>
-        <small>{cliente}</small>
+        <small>Descripción</small>
+        <strong className="summary-description">{descripcion}</strong>
       </div>
 
       <div className="summary-panel-metrics">
@@ -53,6 +57,14 @@ export default function SummaryPanel({
         </div>
         <div className="summary-progress" aria-label={`Progreso ${progressValue}%`}>
           <span style={{ width: `${progressValue}%` }} />
+        </div>
+        <div className="summary-panel-detail">
+          <span>Riesgos</span>
+          <strong>{riesgos}</strong>
+        </div>
+        <div className="summary-panel-detail">
+          <span>Indicadores</span>
+          <strong>{indicadores}</strong>
         </div>
       </div>
 
