@@ -51,6 +51,7 @@ import { WorkspaceService } from './lib/workspace/workspaceService.js';
 import { QuoteRepository } from './lib/quotes/quoteRepository.js';
 import { QuoteAdapter } from './lib/quotes/quoteAdapter.js';
 import { OfflineQueue } from './lib/quotes/offlineQueue.js';
+import { ConflictResolver } from './lib/quotes/conflictResolver.js';
 import { Areas, Materials, Pricing, Summary, Report, Quote, HistoryEngine, Pdf, StorageEngine, PlanEngine, AnalysisEngine } from './lib/br-engine/index.js';
 
 const APP_VERSION = '2026.05.39';
@@ -1897,6 +1898,79 @@ function App() {
     refreshPendingOfflineCount();
   }
 
+  async function resolveQuoteConflict(
+    localItem,
+    queuedOperation = null,
+    { allowPrompt = false } = {},
+  ) {
+    if (!localItem?.id) return false;
+
+    const isActiveQuote = activeQuoteIdentity?.id === localItem.id;
+    if (!allowPrompt || !isActiveQuote) {
+      if (queuedOperation?.id) {
+        OfflineQueue.updateOperation(queuedOperation.id, { conflict: true });
+        refreshPendingOfflineCount();
+      }
+      setSyncStatus('Conflicto de versión · requiere revisión');
+      return false;
+    }
+
+    setSyncStatus('La cotización fue modificada desde otro dispositivo.');
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+
+    const keepRemote = window.confirm(
+      'La cotización fue modificada desde otro dispositivo.\n\nAceptar: usar versión remota.\nCancelar: conservar la mía.'
+    );
+    const result = keepRemote
+      ? await ConflictResolver.resolveKeepRemote(localItem)
+      : await ConflictResolver.resolveKeepLocal(localItem);
+
+    if (result.error || !result.data) {
+      if (queuedOperation?.id) {
+        OfflineQueue.updateOperation(queuedOperation.id, { conflict: true });
+        refreshPendingOfflineCount();
+      }
+      setSyncStatus(
+        result.error?.code === 'QUOTE_REMOTE_DELETED'
+          ? 'La cotización fue eliminada en otro dispositivo.'
+          : 'No se pudo resolver el conflicto · datos locales conservados'
+      );
+      return false;
+    }
+
+    const resolvedItem = result.data;
+    const withoutConflictedItem = historyRef.current.filter((item) => (
+      item.id !== localItem.id && item.id !== resolvedItem.id
+    ));
+    const resolvedHistory = HistoryEngine.mergeHistoryItems(
+      [resolvedItem],
+      withoutConflictedItem,
+    );
+
+    historyRef.current = resolvedHistory;
+    setHistory(resolvedHistory);
+    StorageEngine.saveHistory(resolvedHistory);
+    setForm({ ...defaults, ...resolvedItem.form });
+    setSelectedHistoryPreview(null);
+    setActiveQuoteIdentity({
+      id: resolvedItem.id,
+      folio: resolvedItem.folio,
+      createdAt: resolvedItem.createdAt,
+      version: resolvedItem.version,
+      remote: true,
+    });
+
+    const workspaceId = queuedOperation?.workspaceId || activeWorkspace?.id;
+    if (workspaceId) {
+      removeQueuedQuoteOperations('update', workspaceId, localItem.id);
+    }
+
+    setSyncStatus(keepRemote ? 'Versión remota aplicada' : 'Cambios locales guardados');
+    void saveHistoryRemote(resolvedHistory);
+    void loadRemoteQuotes({ preserveStatus: true });
+    return true;
+  }
+
   async function processOfflineQueue() {
     const userId = authSession?.user?.id;
     const workspaceId = activeWorkspace?.id;
@@ -1935,7 +2009,16 @@ function App() {
         }
 
         if (operation.conflict) {
-          hasConflict = true;
+          const localItem = historyRef.current
+            .find((item) => item.id === operation.quoteId);
+          const resolved = localItem
+            ? await resolveQuoteConflict(localItem, operation)
+            : false;
+          if (!resolved) hasConflict = true;
+          if (resolved) {
+            syncedCount += 1;
+            shouldReload = true;
+          }
           continue;
         }
 
@@ -2000,12 +2083,22 @@ function App() {
           const attempts = operation.attempts + 1;
 
           if (operation.type === 'update' && error.code === 'QUOTE_VERSION_CONFLICT') {
-            OfflineQueue.updateOperation(operation.id, {
-              attempts,
-              conflict: true,
-            });
-            hasConflict = true;
-            refreshPendingOfflineCount();
+            const localItem = historyRef.current
+              .find((item) => item.id === operation.quoteId);
+            const resolved = localItem
+              ? await resolveQuoteConflict(localItem, operation)
+              : false;
+            if (resolved) {
+              syncedCount += 1;
+              shouldReload = true;
+            } else {
+              OfflineQueue.updateOperation(operation.id, {
+                attempts,
+                conflict: true,
+              });
+              hasConflict = true;
+              refreshPendingOfflineCount();
+            }
             continue;
           }
 
@@ -2242,7 +2335,7 @@ function App() {
       })();
 
     void remoteSave
-      .then(({ data, error }) => {
+      .then(async ({ data, error }) => {
         if (error?.code === 'QUOTE_VERSION_CONFLICT') {
           const queuedOperation = enqueueOfflineQuoteOperation({
             type: 'update',
@@ -2255,7 +2348,7 @@ function App() {
             OfflineQueue.updateOperation(queuedOperation.id, { conflict: true });
             refreshPendingOfflineCount();
           }
-          setSyncStatus('Conflicto de versión · requiere revisión');
+          await resolveQuoteConflict(item, queuedOperation, { allowPrompt: true });
           return;
         }
 
@@ -2523,13 +2616,146 @@ function App() {
     reader.readAsText(file);
   }
 
-  function updateHistoryStatus(id, status) {
+  async function updateHistoryStatus(id, nextStatus) {
+    const previousItem = historyRef.current.find((item) => item.id === id);
+    if (!previousItem) return;
+
     const now = Date.now();
-    const nextHistory = HistoryEngine.normalizeHistory(history.map((item) => (
-      item.id === id ? { ...item, status, updatedAt: now } : item
-    )));
+    const normalizedStatus = QuoteAdapter.normalizeQuoteStatus(nextStatus);
+    const updatedItem = {
+      ...previousItem,
+      status: normalizedStatus,
+      estadoCotizacion: normalizedStatus,
+      form: {
+        ...(previousItem.form || {}),
+        estadoCotizacion: normalizedStatus,
+      },
+      updatedAt: now,
+    };
+    const nextHistory = HistoryEngine.normalizeHistory(
+      historyRef.current.map((item) => (
+        item.id === id ? updatedItem : item
+      ))
+    );
+
+    historyRef.current = nextHistory;
     setHistory(nextHistory);
-    saveHistoryRemote(nextHistory);
+    StorageEngine.saveHistory(nextHistory);
+    setForm((current) => (
+      activeQuoteIdentity?.id === id
+        ? { ...current, estadoCotizacion: normalizedStatus }
+        : current
+    ));
+    setSelectedHistoryPreview((current) => (
+      current?.id === id ? { ...updatedItem } : current
+    ));
+
+    const expectedVersion = Number(previousItem.version);
+    const workspaceId = activeWorkspace?.id;
+    const canUpdateRemote = isRemoteQuoteId(id)
+      && Number.isInteger(expectedVersion)
+      && expectedVersion > 0
+      && authSession?.user?.id
+      && workspaceId;
+
+    if (!canUpdateRemote) {
+      setSyncStatus('Estado actualizado localmente');
+      return;
+    }
+
+    const payload = QuoteAdapter.historyItemToQuotePayload(updatedItem);
+    const enqueueStatusUpdate = (conflict = false) => {
+      const operation = enqueueOfflineQuoteOperation({
+        type: 'update',
+        workspaceId,
+        quoteId: id,
+        expectedVersion,
+        payload,
+      });
+      if (conflict && operation?.id) {
+        OfflineQueue.updateOperation(operation.id, { conflict: true });
+        refreshPendingOfflineCount();
+      }
+      return operation;
+    };
+
+    if (!navigator.onLine) {
+      enqueueStatusUpdate();
+      setSyncStatus('Estado guardado localmente · pendiente de sincronizar');
+      return;
+    }
+
+    setSyncStatus('Actualizando estado...');
+
+    try {
+      const { data, error } = await QuoteRepository.updateQuote(
+        id,
+        payload,
+        expectedVersion,
+      );
+
+      if (error?.code === 'QUOTE_VERSION_CONFLICT') {
+        enqueueStatusUpdate(true);
+        setSyncStatus('Conflicto de versión · requiere revisión');
+        return;
+      }
+
+      if (error || !data) {
+        if (isNetworkError(error)) {
+          enqueueStatusUpdate();
+          setSyncStatus('Estado guardado localmente · pendiente de sincronizar');
+        } else {
+          setSyncStatus('Estado actualizado localmente');
+        }
+        return;
+      }
+
+      const remoteItem = QuoteAdapter.quoteRowToHistoryItem(data);
+      const confirmedItem = {
+        ...remoteItem,
+        id: updatedItem.id,
+        folio: updatedItem.folio,
+        createdAt: updatedItem.createdAt,
+      };
+      const confirmedHistory = HistoryEngine.normalizeHistory(
+        historyRef.current.map((item) => (
+          item.id === id ? confirmedItem : item
+        ))
+      );
+
+      historyRef.current = confirmedHistory;
+      setHistory(confirmedHistory);
+      StorageEngine.saveHistory(confirmedHistory);
+      setForm((current) => (
+        activeQuoteIdentity?.id === id
+          ? { ...current, estadoCotizacion: confirmedItem.estadoCotizacion }
+          : current
+      ));
+      setActiveQuoteIdentity((current) => (
+        current?.id === id
+          ? { ...current, version: confirmedItem.version }
+          : current
+      ));
+      setSelectedHistoryPreview((current) => (
+        current?.id === id ? { ...confirmedItem } : current
+      ));
+      removeQueuedQuoteOperations('update', workspaceId, id);
+      setLastSyncAt(
+        new Date().toLocaleTimeString('es-MX', {
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+      );
+      setSyncStatus('Estado actualizado en nube');
+      void loadRemoteQuotes({ preserveStatus: true });
+    } catch (error) {
+      if (isNetworkError(error)) {
+        enqueueStatusUpdate();
+        setSyncStatus('Estado guardado localmente · pendiente de sincronizar');
+      } else {
+        setSyncStatus('Estado actualizado localmente');
+      }
+    }
   }
 
   function copyText(text, label = 'Texto') {
