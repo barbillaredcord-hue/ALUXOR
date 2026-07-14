@@ -50,6 +50,7 @@ import { AuthService } from './lib/auth/authService.js';
 import { WorkspaceService } from './lib/workspace/workspaceService.js';
 import { QuoteRepository } from './lib/quotes/quoteRepository.js';
 import { QuoteAdapter } from './lib/quotes/quoteAdapter.js';
+import { OfflineQueue } from './lib/quotes/offlineQueue.js';
 import { Areas, Materials, Pricing, Summary, Report, Quote, HistoryEngine, Pdf, StorageEngine, PlanEngine, AnalysisEngine } from './lib/br-engine/index.js';
 
 const APP_VERSION = '2026.05.39';
@@ -442,6 +443,55 @@ function isRemoteQuoteId(value) {
     .test(String(value || ''));
 }
 
+function isNetworkError(error) {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return true;
+
+  const code = String(error?.code || '').toUpperCase();
+  const name = String(error?.name || '').toLowerCase();
+  const message = String(error?.message || '').toLowerCase();
+  const details = String(error?.details || '').toLowerCase();
+  const description = `${message} ${details}`;
+
+  if (
+    code === '23505'
+    || code === 'QUOTE_VERSION_CONFLICT'
+    || code === '42501'
+    || description.includes('row-level security')
+    || description.includes('permission denied')
+  ) {
+    return false;
+  }
+
+  return name === 'aborterror'
+    || name === 'timeouterror'
+    || name === 'networkerror'
+    || ['ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'NETWORK_ERROR', 'FETCH_ERROR']
+      .includes(code)
+    || description.includes('failed to fetch')
+    || description.includes('fetch failed')
+    || description.includes('network request failed')
+    || description.includes('networkerror')
+    || description.includes('timeout')
+    || description.includes('timed out');
+}
+
+function queuedCreateMatchesRow(row, payload) {
+  if (!row || !payload || row.folio !== payload.folio) return false;
+
+  try {
+    return row.status === payload.status
+      && row.client_name === payload.client_name
+      && row.client_phone === payload.client_phone
+      && row.product_name === payload.product_name
+      && Number(row.total) === Number(payload.total)
+      && Number(row.deposit) === Number(payload.deposit)
+      && Number(row.balance) === Number(payload.balance)
+      && JSON.stringify(row.form_data || {}) === JSON.stringify(payload.form_data || {});
+  } catch {
+    return false;
+  }
+}
+
 function positiveNumber(value) {
   return Math.max(0, numberValue(value));
 }
@@ -825,7 +875,12 @@ function App() {
   });
   const supabaseTransportActiveRef = useRef(false);
   const quoteSaveInFlightRef = useRef(false);
+  const offlineQueueProcessingRef = useRef(false);
   const [activeQuoteIdentity, setActiveQuoteIdentity] = useState(null);
+  const [selectedHistoryPreview, setSelectedHistoryPreview] = useState(null);
+  const [pendingOfflineCount, setPendingOfflineCount] = useState(
+    () => OfflineQueue.getPendingCount()
+  );
   const [legacyRecoveredCount, setLegacyRecoveredCount] = useState(0);
   const [copied, setCopied] = useState('');
   const [largeText, setLargeText] = useState(false);
@@ -840,6 +895,9 @@ function App() {
   const [floatingSummary, setFloatingSummary] = useState({ x: 24, y: 120, compact: false, minimized: false });
   const [quickCalc, setQuickCalc] = useState({ materialId: '', nombre: 'Melamina', categoria: 'Madera/Melamina', tipoCompra: 'hoja', baseUso: 'medidas', ancho: 122, alto: 244, largo: 100, cantidad: 1, precioTotal: 1200, areaManual: 0, linealManual: 0, cantidadManual: 1, merma: 8, margen: 35 });
   const [pdfEditor, setPdfEditor] = useState(null);
+  const visibleSyncStatus = pendingOfflineCount > 0
+    ? `${syncStatus.includes('Sin conexión') ? 'Sin conexión' : syncStatus} · ${pendingOfflineCount} ${pendingOfflineCount === 1 ? 'operación pendiente' : 'operaciones pendientes'}`
+    : syncStatus;
 
   supabaseTransportActiveRef.current = Boolean(
     authSession?.user?.id && activeWorkspace?.id
@@ -926,6 +984,53 @@ function App() {
 
   const quote = useMemo(() => Quote.calculateQuote(form, quoteHelpers), [form]);
   const dataHealth = useMemo(() => quoteDataHealth(form, quote), [form, quote]);
+  const selectedHistorySummary = useMemo(() => {
+    if (!selectedHistoryPreview) return null;
+
+    const previewForm = { ...(selectedHistoryPreview.form || {}) };
+    const calculatedQuote = Quote.calculateQuote(previewForm, quoteHelpers);
+    const total = numberValue(selectedHistoryPreview.total);
+    const internalTotal = calculatedQuote.internalTotal;
+    const previewQuote = {
+      ...calculatedQuote,
+      total,
+      deposit: numberValue(selectedHistoryPreview.anticipo),
+      rest: numberValue(selectedHistoryPreview.resto),
+      profit: total - internalTotal,
+    };
+    const health = quoteDataHealth(previewForm, previewQuote);
+
+    return {
+      nombre: selectedHistoryPreview.producto || 'Proyecto sin nombre',
+      descripcion: selectedHistoryPreview.notasCliente
+        || previewForm.notasCliente
+        || selectedHistoryPreview.tipoTrabajo
+        || 'Sin descripción',
+      quote: previewQuote,
+      estado: selectedHistoryPreview.estadoCotizacion
+        || selectedHistoryPreview.status
+        || 'Pendiente',
+      riesgos: health.warnings.length
+        ? health.warnings.join(' · ')
+        : 'Sin riesgos detectados',
+      indicadores: `${health.score}% de datos completos`,
+      progreso: health.score,
+    };
+  }, [selectedHistoryPreview]);
+  const activeQuoteSummary = {
+    nombre: form.producto || 'Proyecto sin nombre',
+    descripcion: form.notasCliente || form.tipoTrabajo || 'Sin descripción',
+    quote,
+    estado: form.estadoCotizacion || 'Pendiente',
+    riesgos: dataHealth.warnings.length
+      ? dataHealth.warnings.join(' · ')
+      : 'Sin riesgos detectados',
+    indicadores: `${dataHealth.score}% de datos completos`,
+    progreso: dataHealth.score,
+  };
+  const contextualQuoteSummary = activeSection === 'historial' && selectedHistorySummary
+    ? selectedHistorySummary
+    : activeQuoteSummary;
   const materials = useMemo(() => Report.generateMaterials(form, quote, reportHelpers), [form, quote]);
   const outputs = useMemo(() => Report.generateOutputs(form, quote, reportHelpers), [form, quote]);
   const roleCards = useMemo(() => Report.workRoleCards(form, quote, reportHelpers), [form, quote]);
@@ -1050,11 +1155,43 @@ function App() {
         return;
       }
 
-      const remoteHistory = (Array.isArray(data) ? data : [])
-        .map(QuoteAdapter.quoteRowToHistoryItem);
-      const localOnlyHistory = historyRef.current
-        .filter((item) => !isRemoteQuoteId(item.id));
-      const merged = HistoryEngine.mergeHistoryItems(remoteHistory, localOnlyHistory);
+      const remoteRows = Array.isArray(data) ? data : [];
+      const remoteHistory = remoteRows.map(QuoteAdapter.quoteRowToHistoryItem);
+      const pendingOperations = OfflineQueue.loadQueue()
+        .filter((operation) => operation.workspaceId === workspaceId);
+      const pendingCreateOperations = pendingOperations
+        .filter((operation) => operation.type === 'create');
+      const pendingUpdateIds = new Set(
+        pendingOperations
+          .filter((operation) => operation.type === 'update')
+          .map((operation) => operation.quoteId)
+      );
+      const pendingDeleteIds = new Set(
+        pendingOperations
+          .filter((operation) => operation.type === 'soft_delete')
+          .map((operation) => operation.quoteId)
+      );
+      const localIds = new Set(historyRef.current.map((item) => item.id));
+      const pendingCreateRemoteIds = new Set(
+        remoteRows
+          .filter((row) => pendingCreateOperations.some((operation) => (
+            localIds.has(operation.quoteId)
+            && queuedCreateMatchesRow(row, operation.payload)
+          )))
+          .map((row) => row.id)
+      );
+      const safeRemoteHistory = remoteHistory.filter((item) => (
+        !pendingDeleteIds.has(item.id)
+        && !pendingCreateRemoteIds.has(item.id)
+        && !(pendingUpdateIds.has(item.id) && localIds.has(item.id))
+      ));
+      const protectedLocalHistory = historyRef.current.filter((item) => (
+        !isRemoteQuoteId(item.id) || pendingUpdateIds.has(item.id)
+      ));
+      const merged = HistoryEngine.mergeHistoryItems(
+        safeRemoteHistory,
+        protectedLocalHistory,
+      );
 
       historyRef.current = merged;
       setHistory(merged);
@@ -1068,6 +1205,7 @@ function App() {
       if (!preserveStatus && !remoteQuotesRequestRef.current.preserveCurrentStatus) {
         setSyncStatus('Historial sincronizado');
       }
+      void processOfflineQueue();
     } catch (error) {
       if (requestId !== remoteQuotesRequestRef.current.id) return;
       console.warn('No fue posible cargar cotizaciones remotas:', error);
@@ -1132,6 +1270,53 @@ function App() {
       };
       window.removeEventListener('focus', reloadRemoteQuotes);
       window.removeEventListener('online', reloadRemoteQuotes);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [authSession?.user?.id, activeWorkspace?.id]);
+
+  useEffect(() => {
+    const userId = authSession?.user?.id;
+    const workspaceId = activeWorkspace?.id;
+
+    if (!userId || !workspaceId) return undefined;
+
+    let debounceId = null;
+    const unsubscribe = QuoteRepository.subscribeQuotes(workspaceId, () => {
+      if (debounceId !== null) window.clearTimeout(debounceId);
+
+      debounceId = window.setTimeout(() => {
+        debounceId = null;
+        void loadRemoteQuotes();
+      }, 300);
+    });
+
+    return () => {
+      if (debounceId !== null) window.clearTimeout(debounceId);
+      unsubscribe();
+    };
+  }, [authSession?.user?.id, activeWorkspace?.id]);
+
+  useEffect(() => {
+    const userId = authSession?.user?.id;
+    const workspaceId = activeWorkspace?.id;
+
+    if (!userId || !workspaceId) return undefined;
+
+    const processQueue = () => {
+      void processOfflineQueue();
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') processQueue();
+    };
+
+    processQueue();
+    window.addEventListener('online', processQueue);
+    window.addEventListener('focus', processQueue);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      window.removeEventListener('online', processQueue);
+      window.removeEventListener('focus', processQueue);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, [authSession?.user?.id, activeWorkspace?.id]);
@@ -1674,6 +1859,241 @@ function App() {
     });
   }
 
+  function refreshPendingOfflineCount() {
+    const count = OfflineQueue.getPendingCount();
+    setPendingOfflineCount(count);
+    return count;
+  }
+
+  function enqueueOfflineQuoteOperation({
+    type,
+    workspaceId,
+    quoteId,
+    expectedVersion = null,
+    payload = null,
+  }) {
+    const operation = OfflineQueue.enqueueOperation({
+      type,
+      createdAt: Date.now(),
+      attempts: 0,
+      workspaceId,
+      quoteId,
+      expectedVersion,
+      payload,
+    });
+
+    refreshPendingOfflineCount();
+    return operation;
+  }
+
+  function removeQueuedQuoteOperations(type, workspaceId, quoteId) {
+    OfflineQueue.loadQueue()
+      .filter((operation) => (
+        operation.type === type
+        && operation.workspaceId === workspaceId
+        && operation.quoteId === quoteId
+      ))
+      .forEach((operation) => OfflineQueue.removeOperation(operation.id));
+    refreshPendingOfflineCount();
+  }
+
+  async function processOfflineQueue() {
+    const userId = authSession?.user?.id;
+    const workspaceId = activeWorkspace?.id;
+
+    if (!navigator.onLine) {
+      if (OfflineQueue.getPendingCount() > 0) setSyncStatus('Sin conexión');
+      return;
+    }
+
+    if (
+      offlineQueueProcessingRef.current
+      || !userId
+      || !workspaceId
+    ) {
+      return;
+    }
+
+    offlineQueueProcessingRef.current = true;
+    let syncedCount = 0;
+    let shouldReload = false;
+    let stoppedByNetwork = false;
+    let hasConflict = false;
+    let lastSuccessMessage = '';
+    let currentOperation = null;
+
+    try {
+      const operations = OfflineQueue.loadQueue()
+        .filter((operation) => operation.workspaceId === workspaceId)
+        .sort((left, right) => left.createdAt - right.createdAt);
+
+      for (const operation of operations) {
+        currentOperation = operation;
+        if (!navigator.onLine) {
+          stoppedByNetwork = true;
+          break;
+        }
+
+        if (operation.conflict) {
+          hasConflict = true;
+          continue;
+        }
+
+        let result;
+
+        if (operation.type === 'create') {
+          result = await QuoteRepository.createQuote(workspaceId, operation.payload);
+
+          if (isWorkspaceFolioConflict(result.error)) {
+            const remoteResult = await QuoteRepository.loadQuotes(workspaceId);
+            if (remoteResult.error && isNetworkError(remoteResult.error)) {
+              result = remoteResult;
+            } else {
+              const remoteRows = Array.isArray(remoteResult.data) ? remoteResult.data : [];
+              const existingRow = remoteRows.find((row) => (
+                queuedCreateMatchesRow(row, operation.payload)
+              ));
+
+              if (existingRow) {
+                result = { data: existingRow, error: null };
+              } else {
+                const retryFolio = generateQuoteFolio([
+                  ...historyRef.current,
+                  ...remoteRows,
+                ]);
+                const retryPayload = { ...operation.payload, folio: retryFolio };
+                OfflineQueue.updateOperation(operation.id, { payload: retryPayload });
+
+                const retryHistory = HistoryEngine.normalizeHistory(
+                  historyRef.current.map((item) => (
+                    item.id === operation.quoteId
+                      ? { ...item, folio: retryFolio, updatedAt: Date.now() }
+                      : item
+                  )),
+                );
+                historyRef.current = retryHistory;
+                setHistory(retryHistory);
+                StorageEngine.saveHistory(retryHistory);
+                setActiveQuoteIdentity((current) => (
+                  current?.id === operation.quoteId
+                    ? { ...current, folio: retryFolio, version: null, remote: false }
+                    : current
+                ));
+
+                result = await QuoteRepository.createQuote(workspaceId, retryPayload);
+              }
+            }
+          }
+        } else if (operation.type === 'update') {
+          result = await QuoteRepository.updateQuote(
+            operation.quoteId,
+            operation.payload,
+            operation.expectedVersion,
+          );
+        } else {
+          result = await QuoteRepository.softDeleteQuote(operation.quoteId);
+        }
+
+        const operationFailed = result?.error || !result?.data;
+        if (operationFailed) {
+          const error = result?.error || new Error('Supabase no devolvió datos.');
+          const attempts = operation.attempts + 1;
+
+          if (operation.type === 'update' && error.code === 'QUOTE_VERSION_CONFLICT') {
+            OfflineQueue.updateOperation(operation.id, {
+              attempts,
+              conflict: true,
+            });
+            hasConflict = true;
+            refreshPendingOfflineCount();
+            continue;
+          }
+
+          OfflineQueue.updateOperation(operation.id, { attempts });
+          refreshPendingOfflineCount();
+
+          if (isNetworkError(error)) {
+            stoppedByNetwork = true;
+            break;
+          }
+
+          continue;
+        }
+
+        OfflineQueue.removeOperation(operation.id);
+        refreshPendingOfflineCount();
+        syncedCount += 1;
+        shouldReload = true;
+
+        if (operation.type === 'soft_delete') {
+          const nextHistory = HistoryEngine.normalizeHistory(
+            historyRef.current.filter((item) => item.id !== operation.quoteId)
+          );
+          historyRef.current = nextHistory;
+          setHistory(nextHistory);
+          StorageEngine.saveHistory(nextHistory);
+          setActiveQuoteIdentity((current) => (
+            current?.id === operation.quoteId ? null : current
+          ));
+          lastSuccessMessage = 'Eliminación sincronizada';
+          continue;
+        }
+
+        const remoteItem = QuoteAdapter.quoteRowToHistoryItem(result.data);
+        const withoutLocalItem = historyRef.current.filter((item) => (
+          item.id !== operation.quoteId && item.id !== remoteItem.id
+        ));
+        const nextHistory = HistoryEngine.mergeHistoryItems(
+          [remoteItem],
+          withoutLocalItem,
+        );
+        historyRef.current = nextHistory;
+        setHistory(nextHistory);
+        StorageEngine.saveHistory(nextHistory);
+        setActiveQuoteIdentity((current) => (
+          current?.id === operation.quoteId || current?.id === remoteItem.id
+            ? {
+              id: remoteItem.id,
+              folio: remoteItem.folio,
+              createdAt: remoteItem.createdAt,
+              version: remoteItem.version,
+              remote: true,
+            }
+            : current
+        ));
+        lastSuccessMessage = operation.type === 'create'
+          ? 'Cotización sincronizada'
+          : 'Cambios sincronizados';
+      }
+    } catch (error) {
+      if (currentOperation) {
+        OfflineQueue.updateOperation(currentOperation.id, {
+          attempts: currentOperation.attempts + 1,
+        });
+      }
+      stoppedByNetwork = isNetworkError(error);
+    } finally {
+      offlineQueueProcessingRef.current = false;
+      const remainingCount = refreshPendingOfflineCount();
+
+      if (stoppedByNetwork) {
+        setSyncStatus('Sin conexión');
+      } else if (hasConflict) {
+        setSyncStatus('Conflicto de versión · requiere revisión');
+      } else if (syncedCount > 1 && remainingCount === 0) {
+        setSyncStatus('Cola sincronizada');
+      } else if (lastSuccessMessage) {
+        setSyncStatus(lastSuccessMessage);
+      } else if (remainingCount > 0) {
+        setSyncStatus('Sincronización pendiente');
+      }
+
+      if (shouldReload && !stoppedByNetwork && navigator.onLine) {
+        void loadRemoteQuotes({ preserveStatus: true });
+      }
+    }
+  }
+
   function saveToHistory() {
     if (quoteSaveInFlightRef.current) return;
     quoteSaveInFlightRef.current = true;
@@ -1712,8 +2132,6 @@ function App() {
       ...(currentIdentity?.version ? { version: currentIdentity.version } : {}),
     };
 
-    const previousItem = historyRef.current
-      .find((historyItem) => historyItem.id === item.id);
     const nextHistory = HistoryEngine.mergeHistoryItems([item], historyRef.current);
     historyRef.current = nextHistory;
     setHistory(nextHistory);
@@ -1732,7 +2150,7 @@ function App() {
     const workspaceId = activeWorkspace?.id;
     const userId = authSession?.user?.id;
 
-    if (!userId || !workspaceId) {
+    if (!workspaceId) {
       quoteSaveInFlightRef.current = false;
       void Promise.resolve(legacySave).finally(() => {
         setSyncStatus('Guardada localmente · esperando conexión al workspace');
@@ -1758,6 +2176,19 @@ function App() {
       return;
     }
 
+    if (!userId || !navigator.onLine) {
+      enqueueOfflineQuoteOperation({
+        type: hasRemoteIdentity ? 'update' : 'create',
+        workspaceId,
+        quoteId: item.id,
+        expectedVersion: currentIdentity?.version || null,
+        payload,
+      });
+      quoteSaveInFlightRef.current = false;
+      setSyncStatus('Guardada localmente · pendiente de sincronizar');
+      return;
+    }
+
     const remoteSave = hasRemoteIdentity
       ? QuoteRepository.updateQuote(
         currentIdentity.id,
@@ -1771,7 +2202,16 @@ function App() {
         warnCreateQuoteError(firstAttempt.error);
         setSyncStatus('Folio duplicado · generando nuevo consecutivo');
 
-        const { data: remoteQuotes } = await QuoteRepository.loadQuotes(workspaceId);
+        const {
+          data: remoteQuotes,
+          error: remoteQuotesError,
+        } = await QuoteRepository.loadQuotes(workspaceId);
+        if (remoteQuotesError) return { data: null, error: remoteQuotesError };
+
+        const existingRow = (Array.isArray(remoteQuotes) ? remoteQuotes : [])
+          .find((row) => queuedCreateMatchesRow(row, payload));
+        if (existingRow) return { data: existingRow, error: null };
+
         const retryFolio = generateQuoteFolio([
           ...historyRef.current,
           ...(Array.isArray(remoteQuotes) ? remoteQuotes : []),
@@ -1804,24 +2244,35 @@ function App() {
     void remoteSave
       .then(({ data, error }) => {
         if (error?.code === 'QUOTE_VERSION_CONFLICT') {
-          const withoutOptimisticItem = historyRef.current
-            .filter((historyItem) => historyItem.id !== item.id);
-          const restoredHistory = previousItem
-            ? HistoryEngine.mergeHistoryItems([previousItem], withoutOptimisticItem)
-            : HistoryEngine.normalizeHistory(withoutOptimisticItem);
-
-          historyRef.current = restoredHistory;
-          setHistory(restoredHistory);
-          StorageEngine.saveHistory(restoredHistory);
-          setSyncStatus('Conflicto de versión · recarga la cotización antes de guardar');
-
-          void Promise.resolve(legacySave).finally(() => {
-            void saveHistoryRemote(restoredHistory);
+          const queuedOperation = enqueueOfflineQuoteOperation({
+            type: 'update',
+            workspaceId,
+            quoteId: item.id,
+            expectedVersion: currentIdentity?.version || null,
+            payload,
           });
+          if (queuedOperation) {
+            OfflineQueue.updateOperation(queuedOperation.id, { conflict: true });
+            refreshPendingOfflineCount();
+          }
+          setSyncStatus('Conflicto de versión · requiere revisión');
           return;
         }
 
         if (error || !data) {
+          if (isNetworkError(error)) {
+            if (!hasRemoteIdentity) warnCreateQuoteError(error);
+            enqueueOfflineQuoteOperation({
+              type: hasRemoteIdentity ? 'update' : 'create',
+              workspaceId,
+              quoteId: item.id,
+              expectedVersion: currentIdentity?.version || null,
+              payload,
+            });
+            setSyncStatus('Guardada localmente · pendiente de sincronizar');
+            return;
+          }
+
           if (!hasRemoteIdentity) {
             warnCreateQuoteError(
               error || new Error('Supabase no devolvió la cotización creada.'),
@@ -1853,6 +2304,11 @@ function App() {
           version: remoteItem.version,
           remote: true,
         });
+        removeQueuedQuoteOperations(
+          hasRemoteIdentity ? 'update' : 'create',
+          workspaceId,
+          item.id,
+        );
         setLastSyncAt(
           new Date().toLocaleTimeString('es-MX', {
             hour: '2-digit',
@@ -1871,6 +2327,19 @@ function App() {
         });
       })
       .catch((error) => {
+        if (isNetworkError(error)) {
+          if (!hasRemoteIdentity) warnCreateQuoteError(error);
+          enqueueOfflineQuoteOperation({
+            type: hasRemoteIdentity ? 'update' : 'create',
+            workspaceId,
+            quoteId: item.id,
+            expectedVersion: currentIdentity?.version || null,
+            payload,
+          });
+          setSyncStatus('Guardada localmente · pendiente de sincronizar');
+          return;
+        }
+
         if (!hasRemoteIdentity) {
           warnCreateQuoteError(error);
         }
@@ -1888,6 +2357,7 @@ function App() {
   function loadHistoryItem(item) {
     if (!item?.form) return;
     const version = numberValue(item.version);
+    setSelectedHistoryPreview(null);
     setForm({ ...defaults, ...item.form });
     setActiveQuoteIdentity({
       id: item.id,
@@ -1912,48 +2382,100 @@ function App() {
         : JSON.parse(JSON.stringify(defaults));
 
     setForm(nextDefaults);
+    setSelectedHistoryPreview(null);
     setActiveQuoteIdentity(null);
     setActiveSection('cotizador');
     setCopied('Nueva cotización lista');
   }
 
   function removeHistoryItem(id) {
+    const workspaceId = activeWorkspace?.id;
+    const removedItem = historyRef.current.find((item) => item.id === id);
+    const nextHistory = HistoryEngine.normalizeHistory(
+      historyRef.current.filter((item) => item.id !== id)
+    );
+
+    historyRef.current = nextHistory;
+    setHistory(nextHistory);
+    StorageEngine.saveHistory(nextHistory);
+    setActiveQuoteIdentity((current) => (
+      current?.id === id ? null : current
+    ));
+    void saveHistoryRemote(nextHistory);
+
     if (isRemoteQuoteId(id)) {
+      if (workspaceId && (!authSession?.user?.id || !navigator.onLine)) {
+        enqueueOfflineQuoteOperation({
+          type: 'soft_delete',
+          workspaceId,
+          quoteId: id,
+        });
+        setSyncStatus('Guardada localmente · pendiente de sincronizar');
+        return;
+      }
+
       void QuoteRepository.softDeleteQuote(id)
         .then(({ data, error }) => {
           if (error || !data) {
+            if (workspaceId && isNetworkError(error)) {
+              enqueueOfflineQuoteOperation({
+                type: 'soft_delete',
+                workspaceId,
+                quoteId: id,
+              });
+              setSyncStatus('Guardada localmente · pendiente de sincronizar');
+              return;
+            }
+
+            if (removedItem) {
+              const restoredHistory = HistoryEngine.mergeHistoryItems(
+                [removedItem],
+                historyRef.current,
+              );
+              historyRef.current = restoredHistory;
+              setHistory(restoredHistory);
+              StorageEngine.saveHistory(restoredHistory);
+              void saveHistoryRemote(restoredHistory);
+            }
             setSyncStatus('No se pudo eliminar en nube');
             return;
           }
 
-          const nextHistory = HistoryEngine.normalizeHistory(
-            historyRef.current.filter((item) => item.id !== id)
-          );
-          historyRef.current = nextHistory;
-          setHistory(nextHistory);
-          StorageEngine.saveHistory(nextHistory);
-
-          setActiveQuoteIdentity((current) => (
-            current?.id === id ? null : current
-          ));
-
+          if (workspaceId) {
+            removeQueuedQuoteOperations('soft_delete', workspaceId, id);
+          }
           setSyncStatus('Cotización eliminada en nube');
-          void saveHistoryRemote(nextHistory);
           void loadRemoteQuotes({ preserveStatus: true });
         })
-        .catch(() => {
+        .catch((error) => {
+          if (workspaceId && isNetworkError(error)) {
+            enqueueOfflineQuoteOperation({
+              type: 'soft_delete',
+              workspaceId,
+              quoteId: id,
+            });
+            setSyncStatus('Guardada localmente · pendiente de sincronizar');
+            return;
+          }
+
+          if (removedItem) {
+            const restoredHistory = HistoryEngine.mergeHistoryItems(
+              [removedItem],
+              historyRef.current,
+            );
+            historyRef.current = restoredHistory;
+            setHistory(restoredHistory);
+            StorageEngine.saveHistory(restoredHistory);
+            void saveHistoryRemote(restoredHistory);
+          }
           setSyncStatus('No se pudo eliminar en nube');
         });
       return;
     }
 
-    const nextHistory = HistoryEngine.normalizeHistory(
-      historyRef.current.filter((item) => item.id !== id)
-    );
-    historyRef.current = nextHistory;
-    setHistory(nextHistory);
-    StorageEngine.saveHistory(nextHistory);
-    void saveHistoryRemote(nextHistory);
+    if (workspaceId) {
+      removeQueuedQuoteOperations('create', workspaceId, id);
+    }
   }
 
   function exportHistoryBackup() {
@@ -2218,15 +2740,17 @@ function App() {
         )}
 
         <SummaryPanel
-          proyecto={form.producto || 'Proyecto sin nombre'}
-          cliente={form.clienteNombre || 'Cliente pendiente'}
-          totalCliente={money(quote.total)}
-          costoInterno={money(quote.internalTotal)}
-          utilidad={money(quote.profit)}
-          anticipo={money(quote.deposit)}
-          saldo={money(quote.rest)}
-          estadoProyecto={form.estadoCotizacion || 'Pendiente'}
-          progreso={dataHealth.score}
+          proyecto={contextualQuoteSummary.nombre}
+          descripcion={contextualQuoteSummary.descripcion}
+          totalCliente={money(contextualQuoteSummary.quote.total)}
+          costoInterno={money(contextualQuoteSummary.quote.internalTotal)}
+          utilidad={money(contextualQuoteSummary.quote.profit)}
+          anticipo={money(contextualQuoteSummary.quote.deposit)}
+          saldo={money(contextualQuoteSummary.quote.rest)}
+          estadoProyecto={contextualQuoteSummary.estado}
+          riesgos={contextualQuoteSummary.riesgos}
+          indicadores={contextualQuoteSummary.indicadores}
+          progreso={contextualQuoteSummary.progreso}
           onWhatsApp={openWhatsApp}
           onPdf={() => openPrint('client')}
           onGuardar={saveToHistory}
@@ -2254,8 +2778,8 @@ function App() {
         <div className="sync-card">
           <RefreshCw size={18} />
           <div>
-            <strong>{syncStatus.includes('Sin conexión') ? 'Sin conexión' : syncStatus}</strong>
-            <span>{lastSyncAt ? `Última sincronización: ${lastSyncAt}` : syncStatus.includes('Sin conexión') ? 'Usando copia local' : 'Local + nube'}</span>
+            <strong>{visibleSyncStatus}</strong>
+            <span>{lastSyncAt ? `Última sincronización: ${lastSyncAt}` : visibleSyncStatus.includes('Sin conexión') ? 'Usando copia local' : 'Local + nube'}</span>
           </div>
         </div>
 
@@ -2529,7 +3053,7 @@ function App() {
 
         {activeSection === 'historial' && (
           <HistorySection
-            syncStatus={syncStatus}
+            syncStatus={visibleSyncStatus}
             lastSyncAt={lastSyncAt}
             legacyRecoveredCount={legacyRecoveredCount}
             exportHistoryBackup={exportHistoryBackup}
@@ -2540,6 +3064,8 @@ function App() {
             updateHistoryStatus={updateHistoryStatus}
             loadHistoryItem={loadHistoryItem}
             removeHistoryItem={removeHistoryItem}
+            selectedHistoryPreview={selectedHistoryPreview}
+            selectHistoryPreview={setSelectedHistoryPreview}
           />
         )}
 
