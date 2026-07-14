@@ -1,5 +1,5 @@
 // cSpell:words ALUXOR AnunciaPro anunciapro aluxor Clóset clóset clósets Cotizacion cotizacion Telefono telefono whatsapp promocion jaladera Jaladera jaladeras Jaladeras tornillería Silicón categoria bano economico descripcion triplay Triplay buro buró Buró burós pzas Vidrieria Carpinteria zoclo herrajes melamina merma cotizador metalness
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   Accessibility,
@@ -25,6 +25,8 @@ import {
 } from 'lucide-react';
 import './styles.css';
 import { registerServiceWorker } from './pwa';
+import AuthGate from './components/auth/AuthGate.jsx';
+import UserSessionCard from './components/auth/UserSessionCard.jsx';
 import Field from './components/Field.jsx';
 import InspectorPanel from './components/InspectorPanel.jsx';
 import PlanCanvas3D from './components/PlanCanvas3D.jsx';
@@ -44,6 +46,10 @@ import PurchasesSection from './sections/PurchasesSection.jsx';
 import ReceivingSection from './sections/ReceivingSection.jsx';
 import SettingsSection from './sections/SettingsSection.jsx';
 import TextSection from './sections/TextSection.jsx';
+import { AuthService } from './lib/auth/authService.js';
+import { WorkspaceService } from './lib/workspace/workspaceService.js';
+import { QuoteRepository } from './lib/quotes/quoteRepository.js';
+import { QuoteAdapter } from './lib/quotes/quoteAdapter.js';
 import { Areas, Materials, Pricing, Summary, Report, Quote, HistoryEngine, Pdf, StorageEngine, PlanEngine, AnalysisEngine } from './lib/br-engine/index.js';
 
 const APP_VERSION = '2026.05.39';
@@ -794,9 +800,19 @@ function refreshInstalledApp() {
 }
 
 function App() {
+  const [authSession, setAuthSession] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [activeWorkspace, setActiveWorkspace] = useState(null);
+  const [activeMembership, setActiveMembership] = useState(null);
+  const [workspaceLoading, setWorkspaceLoading] = useState(false);
+  const [workspaceError, setWorkspaceError] = useState('');
+  const [signOutLoading, setSignOutLoading] = useState(false);
   const [form, setForm] = useState(defaults);
   const [catalog, setCatalog] = useState(() => StorageEngine.loadCatalog(storageHelpers));
   const [history, setHistory] = useState(() => StorageEngine.loadHistory(storageHelpers));
+  const historyRef = useRef(history);
+  const remoteQuotesRequestRef = useRef(0);
+  const supabaseTransportActiveRef = useRef(false);
   const [legacyRecoveredCount, setLegacyRecoveredCount] = useState(0);
   const [copied, setCopied] = useState('');
   const [largeText, setLargeText] = useState(false);
@@ -811,6 +827,89 @@ function App() {
   const [floatingSummary, setFloatingSummary] = useState({ x: 24, y: 120, compact: false, minimized: false });
   const [quickCalc, setQuickCalc] = useState({ materialId: '', nombre: 'Melamina', categoria: 'Madera/Melamina', tipoCompra: 'hoja', baseUso: 'medidas', ancho: 122, alto: 244, largo: 100, cantidad: 1, precioTotal: 1200, areaManual: 0, linealManual: 0, cantidadManual: 1, merma: 8, margen: 35 });
   const [pdfEditor, setPdfEditor] = useState(null);
+
+  supabaseTransportActiveRef.current = Boolean(
+    authSession?.user?.id && activeWorkspace?.id
+  );
+
+  useEffect(() => {
+    let isMounted = true;
+
+    AuthService.getSession()
+      .then((session) => {
+        if (isMounted) setAuthSession(session);
+      })
+      .catch(() => {
+        if (isMounted) setAuthSession(null);
+      })
+      .finally(() => {
+        if (isMounted) setAuthLoading(false);
+      });
+
+    const subscription = AuthService.onAuthStateChange((_event, session) => {
+      if (!isMounted) return;
+      setAuthSession(session);
+      setAuthLoading(false);
+    });
+
+    return () => {
+      isMounted = false;
+      subscription?.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const userId = authSession?.user?.id;
+
+    if (!userId) {
+      setActiveWorkspace(null);
+      setActiveMembership(null);
+      setWorkspaceLoading(false);
+      setWorkspaceError('');
+      return () => { active = false; };
+    }
+
+    setWorkspaceLoading(true);
+    setWorkspaceError('');
+
+    async function resolveWorkspace() {
+      let result = await WorkspaceService.getCurrentWorkspace(userId);
+
+      if (!result.error && !result.workspace) {
+        result = await WorkspaceService.createInitialWorkspace({
+          userId,
+          name: 'ALUXOR / BosqueReal',
+        });
+      }
+
+      if (!active) return;
+
+      if (result.error) {
+        setActiveWorkspace(null);
+        setActiveMembership(null);
+        setWorkspaceError('No fue posible resolver tu workspace. Intenta nuevamente.');
+        return;
+      }
+
+      setActiveWorkspace(result.workspace);
+      setActiveMembership(result.membership);
+    }
+
+    resolveWorkspace()
+      .catch(() => {
+        if (active) {
+          setActiveWorkspace(null);
+          setActiveMembership(null);
+          setWorkspaceError('No fue posible resolver tu workspace. Intenta nuevamente.');
+        }
+      })
+      .finally(() => {
+        if (active) setWorkspaceLoading(false);
+      });
+
+    return () => { active = false; };
+  }, [authSession?.user?.id]);
 
   const quote = useMemo(() => Quote.calculateQuote(form, quoteHelpers), [form]);
   const dataHealth = useMemo(() => quoteDataHealth(form, quote), [form, quote]);
@@ -886,6 +985,7 @@ function App() {
   }, [catalog]);
 
   useEffect(() => {
+    historyRef.current = history;
     StorageEngine.saveHistory(history);
   }, [history]);
 
@@ -897,7 +997,65 @@ function App() {
     StorageEngine.saveLogo(appLogo);
   }, [appLogo]);
 
+  async function loadRemoteQuotes() {
+    const userId = authSession?.user?.id;
+    const workspaceId = activeWorkspace?.id;
+
+    if (!userId || !workspaceId) return;
+
+    const requestId = remoteQuotesRequestRef.current + 1;
+    remoteQuotesRequestRef.current = requestId;
+
+    try {
+      const { data, error } = await QuoteRepository.loadQuotes(workspaceId);
+
+      if (requestId !== remoteQuotesRequestRef.current) return;
+
+      if (error) {
+        setSyncStatus('Historial local · nube no disponible');
+        return;
+      }
+
+      const remoteHistory = (Array.isArray(data) ? data : [])
+        .map(QuoteAdapter.quoteRowToHistoryItem);
+      const merged = HistoryEngine.mergeHistoryItems(remoteHistory, historyRef.current);
+
+      historyRef.current = merged;
+      setHistory(merged);
+      StorageEngine.saveHistory(merged);
+      setLastSyncAt(
+        new Date().toLocaleTimeString('es-MX', {
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+      );
+      setSyncStatus('Historial sincronizado');
+    } catch (error) {
+      if (requestId !== remoteQuotesRequestRef.current) return;
+      console.warn('No fue posible cargar cotizaciones remotas:', error);
+      setSyncStatus('Historial local · nube no disponible');
+    }
+  }
+
+  useEffect(() => {
+    const userId = authSession?.user?.id;
+    const workspaceId = activeWorkspace?.id;
+
+    if (!userId || !workspaceId) {
+      remoteQuotesRequestRef.current += 1;
+      return undefined;
+    }
+
+    loadRemoteQuotes();
+
+    return () => {
+      remoteQuotesRequestRef.current += 1;
+    };
+  }, [authSession?.user?.id, activeWorkspace?.id]);
+
   async function syncHistory(uploadLocal = false) {
+    if (supabaseTransportActiveRef.current) return;
+
     try {
       if (!navigator.onLine) {
         setSyncStatus('Sin conexión: historial guardado localmente');
@@ -912,6 +1070,9 @@ function App() {
       }
       const local = StorageEngine.loadHistory(storageHelpers);
       const remote = await HistoryEngine.requestHistory({}, historyHelpers);
+
+      if (supabaseTransportActiveRef.current) return;
+
       const merged = HistoryEngine.mergeHistoryItems(recoveredLegacyHistory, local, history, remote);
 
       if (uploadLocal || merged.length !== remote.length) {
@@ -919,6 +1080,8 @@ function App() {
           method: 'PUT',
           body: JSON.stringify({ history: merged }),
         }, historyHelpers);
+
+        if (supabaseTransportActiveRef.current) return;
 
         setHistory(saved);
       } else {
@@ -935,37 +1098,52 @@ function App() {
       setSyncStatus('Historial sincronizado en la nube');
     } catch (error) {
       console.warn('Error de sincronización:', error);
-      setSyncStatus('Sin conexión: usando copia local');
+      if (!supabaseTransportActiveRef.current) {
+        setSyncStatus('Sin conexión: usando copia local');
+      }
     }
   }
 
   function saveHistoryRemote(nextHistory) {
+    const supabaseActive = supabaseTransportActiveRef.current;
+
     if (!navigator.onLine) {
-      setSyncStatus('Guardado local; se sincroniza al volver internet');
-      return;
+      if (!supabaseActive) {
+        setSyncStatus('Guardado local; se sincroniza al volver internet');
+      }
+      return Promise.resolve(nextHistory);
     }
 
-    HistoryEngine.requestHistory({
+    return HistoryEngine.requestHistory({
       method: 'PUT',
       body: JSON.stringify({ history: nextHistory }),
     }, historyHelpers)
       .then((saved) => {
-        setHistory(saved);
-        setLastSyncAt(
-          new Date().toLocaleTimeString('es-MX', {
-            hour: '2-digit',
-            minute: '2-digit',
-          })
-        );
-        setSyncStatus('Historial sincronizado en la nube');
+        if (!supabaseActive && !supabaseTransportActiveRef.current) {
+          historyRef.current = saved;
+          setHistory(saved);
+          setLastSyncAt(
+            new Date().toLocaleTimeString('es-MX', {
+              hour: '2-digit',
+              minute: '2-digit',
+            })
+          );
+          setSyncStatus('Historial sincronizado en la nube');
+        }
+        return saved;
       })
       .catch((error) => {
         console.warn('Guardado local; sincronización pendiente:', error);
-        setSyncStatus('Guardado local; se sincroniza al volver internet');
+        if (!supabaseActive && !supabaseTransportActiveRef.current) {
+          setSyncStatus('Guardado local; se sincroniza al volver internet');
+        }
+        return nextHistory;
       });
   }
 
   useEffect(() => {
+    if (authSession?.user?.id && activeWorkspace?.id) return undefined;
+
     syncHistory(true);
 
     const interval = window.setInterval(() => {
@@ -990,7 +1168,7 @@ function App() {
       window.removeEventListener('online', onOnline);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
-  }, []);
+  }, [authSession?.user?.id, activeWorkspace?.id]);
   function update(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
   }
@@ -1390,13 +1568,19 @@ function App() {
 
   function saveToHistory() {
     const now = Date.now();
+    const folio = clean(form.folioManual, generateQuoteFolio(history));
+    const status = QuoteAdapter.normalizeQuoteStatus(form.estadoCotizacion);
+    const historyForm = {
+      ...form,
+      estadoCotizacion: status,
+    };
     const item = {
       id: `hist-${now}`,
       createdAt: now,
       updatedAt: now,
-      status: 'Pendiente',
-      folio: clean(form.folioManual, generateQuoteFolio(history)),
-      estadoCotizacion: clean(form.estadoCotizacion, 'Pendiente'),
+      status,
+      folio,
+      estadoCotizacion: status,
       formaPago: clean(form.formaPago, 'Anticipo y saldo contra entrega'),
       notasCliente: clean(form.notasCliente),
       notasInternas: clean(form.notasInternas),
@@ -1408,14 +1592,68 @@ function App() {
       total: quote.total,
       anticipo: quote.deposit,
       resto: quote.rest,
-      form,
+      form: historyForm,
     };
 
     const nextHistory = HistoryEngine.mergeHistoryItems([item], history);
+    historyRef.current = nextHistory;
     setHistory(nextHistory);
-    saveHistoryRemote(nextHistory);
-    setSyncStatus('Cotización guardada en historial');
+    const legacySave = saveHistoryRemote(nextHistory);
+    setSyncStatus('Guardada localmente · pendiente de sincronizar');
     setActiveSection('historial');
+
+    const workspaceId = activeWorkspace?.id;
+    const {
+      payload,
+      error: payloadError,
+    } = QuoteAdapter.quoteFormToPayload({
+      form: historyForm,
+      quote,
+      workspaceId,
+      folio,
+    });
+
+    if (!authSession?.user || payloadError || !payload) {
+      void Promise.resolve(legacySave).finally(() => {
+        setSyncStatus('Guardada localmente · pendiente de sincronizar');
+      });
+      return;
+    }
+
+    void QuoteRepository.createQuote(workspaceId, payload)
+      .then(({ data, error }) => {
+        if (error || !data) {
+          setSyncStatus('Guardada localmente · pendiente de sincronizar');
+          return;
+        }
+
+        const remoteItem = QuoteAdapter.quoteRowToHistoryItem(data);
+        const withoutTemporaryItem = historyRef.current
+          .filter((historyItem) => historyItem.id !== item.id);
+        const remoteHistory = HistoryEngine.mergeHistoryItems(
+          [remoteItem],
+          withoutTemporaryItem,
+        );
+
+        historyRef.current = remoteHistory;
+        setHistory(remoteHistory);
+        StorageEngine.saveHistory(remoteHistory);
+        setLastSyncAt(
+          new Date().toLocaleTimeString('es-MX', {
+            hour: '2-digit',
+            minute: '2-digit',
+          })
+        );
+        setSyncStatus('Cotización guardada en nube');
+
+        void Promise.resolve(legacySave).finally(() => {
+          void saveHistoryRemote(remoteHistory);
+        });
+      })
+      .catch((error) => {
+        console.warn('Guardado remoto pendiente:', error);
+        setSyncStatus('Guardada localmente · pendiente de sincronizar');
+      });
   }
 
   function loadHistoryItem(item) {
@@ -1662,8 +1900,29 @@ function App() {
     />
   );
 
+  async function handleSignOut() {
+    setSignOutLoading(true);
+    setWorkspaceError('');
+
+    const { error } = await AuthService.signOut();
+
+    if (error) {
+      setWorkspaceError('No fue posible cerrar la sesión. Intenta nuevamente.');
+      setSignOutLoading(false);
+      return;
+    }
+
+    setAuthSession(null);
+    setActiveWorkspace(null);
+    setActiveMembership(null);
+    setWorkspaceLoading(false);
+    setWorkspaceError('');
+    setSignOutLoading(false);
+  }
+
   return (
-    <main className={largeText ? 'workspace-shell large-text' : 'workspace-shell'}>
+    <AuthGate session={authSession} loading={authLoading}>
+      <main className={largeText ? 'workspace-shell large-text' : 'workspace-shell'}>
       <WorkspaceLayout
         sidebar={(
           <div className="workspace-sidebar-stack">
@@ -1674,6 +1933,18 @@ function App() {
             <span>Cotizador profesional</span>
           </div>
         </div>
+
+        <UserSessionCard
+          user={authSession?.user}
+          workspace={activeWorkspace}
+          membership={activeMembership}
+          onSignOut={handleSignOut}
+          loading={workspaceLoading || signOutLoading}
+        />
+
+        {workspaceError && (
+          <p className="workspace-session-error" role="alert">{workspaceError}</p>
+        )}
 
         <SummaryPanel
           proyecto={form.producto || 'Proyecto sin nombre'}
@@ -2113,7 +2384,8 @@ function App() {
           />
         )}
       />
-    </main>
+      </main>
+    </AuthGate>
   );
 }
 

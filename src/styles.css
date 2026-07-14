@@ -7353,3 +7353,319 @@ body,
   margin-top: 2px;
   line-height: 1.15;
 }
+
+/* Fase 23.6.2 - acceso seguro */
+.auth-screen {
+  display: grid;
+  min-height: 100vh;
+  min-height: 100dvh;
+  place-items: center;
+  padding: clamp(18px, 4vw, 42px);
+  color: var(--aluxor-graphite, #111915);
+  background:
+    radial-gradient(circle at 14% 10%, rgba(240, 200, 78, 0.2), transparent 28%),
+    radial-gradient(circle at 88% 90%, rgba(31, 107, 82, 0.28), transparent 34%),
+    linear-gradient(145deg, #101a15 0%, #182a21 55%, #102018 100%);
+}
+
+.auth-card {
+  width: min(100%, 440px);
+  padding: clamp(22px, 5vw, 34px);
+  background: var(--aluxor-warm, #fffdf8);
+  border: 1px solid rgba(240, 200, 78, 0.34);
+  border-radius: 20px;
+  box-shadow: 0 28px 70px rgba(4, 12, 8, 0.32);
+}
+
+.auth-card-header {
+  margin-bottom: 20px;
+}
+
+.auth-eyebrow {
+  display: inline-block;
+  margin-bottom: 8px;
+  color: var(--aluxor-forest, #1f6b52);
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.auth-card h1 {
+  margin: 0;
+  color: var(--aluxor-graphite, #111915);
+  font-size: clamp(25px, 6vw, 32px);
+  line-height: 1.05;
+}
+
+.auth-card p {
+  margin: 8px 0 0;
+  color: #526159;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.auth-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  margin-bottom: 20px;
+  padding: 4px;
+  background: #e7ece8;
+  border: 1px solid rgba(23, 32, 27, 0.1);
+  border-radius: 12px;
+}
+
+.auth-tabs button {
+  min-height: 42px;
+  padding: 8px 10px;
+  color: #526159;
+  background: transparent;
+  border: 0;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.auth-tabs button.is-active {
+  color: var(--aluxor-warm, #fffdf8);
+  background: var(--aluxor-forest, #1f6b52);
+  box-shadow: 0 6px 16px rgba(31, 107, 82, 0.2);
+}
+
+.auth-tabs button:disabled,
+.auth-submit:disabled,
+.auth-form input:disabled {
+  cursor: not-allowed;
+  opacity: 0.68;
+}
+
+.auth-form {
+  display: grid;
+  gap: 15px;
+}
+
+.auth-field {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+}
+
+.auth-field > span {
+  color: #263c31;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.auth-form input {
+  width: 100%;
+  min-height: 48px;
+  padding: 0 13px;
+  color: var(--aluxor-graphite, #111915);
+  background: #fff;
+  border: 1px solid #c9d1cc;
+  border-radius: 10px;
+  font-size: 16px;
+}
+
+.auth-form input::placeholder {
+  color: #8b9690;
+}
+
+.auth-form input:focus {
+  border-color: var(--aluxor-forest, #1f6b52);
+  box-shadow: 0 0 0 3px rgba(31, 107, 82, 0.12);
+}
+
+.auth-feedback:empty {
+  display: none;
+}
+
+.auth-message {
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font-size: 13px !important;
+  font-weight: 800;
+  line-height: 1.35 !important;
+}
+
+.auth-message-error {
+  color: #812f2f !important;
+  background: #fff0ed;
+  border-color: #efc2b9;
+}
+
+.auth-message-success {
+  color: #175844 !important;
+  background: #e9f5ef;
+  border-color: #b8dfcd;
+}
+
+.auth-submit {
+  min-height: 48px;
+  padding: 10px 16px;
+  color: #102018;
+  background: var(--aluxor-tool, #f0c84e);
+  border: 1px solid var(--aluxor-tool, #f0c84e);
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 950;
+  cursor: pointer;
+  box-shadow: 0 10px 22px rgba(190, 145, 20, 0.2);
+}
+
+.auth-submit:hover:not(:disabled) {
+  background: #f5d66d;
+  border-color: #f5d66d;
+}
+
+.auth-footnote {
+  margin-top: 18px !important;
+  padding-top: 15px;
+  border-top: 1px solid rgba(23, 32, 27, 0.1);
+  font-size: 12px !important;
+  text-align: center;
+}
+
+.auth-screen-loading .auth-card {
+  width: min(100%, 360px);
+}
+
+.auth-loading {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+}
+
+.auth-loading-indicator {
+  width: 34px;
+  height: 34px;
+  margin-bottom: 14px;
+  border: 3px solid #dce5e0;
+  border-top-color: var(--aluxor-forest, #1f6b52);
+  border-radius: 50%;
+  animation: auth-spin 800ms linear infinite;
+}
+
+.auth-loading strong {
+  color: var(--aluxor-graphite, #111915);
+  font-size: 18px;
+}
+
+@keyframes auth-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 520px) {
+  .auth-screen {
+    align-items: start;
+    padding: max(16px, env(safe-area-inset-top)) 14px max(16px, env(safe-area-inset-bottom));
+  }
+
+  .auth-card {
+    margin-top: clamp(10px, 8vh, 52px);
+    padding: 22px 18px;
+    border-radius: 16px;
+  }
+
+  .auth-tabs button,
+  .auth-submit,
+  .auth-form input {
+    min-height: 48px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-loading-indicator {
+    animation-duration: 1.8s;
+  }
+}
+
+.user-session-card {
+  display: grid;
+  gap: 11px;
+  padding: 13px;
+  color: #f8fbf9;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(240, 200, 78, 0.28);
+  border-radius: 12px;
+}
+
+.user-session-heading,
+.user-session-details {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.user-session-heading span {
+  color: var(--aluxor-tool, #f0c84e);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.user-session-heading strong {
+  color: #fffdf8;
+  font-size: 14px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.user-session-details > span {
+  overflow: hidden;
+  color: rgba(248, 251, 249, 0.78);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-session-details small {
+  width: fit-content;
+  padding: 3px 7px;
+  color: #dce8e2;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.user-session-card button {
+  min-height: 38px;
+  padding: 8px 11px;
+  color: #fffdf8;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 9px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.user-session-card button:hover:not(:disabled) {
+  color: #102018;
+  background: var(--aluxor-tool, #f0c84e);
+  border-color: var(--aluxor-tool, #f0c84e);
+}
+
+.user-session-card button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.workspace-session-error {
+  margin: 0;
+  padding: 10px 12px;
+  color: #ffe5e5;
+  background: rgba(150, 35, 35, 0.28);
+  border: 1px solid rgba(255, 145, 145, 0.3);
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.4;
+}
