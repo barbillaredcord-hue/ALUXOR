@@ -94,12 +94,12 @@ export async function createQuote(workspaceId, form) {
   });
 }
 
-export async function updateQuote(id, form) {
+export async function updateQuote(id, form, expectedVersion) {
   if (!id) {
     return { data: null, error: new Error('Falta el identificador de la cotización.') };
   }
 
-  return execute(() => {
+  return execute(async () => {
     const quote = {
       status: form.status,
       client_name: form.client_name,
@@ -115,12 +115,28 @@ export async function updateQuote(id, form) {
       quote.folio = form.folio;
     }
 
-    return supabase
+    let query = supabase
       .from('quotes')
       .update(quote)
-      .eq('id', id)
+      .eq('id', id);
+
+    if (Number.isInteger(expectedVersion) && expectedVersion > 0) {
+      query = query.eq('version', expectedVersion);
+    }
+
+    const { data, error } = await query
       .select()
-      .single();
+      .maybeSingle();
+
+    if (!error && !data && Number.isInteger(expectedVersion) && expectedVersion > 0) {
+      const conflictError = new Error(
+        'La cotización fue modificada en otra sesión. Recarga antes de guardar.'
+      );
+      conflictError.code = 'QUOTE_VERSION_CONFLICT';
+      return { data: null, error: conflictError };
+    }
+
+    return { data, error };
   });
 }
 
