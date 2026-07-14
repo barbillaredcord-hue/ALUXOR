@@ -1,161 +1,171 @@
-import {
-  CheckCircle2,
-  ClipboardList,
-  Hammer,
-  Image,
-  Layers,
-  PackageCheck,
-  PenLine,
-  Printer,
-  Ruler,
-  Wrench,
-} from 'lucide-react';
+import { ClipboardList, ExternalLink } from 'lucide-react';
 
-const checklist = [
-  { label: 'Compra', status: 'Pendiente', icon: PackageCheck },
-  { label: 'Corte', status: 'En proceso', icon: Ruler },
-  { label: 'Armado', status: 'Pendiente', icon: Wrench },
-  { label: 'Acabado', status: 'Pendiente', icon: Layers },
-  { label: 'Instalación', status: 'Pendiente', icon: ClipboardList },
-  { label: 'Entrega', status: 'Completado', icon: CheckCircle2 },
-];
+const IN_PROCESS_STATUSES = new Set(['Programada', 'En corte', 'Fabricando', 'Armado']);
 
-function materialStatus(item) {
-  if (!item?.nombre) return 'Falta material';
-  if (item.costTotal > 0 && item.saleTotal > 0) return 'Completo';
-  return 'Pendiente';
+function dateTimestamp(value) {
+  const timestamp = Date.parse(value || '');
+  return Number.isNaN(timestamp) ? 0 : timestamp;
 }
 
-export default function ProductionSection({ form, quote, money, decimal, openPrint }) {
-  const folio = form.folioManual || quote.folio || 'Pendiente';
-  const fecha = new Date().toLocaleDateString('es-MX');
-  const progress = 42;
-  const observaciones = form.notasInternas || form.notasCliente || form.condiciones || 'Sin observaciones capturadas para taller.';
-  const mainMaterial = quote.materialRows?.[0];
-  const nextTasks = [
-    ...quote.materialRows.filter((item) => item.nombre).map((item) => `Comprar ${item.nombre}`),
-    ...quote.accessoryRows.filter((item) => item.nombre).map((item) => `Comprar ${item.nombre}`),
-    quote.measureRows.length ? 'Verificar medidas' : null,
-    'Revisar plano',
-    quote.manoObra > 0 ? 'Preparar instalación' : null,
-  ].filter(Boolean);
+function formatDate(value) {
+  const timestamp = dateTimestamp(value);
+  return timestamp ? new Date(timestamp).toLocaleDateString('es-MX') : 'Por definir';
+}
+
+function abbreviatedId(value) {
+  const id = String(value || '').trim();
+  if (!id) return 'Por definir';
+  return id.length > 8 ? `${id.slice(0, 8)}...` : id;
+}
+
+function statusClass(status) {
+  if (status === 'Entregado') return 'delivered';
+  if (status === 'Listo') return 'ready';
+  if (IN_PROCESS_STATUSES.has(status)) return 'in-process';
+  return 'pending';
+}
+
+function priorityClass(priority) {
+  if (priority === 'Urgente') return 'urgent';
+  if (priority === 'Alta') return 'high';
+  return 'normal';
+}
+
+export default function ProductionSection({
+  productionOrders = [],
+  selectedProductionOrderId,
+  onSelectProductionOrder,
+  onOpenQuote,
+}) {
+  const sortedOrders = [...productionOrders].sort((a, b) => (
+    dateTimestamp(b.updatedAt || b.fechaCreacion)
+    - dateTimestamp(a.updatedAt || a.fechaCreacion)
+  ));
+  const selectedOrder = sortedOrders.find((order) => order.id === selectedProductionOrderId) || null;
+  const metrics = {
+    total: sortedOrders.length,
+    pending: sortedOrders.filter((order) => order.estado === 'Pendiente').length,
+    inProcess: sortedOrders.filter((order) => IN_PROCESS_STATUSES.has(order.estado)).length,
+    ready: sortedOrders.filter((order) => order.estado === 'Listo').length,
+    delivered: sortedOrders.filter((order) => order.estado === 'Entregado').length,
+  };
+
+  if (sortedOrders.length === 0) {
+    return (
+      <section className="production-operations panel">
+        <header className="production-operations-head">
+          <div>
+            <span>Operación local</span>
+            <h2>Producción</h2>
+          </div>
+        </header>
+        <div className="production-empty-state">
+          <ClipboardList size={42} />
+          <h3>No hay órdenes de producción todavía.</h3>
+          <p>Acepta una cotización y genera su Orden de Producción para comenzar.</p>
+        </div>
+      </section>
+    );
+  }
 
   return (
-    <section className="production-section panel">
-      <header className="production-hero">
+    <section className="production-operations panel">
+      <header className="production-operations-head">
         <div>
-          <span>Centro de producción</span>
-          <h2>{form.producto || 'Proyecto sin nombre'}</h2>
-          <p>{form.clienteNombre || 'Cliente pendiente'} · Folio {folio} · {fecha}</p>
+          <span>Operación local</span>
+          <h2>Producción</h2>
+          <p>Consulta las órdenes generadas desde cotizaciones aceptadas.</p>
         </div>
-        <div className="production-status">
-          <ClipboardList size={18} />
-          <strong>{form.estadoCotizacion || 'Pendiente'}</strong>
-        </div>
-        <div className="production-progress"><span style={{ width: `${progress}%` }} /></div>
       </header>
 
-      <div className="production-workbench">
-        <div className="production-main-column">
-          <article className="production-card production-materials-card">
-            <h3>Materiales</h3>
-            <div className="production-material-list">
-              {quote.materialRows.map((item) => {
-                const status = materialStatus(item);
-                return (
-                  <div key={item.id} className="production-material-row">
-                    <div>
-                      <strong>{item.nombre}</strong>
-                      <span>{decimal(item.rowQuantity)} {item.unidad} · {item.tipoCompra} · {item.nota || 'Sin nota'}</span>
-                    </div>
-                    <strong>{money(item.costTotal)}</strong>
-                    <em className={`production-badge production-badge-${status.toLowerCase().replace(/\s+/g, '-')}`}>{status}</em>
-                  </div>
-                );
-              })}
-            </div>
-          </article>
-
-          <article className="production-card">
-            <h3>Herrajes</h3>
-            <div className="production-list">
-              {quote.accessoryRows.length > 0 ? quote.accessoryRows.map((item) => (
-                <div key={item.id}>
-                  <strong>{item.nombre}</strong>
-                  <span>{decimal(item.rowQuantity, 0)} pza(s) · {item.tipoCompra} · {money(item.costTotal)}</span>
-                </div>
-              )) : <p>Sin herrajes capturados.</p>}
-            </div>
-          </article>
-
-          <article className="production-card">
-            <h3>Medidas</h3>
-            <div className="production-list">
-              {quote.measureRows.map((item) => (
-                <div key={item.id}>
-                  <strong>{item.nombre}</strong>
-                  <span>{item.ancho} x {item.alto} x {item.fondo} cm · {decimal(item.areaTotal)} m² · {decimal(item.linearTotal)} m</span>
-                </div>
-              ))}
-            </div>
-          </article>
-
-          <article className="production-card production-plan-card">
-            <h3>Plano</h3>
-            <div className="production-plan-placeholder">
-              <Image size={42} />
-              <strong>Plano del proyecto</strong>
-              <span>Sin plano disponible</span>
-              <small>Espacio preparado para SVG, PDF o imagen.</small>
-            </div>
-          </article>
-        </div>
-
-        <aside className="production-side-column">
-          <article className="production-card production-next">
-            <h3><Hammer size={17} /> Qué sigue hoy</h3>
-            <div className="production-next-list">
-              {nextTasks.length > 0 ? nextTasks.map((item) => <span key={item}>{item}</span>) : <p>No hay tareas pendientes.</p>}
-            </div>
-          </article>
-
-          <article className="production-card production-flow">
-            <h3>Línea de producción</h3>
-            <div>
-              {checklist.map(({ label, status, icon: Icon }) => (
-                <article key={label} className={`production-flow-node production-task-${status.toLowerCase().replace(/\s+/g, '-')}`}>
-                  <Icon size={20} />
-                  <div>
-                    <strong>{label}</strong>
-                    <span>{status}</span>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </article>
-
-          <article className="production-card production-notes">
-            <h3><PenLine size={16} /> Observaciones</h3>
-            <p>{observaciones}</p>
-          </article>
-
-          <article className="production-card production-quick-summary">
-            <h3>Resumen rápido</h3>
-            <div className="production-list">
-              <div><strong>Área total</strong><span>{decimal(quote.areaTotal)} m²</span></div>
-              <div><strong>Material principal</strong><span>{mainMaterial?.nombre || 'Sin material'}</span></div>
-              <div><strong>Piezas</strong><span>{decimal(quote.cantidad, 0)}</span></div>
-              <div><strong>Costo interno</strong><span>{money(quote.internalTotal)}</span></div>
-              <div><strong>Precio cliente</strong><span>{money(quote.total)}</span></div>
-              <div><strong>Utilidad</strong><span>{money(quote.profit)}</span></div>
-            </div>
-          </article>
-        </aside>
+      <div className="production-metrics" aria-label="Resumen de producción">
+        <article><span>Total OT</span><strong>{metrics.total}</strong></article>
+        <article><span>Pendientes</span><strong>{metrics.pending}</strong></article>
+        <article><span>En proceso</span><strong>{metrics.inProcess}</strong></article>
+        <article><span>Listas</span><strong>{metrics.ready}</strong></article>
+        <article><span>Entregadas</span><strong>{metrics.delivered}</strong></article>
       </div>
 
-      <div className="actions production-actions">
-        <button type="button" onClick={() => openPrint('business')}><Printer size={18} /> Imprimir Orden</button>
-        <span>Placeholder temporal: usa la impresión interna existente.</span>
+      <div className="production-orders-layout">
+        <div className="production-orders-list" aria-label="Órdenes de producción">
+          {sortedOrders.map((order) => (
+            <button
+              key={order.id}
+              type="button"
+              aria-pressed={order.id === selectedProductionOrderId}
+              aria-controls="production-order-detail"
+              className={`production-order-card ${order.id === selectedProductionOrderId ? 'selected' : ''}`}
+              onClick={() => onSelectProductionOrder?.(order.id)}
+            >
+              <span className="production-order-card-head">
+                <span>
+                  <small>Orden de producción</small>
+                  <strong>{order.folio}</strong>
+                </span>
+                <span className="production-order-badges">
+                  <em className={`production-order-badge status-${statusClass(order.estado)}`}>{order.estado}</em>
+                  <em className={`production-order-badge priority-${priorityClass(order.prioridad)}`}>{order.prioridad}</em>
+                </span>
+              </span>
+              <span className="production-order-title">{order.producto || 'Proyecto sin nombre'}</span>
+              <span className="production-order-client">{order.cliente || 'Cliente pendiente'}</span>
+              <span className="production-order-meta">
+                <span><small>Responsable</small><strong>{order.responsable || 'Sin asignar'}</strong></span>
+                <span><small>Creación</small><strong>{formatDate(order.fechaCreacion)}</strong></span>
+                <span><small>Compromiso</small><strong>{formatDate(order.fechaCompromiso)}</strong></span>
+                <span><small>Versión cotización</small><strong>{order.quoteVersion ?? 1}</strong></span>
+              </span>
+              <span className="production-order-observation">
+                {order.observaciones || 'Sin observaciones.'}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <aside   
+          id="production-order-detail"
+          className="production-order-detail" 
+          aria-live="polite"
+        >
+          {selectedOrder ? (
+            <>
+              <div className="production-order-detail-head">
+                <div>
+                  <span>Detalle de la orden</span>
+                  <h3>{selectedOrder.folio}</h3>
+                </div>
+                <div className="production-order-badges">
+                  <em className={`production-order-badge status-${statusClass(selectedOrder.estado)}`}>{selectedOrder.estado}</em>
+                  <em className={`production-order-badge priority-${priorityClass(selectedOrder.prioridad)}`}>{selectedOrder.prioridad}</em>
+                </div>
+              </div>
+              <dl className="production-order-detail-grid">
+                <div><dt>Responsable</dt><dd>{selectedOrder.responsable || 'Sin asignar'}</dd></div>
+                <div><dt>Cliente</dt><dd>{selectedOrder.cliente || 'Cliente pendiente'}</dd></div>
+                <div><dt>Producto</dt><dd>{selectedOrder.producto || 'Proyecto sin nombre'}</dd></div>
+                <div><dt>Fecha creación</dt><dd>{formatDate(selectedOrder.fechaCreacion)}</dd></div>
+                <div><dt>Fecha compromiso</dt><dd>{formatDate(selectedOrder.fechaCompromiso)}</dd></div>
+                <div><dt>Fecha inicio</dt><dd>{formatDate(selectedOrder.fechaInicio)}</dd></div>
+                <div><dt>Fecha final</dt><dd>{formatDate(selectedOrder.fechaFinal)}</dd></div>
+                <div><dt>Quote Version</dt><dd>{selectedOrder.quoteVersion ?? 1}</dd></div>
+                <div><dt>Quote ID</dt><dd title={selectedOrder.quoteId}>{abbreviatedId(selectedOrder.quoteId)}</dd></div>
+                <div><dt>Timeline</dt><dd>{Array.isArray(selectedOrder.timeline) ? selectedOrder.timeline.length : 0} evento(s)</dd></div>
+              </dl>
+              <div className="production-order-detail-notes">
+                <strong>Observaciones</strong>
+                <p>{selectedOrder.observaciones || 'Sin observaciones.'}</p>
+              </div>
+              <button type="button" onClick={() => onOpenQuote?.(selectedOrder.quoteId)}>
+                <ExternalLink size={17} /> Ver cotización
+              </button>
+            </>
+          ) : (
+            <div className="production-detail-placeholder">
+              <ClipboardList size={34} />
+              <p>Selecciona una orden para consultar su detalle.</p>
+            </div>
+          )}
+        </aside>
       </div>
     </section>
   );

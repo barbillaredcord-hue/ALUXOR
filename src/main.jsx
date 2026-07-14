@@ -52,6 +52,8 @@ import { QuoteRepository } from './lib/quotes/quoteRepository.js';
 import { QuoteAdapter } from './lib/quotes/quoteAdapter.js';
 import { OfflineQueue } from './lib/quotes/offlineQueue.js';
 import { ConflictResolver } from './lib/quotes/conflictResolver.js';
+import { createProductionOrder } from './lib/production/productionEngine.js';
+import { ProductionStorage } from './lib/production/productionStorage.js';
 import { Areas, Materials, Pricing, Summary, Report, Quote, HistoryEngine, Pdf, StorageEngine, PlanEngine, AnalysisEngine } from './lib/br-engine/index.js';
 
 const APP_VERSION = '2026.05.39';
@@ -867,6 +869,11 @@ function App() {
   const [catalog, setCatalog] = useState(() => StorageEngine.loadCatalog(storageHelpers));
   const [history, setHistory] = useState(() => StorageEngine.loadHistory(storageHelpers));
   const historyRef = useRef(history);
+  const [productionOrders, setProductionOrders] = useState(
+    () => ProductionStorage.loadProductionOrders()
+  );
+  const [selectedProductionOrderId, setSelectedProductionOrderId] = useState(null);
+  const productionOrdersRef = useRef(productionOrders);
   const remoteQuotesRequestRef = useRef({
     id: 0,
     inFlight: false,
@@ -1032,6 +1039,19 @@ function App() {
   const contextualQuoteSummary = activeSection === 'historial' && selectedHistorySummary
     ? selectedHistorySummary
     : activeQuoteSummary;
+  const activeProductionOrder = useMemo(
+    () => productionOrders.find((order) => order.quoteId === activeQuoteIdentity?.id) || null,
+    [productionOrders, activeQuoteIdentity?.id]
+  );
+  const activeQuoteStatus = QuoteAdapter.normalizeQuoteStatus(form.estadoCotizacion);
+  const canGenerateProductionOrder = Boolean(
+    activeWorkspace?.id
+    && authSession?.user?.id
+    && activeQuoteIdentity?.remote
+    && isRemoteQuoteId(activeQuoteIdentity.id)
+    && activeQuoteStatus === 'Aceptada'
+    && !activeProductionOrder
+  );
   const materials = useMemo(() => Report.generateMaterials(form, quote, reportHelpers), [form, quote]);
   const outputs = useMemo(() => Report.generateOutputs(form, quote, reportHelpers), [form, quote]);
   const roleCards = useMemo(() => Report.workRoleCards(form, quote, reportHelpers), [form, quote]);
@@ -1107,6 +1127,11 @@ function App() {
     historyRef.current = history;
     StorageEngine.saveHistory(history);
   }, [history]);
+
+  useEffect(() => {
+    productionOrdersRef.current = productionOrders;
+    ProductionStorage.saveProductionOrders(productionOrders);
+  }, [productionOrders]);
 
   useEffect(() => {
     StorageEngine.saveTypeDetails(typeDetails);
@@ -2462,6 +2487,90 @@ function App() {
     setActiveSection('cotizador');
   }
 
+  function generateProductionOrderFromCurrentQuote() {
+    const workspaceId = activeWorkspace?.id;
+    const userId = authSession?.user?.id;
+    const quoteId = activeQuoteIdentity?.id;
+
+    if (!workspaceId) {
+      setSyncStatus('No hay un workspace activo');
+      return;
+    }
+    if (!userId) {
+      setSyncStatus('Se requiere una sesión activa');
+      return;
+    }
+    if (!activeQuoteIdentity) {
+      setSyncStatus('Guarda la cotización antes de generar la orden');
+      return;
+    }
+    if (!activeQuoteIdentity.remote || !isRemoteQuoteId(quoteId)) {
+      setSyncStatus('La cotización debe estar guardada en nube');
+      return;
+    }
+    if (QuoteAdapter.normalizeQuoteStatus(form.estadoCotizacion) !== 'Aceptada') {
+      setSyncStatus('La cotización debe estar Aceptada');
+      return;
+    }
+
+    const existingOrder = productionOrdersRef.current.find(
+      (order) => order.quoteId === quoteId
+    );
+    if (existingOrder) {
+      setSyncStatus('Esta cotización ya tiene una orden de producción');
+      setSelectedProductionOrderId(existingOrder.id);
+      setActiveSection('produccion');
+      return;
+    }
+
+    const order = createProductionOrder({
+      quoteId,
+      workspaceId,
+      cliente: form.clienteNombre,
+      producto: form.producto,
+      estado: 'Pendiente',
+      prioridad: 'Normal',
+      responsable: '',
+      fechaCreacion: new Date(),
+      fechaCompromiso:  '',
+      observaciones: form.notasInternas || form.notasCliente || '',
+      formSnapshot: form,
+      quoteVersion: activeQuoteIdentity.version,
+      createdBy: userId,
+    }, productionOrdersRef.current);
+
+    const savedOrder = ProductionStorage.addProductionOrder(order);
+
+    if (!savedOrder) {
+      setSyncStatus('No fue posible crear la orden de producción');
+      return;
+    }
+
+    const nextOrders = ProductionStorage.loadProductionOrders();
+
+    productionOrdersRef.current = nextOrders;
+    setProductionOrders(nextOrders);
+
+    if (savedOrder.id !== order.id) {
+      setSyncStatus('Esta cotización ya tiene una orden de producción');
+    } else {
+      setSyncStatus('Orden de producción creada');
+    }
+    setSelectedProductionOrderId(savedOrder.id);
+    setActiveSection('produccion');
+  }
+
+  function openQuoteFromProduction(quoteId) {
+    const relatedQuote = historyRef.current.find((item) => item.id === quoteId);
+
+    if (!relatedQuote) {
+      setSyncStatus('No se encontró la cotización relacionada.');
+      return;
+    }
+
+    loadHistoryItem(relatedQuote);
+  }
+
   function startNewQuote() {
     const confirmed = window.confirm(
       '¿Comenzar una nueva cotización?\n\nSe limpiarán los datos de la cotización actual. Esta acción no elimina historial, catálogo, precios ni configuración.'
@@ -3048,6 +3157,17 @@ function App() {
           <div className="hero-actions hero-actions-compact">
             <button type="button" className="ghost" onClick={refreshInstalledApp}><RefreshCw size={16} /> Actualizar</button>
             <button type="button" className="ghost" onClick={startNewQuote}><History size={16} /> Nueva cotización</button>
+            {activeSection === 'cotizador' && activeQuoteIdentity && (
+              <button
+                type="button"
+                className="ghost"
+                disabled={!activeProductionOrder && !canGenerateProductionOrder}
+                onClick={generateProductionOrderFromCurrentQuote}
+              >
+                <ClipboardList size={16} />
+                {activeProductionOrder ? 'Ver Orden de Producción' : 'Generar Orden de Producción'}
+              </button>
+            )}
             <button type="button" className="ghost" onClick={() => setActiveSection('textos')}><FileText size={16} /> Textos</button>
             <button type="button" onClick={openWhatsApp}><MessageCircle size={16} /> WhatsApp</button>
             <button type="button" onClick={() => openPrint('client')}><FileText size={16} /> PDF</button>
@@ -3219,11 +3339,10 @@ function App() {
 
         {activeSection === 'produccion' && (
           <ProductionSection
-            form={form}
-            quote={quote}
-            money={money}
-            decimal={decimal}
-            openPrint={openPrint}
+            productionOrders={productionOrders}
+            selectedProductionOrderId={selectedProductionOrderId}
+            onSelectProductionOrder={setSelectedProductionOrderId}
+            onOpenQuote={openQuoteFromProduction}
           />
         )}
 
@@ -3412,9 +3531,8 @@ function App() {
   );
 }
 
-registerServiceWorker();
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <App />
-  </React.StrictMode>,
+  </React.StrictMode>
 );
