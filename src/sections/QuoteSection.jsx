@@ -68,11 +68,26 @@ export default function QuoteSection({
   openWhatsApp,
   chainInsights,
   professionalAnalysis,
+  collaborationStatus,
+  quoteFieldConflicts,
+  onQuoteFieldFocus,
+  onQuoteFieldBlur,
 }) {
   const isFilled = mode === 'filled';
+  const fieldProps = (fieldPath) => ({
+    'data-quote-field': fieldPath,
+    'data-quote-conflict': quoteFieldConflicts.includes(fieldPath) ? 'true' : undefined,
+  });
+  const fieldPathFromEvent = (event) => (
+    event.target?.dataset?.quoteField || event.target?.id || ''
+  );
 
   return (
-          <section className={`quote-workspace quote-operational-layout ${isFilled ? 'quote-filled-layout' : ''}`}>
+          <section
+            className={`quote-workspace quote-operational-layout ${isFilled ? 'quote-filled-layout' : ''}`}
+            onFocusCapture={(event) => onQuoteFieldFocus(fieldPathFromEvent(event))}
+            onBlurCapture={(event) => onQuoteFieldBlur(fieldPathFromEvent(event))}
+          >
             {isFilled ? (
               <article className="panel quote-editor quote-main-editor filled-quote-editor">
                 <div className="section-head quote-head">
@@ -80,6 +95,7 @@ export default function QuoteSection({
                     <h2>Cotizador rellenado</h2>
                     <p>Captura una cotización que ya fue calculada externamente. Registra costos internos y precios al cliente sin recalcular medidas ni materiales.</p>
                   </div>
+                  <span className="quote-collaboration-status" role="status" aria-live="polite">{collaborationStatus}</span>
                 </div>
 
                 <div className="filled-card-grid">
@@ -90,13 +106,13 @@ export default function QuoteSection({
                       <Field id="clienteTelefono" label="Teléfono">{input('clienteTelefono')}</Field>
                       <Field id="producto" label="Producto / trabajo">{input('producto')}</Field>
                       <Field id="tipoTrabajo" label="Tipo de trabajo">
-                        <select id="tipoTrabajo" value={form.tipoTrabajo} onChange={(event) => update('tipoTrabajo', event.target.value)}>
+                        <select {...fieldProps('tipoTrabajo')} id="tipoTrabajo" value={form.tipoTrabajo} onChange={(event) => update('tipoTrabajo', event.target.value)}>
                           {currentTypeOptions.map((item) => <option key={item} value={item}>{item}</option>)}
                         </select>
                       </Field>
                       <Field id="ciudad" label="Ciudad">{input('ciudad')}</Field>
                       <Field id="estadoCotizacion" label="Estado de cotización">
-                        <select id="estadoCotizacion" value={form.estadoCotizacion} onChange={(event) => update('estadoCotizacion', event.target.value)}>
+                        <select {...fieldProps('estadoCotizacion')} id="estadoCotizacion" value={form.estadoCotizacion} onChange={(event) => update('estadoCotizacion', event.target.value)}>
                           <option>Pendiente</option>
                           <option>Enviada</option>
                           <option>Aceptada</option>
@@ -116,13 +132,13 @@ export default function QuoteSection({
                         <input id="filledLaborInternal" type="number" value="0" readOnly />
                       </Field>
                       <Field id="filledLaborClient" label="Mano de obra cliente">
-                        <input id="filledLaborClient" type="number" value={form.manoObra ?? ''} onChange={(event) => update('manoObra', numberValue(event.target.value))} />
+                        <input {...fieldProps('manoObra')} id="filledLaborClient" type="number" value={form.manoObra ?? ''} onChange={(event) => update('manoObra', numberValue(event.target.value))} />
                       </Field>
                       <Field id="filledExtrasInternal" label="Extras internos">
-                        <input id="filledExtrasInternal" type="number" value={form.extras ?? ''} onChange={(event) => update('extras', numberValue(event.target.value))} />
+                        <input {...fieldProps('extras')} id="filledExtrasInternal" type="number" value={form.extras ?? ''} onChange={(event) => update('extras', numberValue(event.target.value))} />
                       </Field>
                       <Field id="filledExtrasClient" label="Extras cliente">
-                        <input id="filledExtrasClient" type="number" value={form.extras ?? ''} onChange={(event) => update('extras', numberValue(event.target.value))} />
+                        <input {...fieldProps('extras')} id="filledExtrasClient" type="number" value={form.extras ?? ''} onChange={(event) => update('extras', numberValue(event.target.value))} />
                       </Field>
                       <Field id="descuento" label="Descuento %">{input('descuento', 'number')}</Field>
                       <Field id="anticipo" label="Anticipo %">{input('anticipo', 'number')}</Field>
@@ -148,21 +164,21 @@ export default function QuoteSection({
                     {quote.materialRows.map((item) => (
                       <article key={item.id} className="filled-line-item">
                         <Field id={`filledConcept-${item.id}`} label="Concepto">
-                          <input id={`filledConcept-${item.id}`} value={item.nombre} onChange={(event) => updateMaterialItem(item.id, 'nombre', event.target.value, true)} />
+                          <input {...fieldProps(`materialItems.${item.id}.nombre`)} id={`filledConcept-${item.id}`} value={item.nombre} onChange={(event) => updateMaterialItem(item.id, 'nombre', event.target.value, true)} />
                         </Field>
                         <Field id={`filledQuantity-${item.id}`} label="Cantidad">
-                          <input id={`filledQuantity-${item.id}`} type="number" min="0" value={item.cantidad} onChange={(event) => updateMaterialItem(item.id, 'cantidad', numberValue(event.target.value), true)} />
+                          <input {...fieldProps(`materialItems.${item.id}.cantidad`)} id={`filledQuantity-${item.id}`} type="number" min="0" value={item.cantidad} onChange={(event) => updateMaterialItem(item.id, 'cantidad', numberValue(event.target.value), true)} />
                         </Field>
                         <Field id={`filledCost-${item.id}`} label="Costo unitario interno">
-                          <input id={`filledCost-${item.id}`} type="number" min="0" value={item.costoUnitario} onChange={(event) => updateMaterialItem(item.id, 'costoUnitario', numberValue(event.target.value), true)} />
+                          <input {...fieldProps(`materialItems.${item.id}.costoUnitario`)} id={`filledCost-${item.id}`} type="number" min="0" value={item.costoUnitario} onChange={(event) => updateMaterialItem(item.id, 'costoUnitario', numberValue(event.target.value), true)} />
                         </Field>
                         <Field id={`filledPrice-${item.id}`} label="Precio unitario cliente">
-                          <input id={`filledPrice-${item.id}`} type="number" min="0" value={item.precioUnitario} onChange={(event) => updateMaterialItem(item.id, 'precioUnitario', numberValue(event.target.value), true)} />
+                          <input {...fieldProps(`materialItems.${item.id}.precioUnitario`)} id={`filledPrice-${item.id}`} type="number" min="0" value={item.precioUnitario} onChange={(event) => updateMaterialItem(item.id, 'precioUnitario', numberValue(event.target.value), true)} />
                         </Field>
                         <div className="filled-line-total"><span>Subtotal interno</span><strong>{money(numberValue(item.cantidad) * numberValue(item.costoUnitario))}</strong></div>
                         <div className="filled-line-total"><span>Subtotal cliente</span><strong>{money(numberValue(item.cantidad) * numberValue(item.precioUnitario))}</strong></div>
                         <Field id={`filledNote-${item.id}`} label="Nota">
-                          <input id={`filledNote-${item.id}`} value={item.nota} onChange={(event) => updateMaterialItem(item.id, 'nota', event.target.value, true)} />
+                          <input {...fieldProps(`materialItems.${item.id}.nota`)} id={`filledNote-${item.id}`} value={item.nota} onChange={(event) => updateMaterialItem(item.id, 'nota', event.target.value, true)} />
                         </Field>
                         <button type="button" className="ghost filled-remove-button" onClick={() => removeMaterialItem(item.id)} aria-label={`Eliminar ${item.nombre}`}><Eraser size={16} /> Eliminar</button>
                       </article>
@@ -178,6 +194,7 @@ export default function QuoteSection({
                   <h2>Cotizador profesional</h2>
                   <p>Captura por secciones, con medidas y materiales listos para editar.</p>
                 </div>
+                <span className="quote-collaboration-status" role="status" aria-live="polite">{collaborationStatus}</span>
               </div>
               <div className="actions compact">
                 {Object.keys(quoteProfiles).map((key) => (
@@ -286,7 +303,7 @@ export default function QuoteSection({
                   <div className="form-grid">
                     <Field id="giro" label="Giro">{input('giro')}</Field>
                     <Field id="tipoTrabajo" label="Tipo de trabajo">
-                      <select id="tipoTrabajo" value={form.tipoTrabajo} onChange={(event) => update('tipoTrabajo', event.target.value)}>
+                      <select {...fieldProps('tipoTrabajo')} id="tipoTrabajo" value={form.tipoTrabajo} onChange={(event) => update('tipoTrabajo', event.target.value)}>
                         {currentTypeOptions.map((item) => <option key={item} value={item}>{item}</option>)}
                       </select>
                     </Field>
@@ -325,11 +342,11 @@ export default function QuoteSection({
                     <div className="quote-table-header">Borrar</div>
                     {quote.measureRows.map((item) => (
                       <div key={item.id} className="quote-table-row quote-measure-row">
-                        <input value={item.nombre} onChange={(event) => updateMeasureItem(item.id, 'nombre', event.target.value)} aria-label="Nombre de medida" />
-                        <input type="number" value={item.ancho} onChange={(event) => updateMeasureItem(item.id, 'ancho', numberValue(event.target.value))} aria-label="Ancho" />
-                        <input type="number" value={item.alto} onChange={(event) => updateMeasureItem(item.id, 'alto', numberValue(event.target.value))} aria-label="Alto" />
-                        <input type="number" value={item.fondo} onChange={(event) => updateMeasureItem(item.id, 'fondo', numberValue(event.target.value))} aria-label="Fondo" />
-                        <input type="number" value={item.cantidad} onChange={(event) => updateMeasureItem(item.id, 'cantidad', numberValue(event.target.value))} aria-label="Cantidad" />
+                        <input {...fieldProps(`measureItems.${item.id}.nombre`)} value={item.nombre} onChange={(event) => updateMeasureItem(item.id, 'nombre', event.target.value)} aria-label="Nombre de medida" />
+                        <input {...fieldProps(`measureItems.${item.id}.ancho`)} type="number" value={item.ancho} onChange={(event) => updateMeasureItem(item.id, 'ancho', numberValue(event.target.value))} aria-label="Ancho" />
+                        <input {...fieldProps(`measureItems.${item.id}.alto`)} type="number" value={item.alto} onChange={(event) => updateMeasureItem(item.id, 'alto', numberValue(event.target.value))} aria-label="Alto" />
+                        <input {...fieldProps(`measureItems.${item.id}.fondo`)} type="number" value={item.fondo} onChange={(event) => updateMeasureItem(item.id, 'fondo', numberValue(event.target.value))} aria-label="Fondo" />
+                        <input {...fieldProps(`measureItems.${item.id}.cantidad`)} type="number" value={item.cantidad} onChange={(event) => updateMeasureItem(item.id, 'cantidad', numberValue(event.target.value))} aria-label="Cantidad" />
                         <strong>{decimal(item.areaTotal)} m²</strong>
                         <strong>{decimal(item.linearTotal)} m</strong>
                         <strong>{decimal(item.areaTotal)} m²</strong>
@@ -365,22 +382,22 @@ export default function QuoteSection({
                     <div className="quote-table-header">Borrar</div>
                     {quote.materialRows.map((item) => (
                       <div key={item.id} className="quote-table-row quote-material-row">
-                        <input value={item.nombre} onChange={(event) => updateMaterialItem(item.id, 'nombre', event.target.value)} aria-label="Material" />
-                        <select value={item.categoria} onChange={(event) => updateMaterialItem(item.id, 'categoria', event.target.value)} aria-label="Categoría">
+                        <input {...fieldProps(`materialItems.${item.id}.nombre`)} value={item.nombre} onChange={(event) => updateMaterialItem(item.id, 'nombre', event.target.value)} aria-label="Material" />
+                        <select {...fieldProps(`materialItems.${item.id}.categoria`)} value={item.categoria} onChange={(event) => updateMaterialItem(item.id, 'categoria', event.target.value)} aria-label="Categoría">
                           <option>Vidrio</option>
                           <option>Aluminio</option>
                           <option>Madera/Melamina</option>
                           <option>Herraje</option>
                           <option>Otro</option>
                         </select>
-                        <select value={item.tipoCompra} onChange={(event) => updateMaterialItem(item.id, 'tipoCompra', event.target.value)} aria-label="Tipo de compra">
+                        <select {...fieldProps(`materialItems.${item.id}.tipoCompra`)} value={item.tipoCompra} onChange={(event) => updateMaterialItem(item.id, 'tipoCompra', event.target.value)} aria-label="Tipo de compra">
                           <option value="manual">Manual</option>
                           <option value="pieza">Pieza</option>
                           <option value="area">m²</option>
                           <option value="lineal">Metro lineal</option>
                           <option value="hoja">Hoja / placa</option>
                         </select>
-                        <select value={item.baseCalculo} onChange={(event) => updateMaterialItem(item.id, 'baseCalculo', event.target.value)} aria-label="Base de cálculo">
+                        <select {...fieldProps(`materialItems.${item.id}.baseCalculo`)} value={item.baseCalculo} onChange={(event) => updateMaterialItem(item.id, 'baseCalculo', event.target.value)} aria-label="Base de cálculo">
                           <option value="medidas_area">Área total de medidas</option>
                           <option value="manual_area">Área manual</option>
                           <option value="lineal">Metro lineal</option>
@@ -388,12 +405,12 @@ export default function QuoteSection({
                         </select>
                         <strong>{decimal(item.rowQuantity)} {item.unidad}</strong>
                         <div className="measure-purchase">
-                          <input type="number" value={item.ancho} onChange={(event) => updateMaterialItem(item.id, 'ancho', numberValue(event.target.value))} aria-label="Ancho compra" />
-                          <input type="number" value={item.alto} onChange={(event) => updateMaterialItem(item.id, 'alto', numberValue(event.target.value))} aria-label="Alto compra" />
-                          <input type="number" value={item.largo} onChange={(event) => updateMaterialItem(item.id, 'largo', numberValue(event.target.value))} aria-label="Largo compra" />
+                          <input {...fieldProps(`materialItems.${item.id}.ancho`)} type="number" value={item.ancho} onChange={(event) => updateMaterialItem(item.id, 'ancho', numberValue(event.target.value))} aria-label="Ancho compra" />
+                          <input {...fieldProps(`materialItems.${item.id}.alto`)} type="number" value={item.alto} onChange={(event) => updateMaterialItem(item.id, 'alto', numberValue(event.target.value))} aria-label="Alto compra" />
+                          <input {...fieldProps(`materialItems.${item.id}.largo`)} type="number" value={item.largo} onChange={(event) => updateMaterialItem(item.id, 'largo', numberValue(event.target.value))} aria-label="Largo compra" />
                         </div>
-                        <input type="number" value={item.merma} onChange={(event) => updateMaterialItem(item.id, 'merma', numberValue(event.target.value))} aria-label="Merma" />
-                        <input type="number" value={item.rowMargin} onChange={(event) => updateMaterialItem(item.id, 'margen', numberValue(event.target.value))} aria-label="Margen" />
+                        <input {...fieldProps(`materialItems.${item.id}.merma`)} type="number" value={item.merma} onChange={(event) => updateMaterialItem(item.id, 'merma', numberValue(event.target.value))} aria-label="Merma" />
+                        <input {...fieldProps(`materialItems.${item.id}.margen`)} type="number" value={item.rowMargin} onChange={(event) => updateMaterialItem(item.id, 'margen', numberValue(event.target.value))} aria-label="Margen" />
                         <strong>{item.tipoCompra === 'hoja' ? `${item.hojasNecesarias} hoja(s)` : item.tipoCompra === 'lineal' ? `${decimal(item.metrosNecesarios)} m` : `${item.piezasNecesarias || decimal(item.rowQuantity, 0)} pza(s)`}</strong>
                         <strong>{money(item.costTotal)}</strong>
                         <strong>{money(item.saleTotal)}</strong>
@@ -443,17 +460,17 @@ export default function QuoteSection({
                     <div className="quote-table-header">Borrar</div>
                     {quote.accessoryRows.map((item) => (
                       <div key={item.id} className="quote-table-row quote-accessory-row">
-                        <input value={item.nombre} onChange={(event) => updateAccessoryItem(item.id, 'nombre', event.target.value)} aria-label="Accesorio" />
-                        <select value={item.tipoCompra} onChange={(event) => updateAccessoryItem(item.id, 'tipoCompra', event.target.value)} aria-label="Tipo de accesorio">
+                        <input {...fieldProps(`accessoryItems.${item.id}.nombre`)} value={item.nombre} onChange={(event) => updateAccessoryItem(item.id, 'nombre', event.target.value)} aria-label="Accesorio" />
+                        <select {...fieldProps(`accessoryItems.${item.id}.tipoCompra`)} value={item.tipoCompra} onChange={(event) => updateAccessoryItem(item.id, 'tipoCompra', event.target.value)} aria-label="Tipo de accesorio">
                           <option value="pieza">Pieza</option>
                           <option value="juego">Juego</option>
                           <option value="manual">Manual</option>
                         </select>
-                        <input type="number" value={item.cantidad} onChange={(event) => updateAccessoryItem(item.id, 'cantidad', numberValue(event.target.value))} aria-label="Cantidad" />
-                        <input type="number" value={item.merma} onChange={(event) => updateAccessoryItem(item.id, 'merma', numberValue(event.target.value))} aria-label="Merma" />
-                        <input type="number" value={item.rowMargin} onChange={(event) => updateAccessoryItem(item.id, 'margen', numberValue(event.target.value))} aria-label="Margen" />
-                        <input type="number" value={item.costoUnitario} onChange={(event) => updateAccessoryItem(item.id, 'costoUnitario', numberValue(event.target.value))} aria-label="Costo unitario" />
-                        <input type="number" value={item.precioManual ? item.precioUnitario : Math.round(item.precioCliente)} onChange={(event) => updateAccessoryItem(item.id, 'precioUnitario', numberValue(event.target.value))} aria-label="Precio unitario" />
+                        <input {...fieldProps(`accessoryItems.${item.id}.cantidad`)} type="number" value={item.cantidad} onChange={(event) => updateAccessoryItem(item.id, 'cantidad', numberValue(event.target.value))} aria-label="Cantidad" />
+                        <input {...fieldProps(`accessoryItems.${item.id}.merma`)} type="number" value={item.merma} onChange={(event) => updateAccessoryItem(item.id, 'merma', numberValue(event.target.value))} aria-label="Merma" />
+                        <input {...fieldProps(`accessoryItems.${item.id}.margen`)} type="number" value={item.rowMargin} onChange={(event) => updateAccessoryItem(item.id, 'margen', numberValue(event.target.value))} aria-label="Margen" />
+                        <input {...fieldProps(`accessoryItems.${item.id}.costoUnitario`)} type="number" value={item.costoUnitario} onChange={(event) => updateAccessoryItem(item.id, 'costoUnitario', numberValue(event.target.value))} aria-label="Costo unitario" />
+                        <input {...fieldProps(`accessoryItems.${item.id}.precioUnitario`)} type="number" value={item.precioManual ? item.precioUnitario : Math.round(item.precioCliente)} onChange={(event) => updateAccessoryItem(item.id, 'precioUnitario', numberValue(event.target.value))} aria-label="Precio unitario" />
                         <strong>{money(item.costTotal)}</strong>
                         <strong>{money(item.saleTotal)}</strong>
                         <button type="button" className="ghost" onClick={() => removeAccessoryItem(item.id)} aria-label="Eliminar accesorio"><Eraser size={16} /></button>
@@ -516,7 +533,7 @@ export default function QuoteSection({
                     <Field id="vigencia" label="Vigencia días" {...guideFor('vigencia')}>{input('vigencia', 'number')}</Field>
                     <Field id="formaPago" label="Forma de pago" {...guideFor('formaPago')}>{input('formaPago')}</Field>
                     <Field id="estadoCotizacion" label="Estado de cotización" {...guideFor('estadoCotizacion')}>
-                      <select id="estadoCotizacion" value={form.estadoCotizacion} onChange={(event) => update('estadoCotizacion', event.target.value)}>
+                      <select {...fieldProps('estadoCotizacion')} id="estadoCotizacion" value={form.estadoCotizacion} onChange={(event) => update('estadoCotizacion', event.target.value)}>
                         <option>Pendiente</option>
                         <option>Enviada</option>
                         <option>Aceptada</option>

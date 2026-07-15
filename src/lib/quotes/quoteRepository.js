@@ -184,10 +184,10 @@ export function subscribeQuotes(workspaceId, callback) {
           table: 'quotes',
           filter: `workspace_id=eq.${workspaceId}`,
         },
-        callback,
+        callback
       )
       .subscribe();
-  } catch {
+  } catch (error) {
     return function unsubscribe() {};
   }
 
@@ -195,7 +195,7 @@ export function subscribeQuotes(workspaceId, callback) {
     try {
       void channel.unsubscribe();
     } catch {
-      // La desuscripción debe ser segura para el consumidor.
+      // Limpieza segura.
     }
   };
 }

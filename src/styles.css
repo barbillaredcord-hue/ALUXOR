@@ -3708,6 +3708,26 @@ textarea {
   margin-bottom: 8px;
 }
 
+.quote-collaboration-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 5px 9px;
+  color: #22745f;
+  background: #edf5f1;
+  border: 1px solid rgba(34, 116, 95, 0.2);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.quote-workspace [data-quote-conflict='true'] {
+  border-color: #b96922;
+  box-shadow: 0 0 0 2px rgba(185, 105, 34, 0.16);
+  background: #fff8ed;
+}
+
 .quote-accordion-list {
   display: grid;
   gap: 12px;

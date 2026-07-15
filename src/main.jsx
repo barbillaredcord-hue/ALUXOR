@@ -497,6 +497,103 @@ function queuedCreateMatchesRow(row, payload) {
   }
 }
 
+const QUOTE_FIELD_DELETED = Symbol('quote-field-deleted');
+
+function quoteValuesEqual(left, right) {
+  if (Object.is(left, right)) return true;
+
+  try {
+    return JSON.stringify(left) === JSON.stringify(right);
+  } catch {
+    return false;
+  }
+}
+
+function quoteFormChanges(baseForm = {}, nextForm = {}) {
+  const changes = new Map();
+  const keys = new Set([
+    ...Object.keys(baseForm || {}),
+    ...Object.keys(nextForm || {}),
+  ]);
+
+  keys.forEach((key) => {
+    const baseValue = baseForm?.[key];
+    const nextValue = nextForm?.[key];
+    const keyedArrays = Array.isArray(baseValue)
+      && Array.isArray(nextValue)
+      && [...baseValue, ...nextValue].every((item) => item?.id);
+
+    if (!keyedArrays) {
+      if (!quoteValuesEqual(baseValue, nextValue)) changes.set(key, nextValue);
+      return;
+    }
+
+    const baseById = new Map(baseValue.map((item) => [String(item.id), item]));
+    const nextById = new Map(nextValue.map((item) => [String(item.id), item]));
+    const ids = new Set([...baseById.keys(), ...nextById.keys()]);
+
+    ids.forEach((id) => {
+      const baseItem = baseById.get(id);
+      const nextItem = nextById.get(id);
+      const itemPath = `${key}.${id}`;
+
+      if (!nextItem) {
+        changes.set(itemPath, QUOTE_FIELD_DELETED);
+        return;
+      }
+      if (!baseItem) {
+        changes.set(itemPath, nextItem);
+        return;
+      }
+
+      const itemKeys = new Set([
+        ...Object.keys(baseItem),
+        ...Object.keys(nextItem),
+      ]);
+      itemKeys.forEach((itemKey) => {
+        if (!quoteValuesEqual(baseItem[itemKey], nextItem[itemKey])) {
+          changes.set(`${itemPath}.${itemKey}`, nextItem[itemKey]);
+        }
+      });
+    });
+  });
+
+  return changes;
+}
+
+function quoteFormValue(form, path) {
+  const [field, itemId, itemField] = String(path || '').split('.');
+  if (!field) return undefined;
+  if (!itemId) return form?.[field];
+
+  const item = Array.isArray(form?.[field])
+    ? form[field].find((entry) => String(entry?.id) === itemId)
+    : undefined;
+  return itemField ? item?.[itemField] : item;
+}
+
+function withQuoteFormValue(form, path, value) {
+  const [field, itemId, itemField] = String(path || '').split('.');
+  if (!field) return form;
+  if (!itemId) return { ...form, [field]: value };
+
+  const items = Array.isArray(form?.[field]) ? form[field] : [];
+  if (!itemField) {
+    const withoutItem = items.filter((entry) => String(entry?.id) !== itemId);
+    return {
+      ...form,
+      [field]: value === QUOTE_FIELD_DELETED ? withoutItem : [...withoutItem, value],
+    };
+  }
+
+  return {
+    ...form,
+    [field]: items.map((entry) => (
+      String(entry?.id) === itemId ? { ...entry, [itemField]: value } : entry
+    )),
+  };
+}
+
 function positiveNumber(value) {
   return Math.max(0, numberValue(value));
 }
@@ -895,11 +992,19 @@ function App() {
   const quoteAutoSaveInitializedRef = useRef(false);
   const quoteAutoSaveConflictRetryRef = useRef(false);
   const quoteRealtimeReloadPendingRef = useRef(false);
+  const dirtyQuoteFieldsRef = useRef(new Set());
+  const focusedQuoteFieldRef = useRef(null);
+  const lastConfirmedQuoteFormRef = useRef(form);
+  const remoteQuoteBufferRef = useRef({ fields: new Map(), pendingRow: null });
+  const quoteFieldConflictsRef = useRef(new Set());
+  const quoteRealtimeDebounceRef = useRef(null);
   const offlineQueueProcessingRef = useRef(false);
   const [activeQuoteIdentity, setActiveQuoteIdentity] = useState(null);
   const activeQuoteIdentityRef = useRef(activeQuoteIdentity);
   const latestQuoteFormRef = useRef(form);
   const [selectedHistoryPreview, setSelectedHistoryPreview] = useState(null);
+  const [quoteCollaborationStatus, setQuoteCollaborationStatus] = useState('Sincronizado');
+  const [quoteFieldConflicts, setQuoteFieldConflicts] = useState([]);
   const [pendingOfflineCount, setPendingOfflineCount] = useState(
     () => OfflineQueue.getPendingCount()
   );
@@ -940,6 +1045,171 @@ function App() {
   useEffect(() => {
     latestQuoteFormRef.current = form;
   }, [form]);
+
+  function publishQuoteFieldConflicts() {
+    setQuoteFieldConflicts(Array.from(quoteFieldConflictsRef.current));
+  }
+
+  function markQuoteFormDirty(previousForm, nextForm) {
+    quoteFormChanges(previousForm, nextForm).forEach((_, fieldPath) => {
+      dirtyQuoteFieldsRef.current.add(fieldPath);
+    });
+    latestQuoteFormRef.current = nextForm;
+  }
+
+  function confirmQuoteForm(remoteForm) {
+    const localForm = latestQuoteFormRef.current;
+    lastConfirmedQuoteFormRef.current = remoteForm;
+
+    dirtyQuoteFieldsRef.current.forEach((fieldPath) => {
+      if (quoteValuesEqual(
+        quoteFormValue(localForm, fieldPath),
+        quoteFormValue(remoteForm, fieldPath),
+      )) {
+        dirtyQuoteFieldsRef.current.delete(fieldPath);
+        quoteFieldConflictsRef.current.delete(fieldPath);
+      }
+    });
+    publishQuoteFieldConflicts();
+    setQuoteCollaborationStatus(
+      quoteFieldConflictsRef.current.size ? 'Cambios pendientes de revisión' : 'Sincronizado'
+    );
+  }
+
+  function applyRemoteQuoteRow(row, { ignoreSaveLock = false } = {}) {
+    const activeIdentity = activeQuoteIdentityRef.current;
+    if (!row?.id || row.id !== activeIdentity?.id) {
+      return { applied: false, hasConflicts: false };
+    }
+
+    if (
+      !ignoreSaveLock
+      && (quoteSaveInFlightRef.current || quoteAutoSavePendingRef.current)
+    ) {
+      remoteQuoteBufferRef.current.pendingRow = row;
+      setQuoteCollaborationStatus('Cambios remotos pendientes');
+      return { applied: false, hasConflicts: false };
+    }
+
+    const remoteItem = QuoteAdapter.quoteRowToHistoryItem(row);
+    const remoteForm = remoteItem.form || {};
+    const confirmedForm = lastConfirmedQuoteFormRef.current || {};
+    const changes = quoteFormChanges(confirmedForm, remoteForm);
+    let nextForm = latestQuoteFormRef.current;
+    let changedVisibleForm = false;
+
+    changes.forEach((remoteValue, fieldPath) => {
+      const baseValue = quoteFormValue(confirmedForm, fieldPath);
+      const localValue = quoteFormValue(nextForm, fieldPath);
+
+      if (focusedQuoteFieldRef.current === fieldPath) {
+        remoteQuoteBufferRef.current.fields.set(fieldPath, {
+          baseValue,
+          remoteValue,
+        });
+        return;
+      }
+
+      if (dirtyQuoteFieldsRef.current.has(fieldPath)) {
+        if (quoteValuesEqual(localValue, remoteValue)) {
+          dirtyQuoteFieldsRef.current.delete(fieldPath);
+          quoteFieldConflictsRef.current.delete(fieldPath);
+        } else if (quoteValuesEqual(localValue, baseValue)) {
+          nextForm = withQuoteFormValue(nextForm, fieldPath, remoteValue);
+          dirtyQuoteFieldsRef.current.delete(fieldPath);
+          quoteFieldConflictsRef.current.delete(fieldPath);
+          changedVisibleForm = true;
+        } else {
+          quoteFieldConflictsRef.current.add(fieldPath);
+        }
+        return;
+      }
+
+      nextForm = withQuoteFormValue(nextForm, fieldPath, remoteValue);
+      quoteFieldConflictsRef.current.delete(fieldPath);
+      changedVisibleForm = true;
+    });
+
+    lastConfirmedQuoteFormRef.current = remoteForm;
+    if (changedVisibleForm) {
+      latestQuoteFormRef.current = nextForm;
+      setForm(nextForm);
+    }
+
+    const nextIdentity = {
+      ...activeIdentity,
+      folio: remoteItem.folio,
+      createdAt: remoteItem.createdAt,
+      version: remoteItem.version,
+      remote: true,
+    };
+    activeQuoteIdentityRef.current = nextIdentity;
+    setActiveQuoteIdentity(nextIdentity);
+
+    const remoteHistory = HistoryEngine.mergeHistoryItems(
+      [remoteItem],
+      historyRef.current.filter((item) => item.id !== remoteItem.id),
+    );
+    historyRef.current = remoteHistory;
+    setHistory(remoteHistory);
+    StorageEngine.saveHistory(remoteHistory);
+    publishQuoteFieldConflicts();
+
+    const hasConflicts = quoteFieldConflictsRef.current.size > 0;
+    setQuoteCollaborationStatus(hasConflicts ? 'Cambios pendientes de revisión' : 'Sincronizado');
+    return { applied: true, hasConflicts };
+  }
+
+  function flushRemoteQuoteBuffer() {
+    const pendingRow = remoteQuoteBufferRef.current.pendingRow;
+    remoteQuoteBufferRef.current.pendingRow = null;
+    if (pendingRow) applyRemoteQuoteRow(pendingRow);
+  }
+
+  function handleQuoteFieldFocus(fieldPath) {
+    if (!fieldPath) return;
+    focusedQuoteFieldRef.current = fieldPath;
+    setQuoteCollaborationStatus('Editando...');
+  }
+
+  function handleQuoteFieldBlur(fieldPath) {
+    if (!fieldPath) return;
+    if (focusedQuoteFieldRef.current === fieldPath) focusedQuoteFieldRef.current = null;
+
+    const buffered = remoteQuoteBufferRef.current.fields.get(fieldPath);
+    if (!buffered) {
+      setQuoteCollaborationStatus(
+        quoteFieldConflictsRef.current.size ? 'Cambios pendientes de revisión' : 'Actualizando...'
+      );
+      return;
+    }
+
+    remoteQuoteBufferRef.current.fields.delete(fieldPath);
+    const localValue = quoteFormValue(latestQuoteFormRef.current, fieldPath);
+    const { baseValue, remoteValue } = buffered;
+
+    if (quoteValuesEqual(localValue, remoteValue)) {
+      dirtyQuoteFieldsRef.current.delete(fieldPath);
+      quoteFieldConflictsRef.current.delete(fieldPath);
+    } else if (quoteValuesEqual(localValue, baseValue)) {
+      const nextForm = withQuoteFormValue(
+        latestQuoteFormRef.current,
+        fieldPath,
+        remoteValue,
+      );
+      latestQuoteFormRef.current = nextForm;
+      setForm(nextForm);
+      dirtyQuoteFieldsRef.current.delete(fieldPath);
+      quoteFieldConflictsRef.current.delete(fieldPath);
+    } else if (!quoteValuesEqual(remoteValue, baseValue)) {
+      quoteFieldConflictsRef.current.add(fieldPath);
+    }
+
+    publishQuoteFieldConflicts();
+    setQuoteCollaborationStatus(
+      quoteFieldConflictsRef.current.size ? 'Cambios pendientes de revisión' : 'Actualizando...'
+    );
+  }
 
   useEffect(() => {
     let isMounted = true;
@@ -1668,23 +1938,41 @@ function App() {
 
     if (!userId || !workspaceId) return undefined;
 
-    let debounceId = null;
-    const unsubscribe = QuoteRepository.subscribeQuotes(workspaceId, () => {
-      if (quoteSaveInFlightRef.current || quoteAutoSavePendingRef.current) {
-        quoteRealtimeReloadPendingRef.current = true;
-        return;
+    const unsubscribe = QuoteRepository.subscribeQuotes(workspaceId, (payload) => {
+      const remoteRow = payload?.new?.id ? payload.new : null;
+      const activeQuoteId = activeQuoteIdentityRef.current?.id;
+
+      if (quoteRealtimeDebounceRef.current !== null) {
+        window.clearTimeout(quoteRealtimeDebounceRef.current);
       }
 
-      if (debounceId !== null) window.clearTimeout(debounceId);
+      quoteRealtimeDebounceRef.current = window.setTimeout(() => {
+        quoteRealtimeDebounceRef.current = null;
 
-      debounceId = window.setTimeout(() => {
-        debounceId = null;
+        if (remoteRow?.id === activeQuoteId && !remoteRow.deleted_at) {
+          if (quoteSaveInFlightRef.current || quoteAutoSavePendingRef.current) {
+            remoteQuoteBufferRef.current.pendingRow = remoteRow;
+            setQuoteCollaborationStatus('Cambios remotos pendientes');
+            return;
+          }
+          const mergeResult = applyRemoteQuoteRow(remoteRow);
+          if (!mergeResult.applied) void loadRemoteQuotes({ fromRealtime: true });
+          return;
+        }
+
+        if (quoteSaveInFlightRef.current || quoteAutoSavePendingRef.current) {
+          quoteRealtimeReloadPendingRef.current = true;
+          return;
+        }
         void loadRemoteQuotes({ fromRealtime: true });
-      }, 300);
+      }, 280);
     });
 
     return () => {
-      if (debounceId !== null) window.clearTimeout(debounceId);
+      if (quoteRealtimeDebounceRef.current !== null) {
+        window.clearTimeout(quoteRealtimeDebounceRef.current);
+        quoteRealtimeDebounceRef.current = null;
+      }
       unsubscribe();
     };
   }, [authSession?.user?.id, activeWorkspace?.id]);
@@ -1830,12 +2118,21 @@ function App() {
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, [authSession?.user?.id, activeWorkspace?.id]);
+  function updateDirtyQuoteForm(updater) {
+    setQuoteCollaborationStatus('Actualizando...');
+    setForm((current) => {
+      const next = typeof updater === 'function' ? updater(current) : updater;
+      markQuoteFormDirty(current, next);
+      return next;
+    });
+  }
+
   function update(field, value) {
-    setForm((current) => ({ ...current, [field]: value }));
+    updateDirtyQuoteForm((current) => ({ ...current, [field]: value }));
   }
 
   function updateMeasure(field, value) {
-    setForm((current) => {
+    updateDirtyQuoteForm((current) => {
       const measureItems = Quote.measurementItemsFromForm(current, quoteHelpers);
       const first = measureItems[0] || Quote.normalizeMeasureItem({}, 0, current, quoteHelpers);
       const nextMeasureItems = [{ ...first, [field]: value }, ...measureItems.slice(1)];
@@ -1845,7 +2142,7 @@ function App() {
   }
 
   function updateMeasureItem(id, field, value) {
-    setForm((current) => {
+    updateDirtyQuoteForm((current) => {
       const measureItems = Quote.measurementItemsFromForm(current, quoteHelpers).map((item) => (
         item.id === id ? { ...item, [field]: value } : item
       ));
@@ -1864,7 +2161,7 @@ function App() {
   }
 
   function addMeasureItem() {
-    setForm((current) => {
+    updateDirtyQuoteForm((current) => {
       const measureItems = [
         ...Quote.measurementItemsFromForm(current, quoteHelpers),
         {
@@ -1884,7 +2181,7 @@ function App() {
   }
 
   function removeMeasureItem(id) {
-    setForm((current) => {
+    updateDirtyQuoteForm((current) => {
       const measureItems = Quote.measurementItemsFromForm(current, quoteHelpers).filter((item) => item.id !== id);
       const safeItems = measureItems.length ? measureItems : [Quote.normalizeMeasureItem({}, 0, current, quoteHelpers)];
       const first = safeItems[0];
@@ -1902,7 +2199,7 @@ function App() {
   }
 
   function updateMaterialItem(id, field, value, manualCapture = false) {
-    setForm((current) => {
+    updateDirtyQuoteForm((current) => {
       const areaTotal = Quote.quoteAreaTotal(current, quoteHelpers);
       const materialItems = Quote.materialItemsFromForm(current, areaTotal, quoteHelpers).map((item) => {
         if (item.id !== id) return item;
@@ -1947,7 +2244,7 @@ function App() {
   }
 
   function addMaterialItem(manualCapture = false) {
-    setForm((current) => ({
+    updateDirtyQuoteForm((current) => ({
       ...current,
       materialItems: [
         ...Quote.materialItemsFromForm(current, Quote.quoteAreaTotal(current, quoteHelpers), quoteHelpers),
@@ -1976,7 +2273,7 @@ function App() {
   }
 
   function removeMaterialItem(id) {
-    setForm((current) => {
+    updateDirtyQuoteForm((current) => {
       const areaTotal = Quote.quoteAreaTotal(current, quoteHelpers);
       const items = Quote.materialItemsFromForm(current, areaTotal, quoteHelpers).filter((item) => item.id !== id);
       return { ...current, materialItems: items.length ? items : [] };
@@ -1984,7 +2281,7 @@ function App() {
   }
 
   function applySuggestedPrices() {
-    setForm((current) => {
+    updateDirtyQuoteForm((current) => {
       const areaTotal = Quote.quoteAreaTotal(current, quoteHelpers);
       const currentQuote = Quote.calculateQuote(current, quoteHelpers);
       const materialItems = Quote.materialItemsFromForm(current, areaTotal, quoteHelpers).map((item) => ({
@@ -2002,7 +2299,7 @@ function App() {
   function applyQuoteProfile(profileKey) {
     const profile = quoteProfiles[profileKey];
     if (!profile) return;
-    setForm((current) => {
+    updateDirtyQuoteForm((current) => {
       const measureItems = profile.measureItems.map((item) => ({ ...item, id: `${item.id}-${Date.now()}` }));
       const materialItems = profile.materialItems.map((item) => ({ ...item, id: `${item.id}-${Date.now()}` }));
       const accessoryItems = profile.accessoryItems.map((item) => ({ ...item, id: `${item.id}-${Date.now()}` }));
@@ -2027,7 +2324,7 @@ function App() {
   }
 
   function updateAccessoryItem(id, field, value) {
-    setForm((current) => ({
+    updateDirtyQuoteForm((current) => ({
       ...current,
       accessoryItems: Quote.accessoryItemsFromForm(current, quoteHelpers).map((item) => {
         if (item.id !== id) return item;
@@ -2048,7 +2345,7 @@ function App() {
   }
 
   function addAccessoryItem() {
-    setForm((current) => ({
+    updateDirtyQuoteForm((current) => ({
       ...current,
       accessoryItems: [
         ...Quote.accessoryItemsFromForm(current, quoteHelpers),
@@ -2069,7 +2366,7 @@ function App() {
   }
 
   function removeAccessoryItem(id) {
-    setForm((current) => {
+    updateDirtyQuoteForm((current) => {
       const items = Quote.accessoryItemsFromForm(current, quoteHelpers).filter((item) => item.id !== id);
       return { ...current, accessoryItems: items.length ? items : [] };
     });
@@ -2098,7 +2395,7 @@ function App() {
   }
 
   function updatePlanItem(id, field, value) {
-    setForm((current) => ({
+    updateDirtyQuoteForm((current) => ({
       ...current,
       planItems: PlanEngine.planItemsFromForm(current, planHelpers).map((item) => (
         item.id === id ? { ...item, [field]: value } : item
@@ -2107,7 +2404,7 @@ function App() {
   }
 
   function addPlanItem() {
-    setForm((current) => ({
+    updateDirtyQuoteForm((current) => ({
       ...current,
       planItems: [
         ...PlanEngine.planItemsFromForm(current, planHelpers),
@@ -2129,7 +2426,7 @@ function App() {
   }
 
   function removePlanItem(id) {
-    setForm((current) => {
+    updateDirtyQuoteForm((current) => {
       const items = PlanEngine.planItemsFromForm(current, planHelpers).filter((item) => item.id !== id);
       return { ...current, planItems: items.length ? items : [] };
     });
@@ -2355,7 +2652,13 @@ function App() {
     historyRef.current = resolvedHistory;
     setHistory(resolvedHistory);
     StorageEngine.saveHistory(resolvedHistory);
-    setForm({ ...defaults, ...resolvedItem.form });
+    const resolvedForm = { ...defaults, ...resolvedItem.form };
+    latestQuoteFormRef.current = resolvedForm;
+    setForm(resolvedForm);
+    dirtyQuoteFieldsRef.current.clear();
+    quoteFieldConflictsRef.current.clear();
+    remoteQuoteBufferRef.current = { fields: new Map(), pendingRow: null };
+    confirmQuoteForm(resolvedForm);
     setSelectedHistoryPreview(null);
     const nextIdentity = {
       id: resolvedItem.id,
@@ -2390,6 +2693,7 @@ function App() {
 
     if (
       offlineQueueProcessingRef.current
+      || quoteSaveInFlightRef.current
       || !userId
       || !workspaceId
     ) {
@@ -2571,6 +2875,7 @@ function App() {
           };
           activeQuoteIdentityRef.current = nextIdentity;
           setActiveQuoteIdentity(nextIdentity);
+          confirmQuoteForm(remoteItem.form || {});
         }
         lastSuccessMessage = operation.type === 'create'
           ? 'Cotización sincronizada'
@@ -2615,6 +2920,22 @@ function App() {
         quoteAutoSavePendingRef.current = true;
       }
       return;
+    }
+
+    if (quoteFieldConflictsRef.current.size > 0) {
+      if (silent) {
+        setSyncStatus('Conflicto de versión · cambios pendientes de revisión');
+        setQuoteCollaborationStatus('Cambios pendientes de revisión');
+        return;
+      }
+
+      const keepLocal = window.confirm(
+        'Hay campos modificados también por otro usuario.\n\nAceptar: conservar y guardar tus valores.\nCancelar: revisar antes de guardar.'
+      );
+      if (!keepLocal) return;
+      quoteFieldConflictsRef.current.clear();
+      remoteQuoteBufferRef.current.fields.clear();
+      publishQuoteFieldConflicts();
     }
 
     quoteSaveInFlightRef.current = true;
@@ -2817,6 +3138,7 @@ function App() {
               historyRef.current = remoteHistory;
               setHistory(remoteHistory);
               StorageEngine.saveHistory(remoteHistory);
+              confirmQuoteForm(remoteItem.form || {});
               removeQueuedQuoteOperations('update', workspaceId, item.id);
 
               const latestForm = latestQuoteFormRef.current;
@@ -2852,6 +3174,19 @@ function App() {
                 setSyncStatus('Cotización sincronizada');
               }
               return;
+            }
+
+            if (remoteResult.data) {
+              const mergeResult = applyRemoteQuoteRow(
+                remoteResult.data,
+                { ignoreSaveLock: true },
+              );
+              if (mergeResult.applied && !mergeResult.hasConflicts && !autoConflictRetry) {
+                removeQueuedQuoteOperations('update', workspaceId, item.id);
+                quoteAutoSaveConflictRetryRef.current = true;
+                quoteAutoSavePendingRef.current = true;
+                return;
+              }
             }
 
             const latestForm = latestQuoteFormRef.current;
@@ -2936,6 +3271,7 @@ function App() {
         };
         activeQuoteIdentityRef.current = nextIdentity;
         setActiveQuoteIdentity(nextIdentity);
+        confirmQuoteForm(remoteItem.form || {});
 
         syncProductionOrderFromQuote(
           remoteItem.id,
@@ -3004,6 +3340,8 @@ function App() {
           });
           return;
         }
+
+        flushRemoteQuoteBuffer();
 
         if (quoteRealtimeReloadPendingRef.current) {
           quoteRealtimeReloadPendingRef.current = false;
@@ -3120,15 +3458,26 @@ function App() {
     if (!item?.form) return;
     const version = numberValue(item.version);
     setSelectedHistoryPreview(null);
-    setForm({ ...defaults, ...item.form });
-    setActiveQuoteIdentity({
+    const loadedForm = { ...defaults, ...item.form };
+    const nextIdentity = {
       id: item.id,
       workspaceId: activeWorkspace?.id || null,
       folio: item.folio,
       createdAt: item.createdAt,
       version: version || null,
       remote: isRemoteQuoteId(item.id) && version > 0,
-    });
+    };
+    latestQuoteFormRef.current = loadedForm;
+    lastConfirmedQuoteFormRef.current = loadedForm;
+    dirtyQuoteFieldsRef.current.clear();
+    quoteFieldConflictsRef.current.clear();
+    remoteQuoteBufferRef.current = { fields: new Map(), pendingRow: null };
+    focusedQuoteFieldRef.current = null;
+    activeQuoteIdentityRef.current = nextIdentity;
+    setForm(loadedForm);
+    setActiveQuoteIdentity(nextIdentity);
+    publishQuoteFieldConflicts();
+    setQuoteCollaborationStatus('Sincronizado');
     setActiveSection('cotizador');
   }
 function syncProductionOrderFromQuote(quoteId, nextForm, quoteVersion) {
@@ -3432,8 +3781,17 @@ function syncProductionOrderFromQuote(quoteId, nextForm, quoteVersion) {
         : JSON.parse(JSON.stringify(defaults));
 
     setForm(nextDefaults);
+    latestQuoteFormRef.current = nextDefaults;
+    lastConfirmedQuoteFormRef.current = nextDefaults;
+    dirtyQuoteFieldsRef.current.clear();
+    quoteFieldConflictsRef.current.clear();
+    remoteQuoteBufferRef.current = { fields: new Map(), pendingRow: null };
+    focusedQuoteFieldRef.current = null;
     setSelectedHistoryPreview(null);
+    activeQuoteIdentityRef.current = null;
     setActiveQuoteIdentity(null);
+    publishQuoteFieldConflicts();
+    setQuoteCollaborationStatus('Sincronizado');
     setActiveSection('cotizador');
     setCopied('Nueva cotización lista');
   }
@@ -3862,6 +4220,8 @@ function syncProductionOrderFromQuote(quoteId, nextForm, quoteVersion) {
   const input = (field, type = 'text') => (
     <input
       id={field}
+      data-quote-field={field}
+      data-quote-conflict={quoteFieldConflicts.includes(field) ? 'true' : undefined}
       type={type}
       value={form[field] ?? ''}
       onChange={(event) => update(field, type === 'number' ? numberValue(event.target.value) : event.target.value)}
@@ -3871,6 +4231,8 @@ function syncProductionOrderFromQuote(quoteId, nextForm, quoteVersion) {
   const textareaInput = (field) => (
     <textarea
       id={field}
+      data-quote-field={field}
+      data-quote-conflict={quoteFieldConflicts.includes(field) ? 'true' : undefined}
       value={form[field] ?? ''}
       onChange={(event) => update(field, event.target.value)}
     />
@@ -4111,6 +4473,10 @@ function syncProductionOrderFromQuote(quoteId, nextForm, quoteVersion) {
             openWhatsApp={openWhatsApp}
             chainInsights={chainInsights}
             professionalAnalysis={professionalAnalysis}
+            collaborationStatus={quoteCollaborationStatus}
+            quoteFieldConflicts={quoteFieldConflicts}
+            onQuoteFieldFocus={handleQuoteFieldFocus}
+            onQuoteFieldBlur={handleQuoteFieldBlur}
           />
         )}
         {pdfEditor && (
