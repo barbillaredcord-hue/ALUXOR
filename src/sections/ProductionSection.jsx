@@ -1,6 +1,9 @@
+import { useEffect, useState } from 'react';
 import { ClipboardList, ExternalLink } from 'lucide-react';
 
 const IN_PROCESS_STATUSES = new Set(['Programada', 'En corte', 'Fabricando', 'Armado']);
+const STATUS_OPTIONS = ['Pendiente', 'Programada', 'En corte', 'Fabricando', 'Armado', 'Listo', 'Entregado'];
+const PRIORITY_OPTIONS = ['Normal', 'Alta', 'Urgente'];
 
 function dateTimestamp(value) {
   const timestamp = Date.parse(value || '');
@@ -10,6 +13,15 @@ function dateTimestamp(value) {
 function formatDate(value) {
   const timestamp = dateTimestamp(value);
   return timestamp ? new Date(timestamp).toLocaleDateString('es-MX') : 'Por definir';
+}
+
+function dateInputValue(value) {
+  const timestamp = dateTimestamp(value);
+  if (!timestamp) return '';
+
+  const date = new Date(timestamp);
+  const localDate = new Date(date.getTime() - (date.getTimezoneOffset() * 60000));
+  return localDate.toISOString().slice(0, 16);
 }
 
 function abbreviatedId(value) {
@@ -36,8 +48,10 @@ export default function ProductionSection({
   selectedProductionOrderId,
   onSelectProductionOrder,
   onOpenQuote,
+  onUpdateProductionOrder,
   productionLoading = false,
   productionError = '',
+  productionSyncStatus = '',
 }) {
   const sortedOrders = [...productionOrders].sort((a, b) => (
     dateTimestamp(b.updatedAt || b.fechaCreacion)
@@ -51,6 +65,45 @@ export default function ProductionSection({
     ready: sortedOrders.filter((order) => order.estado === 'Listo').length,
     delivered: sortedOrders.filter((order) => order.estado === 'Entregado').length,
   };
+  const [draft, setDraft] = useState({
+    estado: 'Pendiente',
+    prioridad: 'Normal',
+    responsable: '',
+    fechaCompromiso: '',
+    fechaInicio: '',
+    fechaFinal: '',
+    observaciones: '',
+  });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!selectedOrder) return;
+
+    setDraft({
+      estado: selectedOrder.estado,
+      prioridad: selectedOrder.prioridad,
+      responsable: selectedOrder.responsable || '',
+      fechaCompromiso: dateInputValue(selectedOrder.fechaCompromiso),
+      fechaInicio: dateInputValue(selectedOrder.fechaInicio),
+      fechaFinal: dateInputValue(selectedOrder.fechaFinal),
+      observaciones: selectedOrder.observaciones || '',
+    });
+  }, [selectedOrder?.id, selectedOrder?.updatedAt, selectedOrder?.version]);
+
+  function updateDraft(field, value) {
+    setDraft((current) => ({ ...current, [field]: value }));
+  }
+
+  async function saveChanges() {
+    if (!selectedOrder || saving) return;
+
+    setSaving(true);
+    try {
+      await onUpdateProductionOrder?.(selectedOrder.id, draft);
+    } finally {
+      setSaving(false);
+    }
+  }
 
   if (sortedOrders.length === 0) {
     return (
@@ -62,11 +115,20 @@ export default function ProductionSection({
           </div>
         </header>
         {productionLoading && (
-          <p className="production-cloud-status" role="status">Cargando órdenes de producción…</p>
+          <p className="production-cloud-status" role="status">
+            Cargando órdenes de producción…</p>
         )}
         {productionError && (
-          <p className="production-cloud-status error" role="alert">{productionError}</p>
+          <p className="production-cloud-status error" role="alert">
+            {productionError}
+          </p>
         )}
+        {productionSyncStatus && !productionError && (
+          <p className="production-cloud-status" role="status">
+            {productionSyncStatus}
+          </p>
+       )}
+
         <div className="production-empty-state">
           <ClipboardList size={42} />
           <h3>No hay órdenes de producción todavía.</h3>
@@ -87,12 +149,19 @@ export default function ProductionSection({
       </header>
 
       {productionLoading && (
-        <p className="production-cloud-status" role="status">Cargando órdenes de producción…</p>
+        <p className="production-cloud-status" role="status">
+          Cargando órdenes de producción…
+        </p>
       )}
       {productionError && (
-        <p className="production-cloud-status error" role="alert">{productionError}</p>
+        <p className="production-cloud-status error" role="alert">
+          {productionError}</p>
       )}
-
+      {productionSyncStatus && !productionError && (
+        <p className="production-cloud-status" role="status">
+          {productionSyncStatus}
+        </p>
+      )}
       <div className="production-metrics" aria-label="Resumen de producción">
         <article><span>Total OT</span><strong>{metrics.total}</strong></article>
         <article><span>Pendientes</span><strong>{metrics.pending}</strong></article>
@@ -150,29 +219,65 @@ export default function ProductionSection({
                   <h3>{selectedOrder.folio}</h3>
                 </div>
                 <div className="production-order-badges">
-                  <em className={`production-order-badge status-${statusClass(selectedOrder.estado)}`}>{selectedOrder.estado}</em>
-                  <em className={`production-order-badge priority-${priorityClass(selectedOrder.prioridad)}`}>{selectedOrder.prioridad}</em>
+                  <em className={`production-order-badge status-${statusClass(draft.estado)}`}>{draft.estado}</em>
+                  <em className={`production-order-badge priority-${priorityClass(draft.prioridad)}`}>{draft.prioridad}</em>
                 </div>
               </div>
               <dl className="production-order-detail-grid">
-                <div><dt>Responsable</dt><dd>{selectedOrder.responsable || 'Sin asignar'}</dd></div>
                 <div><dt>Cliente</dt><dd>{selectedOrder.cliente || 'Cliente pendiente'}</dd></div>
                 <div><dt>Producto</dt><dd>{selectedOrder.producto || 'Proyecto sin nombre'}</dd></div>
                 <div><dt>Fecha creación</dt><dd>{formatDate(selectedOrder.fechaCreacion)}</dd></div>
-                <div><dt>Fecha compromiso</dt><dd>{formatDate(selectedOrder.fechaCompromiso)}</dd></div>
-                <div><dt>Fecha inicio</dt><dd>{formatDate(selectedOrder.fechaInicio)}</dd></div>
-                <div><dt>Fecha final</dt><dd>{formatDate(selectedOrder.fechaFinal)}</dd></div>
                 <div><dt>Quote Version</dt><dd>{selectedOrder.quoteVersion ?? 1}</dd></div>
                 <div><dt>Quote ID</dt><dd title={selectedOrder.quoteId}>{abbreviatedId(selectedOrder.quoteId)}</dd></div>
                 <div><dt>Timeline</dt><dd>{Array.isArray(selectedOrder.timeline) ? selectedOrder.timeline.length : 0} evento(s)</dd></div>
               </dl>
-              <div className="production-order-detail-notes">
-                <strong>Observaciones</strong>
-                <p>{selectedOrder.observaciones || 'Sin observaciones.'}</p>
+
+              <div className="form-grid">
+                <label>
+                  Estado
+                  <select value={draft.estado} onChange={(event) => updateDraft('estado', event.target.value)}>
+                    {STATUS_OPTIONS.map((status) => <option key={status} value={status}>{status}</option>)}
+                  </select>
+                </label>
+                <label>
+                  Prioridad
+                  <select value={draft.prioridad} onChange={(event) => updateDraft('prioridad', event.target.value)}>
+                    {PRIORITY_OPTIONS.map((priority) => <option key={priority} value={priority}>{priority}</option>)}
+                  </select>
+                </label>
+                <label>
+                  Responsable
+                  <input value={draft.responsable} onChange={(event) => updateDraft('responsable', event.target.value)} placeholder="Sin asignar" />
+                </label>
+                <label>
+                  Fecha compromiso
+                  <input type="datetime-local" value={draft.fechaCompromiso} onChange={(event) => updateDraft('fechaCompromiso', event.target.value)} />
+                </label>
+                <label>
+                  Fecha inicio
+                  <input type="datetime-local" value={draft.fechaInicio} onChange={(event) => updateDraft('fechaInicio', event.target.value)} />
+                </label>
+                <label>
+                  Fecha final
+                  <input type="datetime-local" value={draft.fechaFinal} onChange={(event) => updateDraft('fechaFinal', event.target.value)} />
+                </label>
               </div>
-              <button type="button" onClick={() => onOpenQuote?.(selectedOrder.quoteId)}>
-                <ExternalLink size={17} /> Ver cotización
-              </button>
+              <label>
+                Observaciones
+                <textarea value={draft.observaciones} onChange={(event) => updateDraft('observaciones', event.target.value)} />
+              </label>
+              <div className="actions compact">
+                <button
+                  type="button"
+                  disabled={saving || productionLoading || !onUpdateProductionOrder}
+                  onClick={saveChanges}
+                >
+                  {saving ? 'Guardando…' : 'Guardar cambios'}
+                </button>
+                <button type="button" className="ghost" onClick={() => onOpenQuote?.(selectedOrder.quoteId)}>
+                  <ExternalLink size={17} /> Ver cotización
+                </button>
+              </div>
             </>
           ) : (
             <div className="production-detail-placeholder">

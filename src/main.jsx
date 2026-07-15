@@ -52,7 +52,7 @@ import { QuoteRepository } from './lib/quotes/quoteRepository.js';
 import { QuoteAdapter } from './lib/quotes/quoteAdapter.js';
 import { OfflineQueue } from './lib/quotes/offlineQueue.js';
 import { ConflictResolver } from './lib/quotes/conflictResolver.js';
-import { createProductionOrder } from './lib/production/productionEngine.js';
+import { createProductionOrder, updateProductionOrder } from './lib/production/productionEngine.js';
 import { ProductionStorage } from './lib/production/productionStorage.js';
 import { ProductionOrderRepository } from './lib/production/productionOrderRepository.js';
 import { Areas, Materials, Pricing, Summary, Report, Quote, HistoryEngine, Pdf, StorageEngine, PlanEngine, AnalysisEngine } from './lib/br-engine/index.js';
@@ -459,6 +459,7 @@ function isNetworkError(error) {
   if (
     code === '23505'
     || code === 'QUOTE_VERSION_CONFLICT'
+    || code === 'PRODUCTION_ORDER_VERSION_CONFLICT'
     || code === '42501'
     || description.includes('row-level security')
     || description.includes('permission denied')
@@ -877,6 +878,7 @@ function App() {
   const productionOrdersRef = useRef(productionOrders);
   const productionRemoteRequestRef = useRef({ id: 0, inFlight: false, pending: false });
   const productionMigrationRef = useRef(null);
+  const productionSyncRef = useRef(false);
   const productionContextRef = useRef({ userId: null, workspaceId: null });
   const remoteQuotesRequestRef = useRef({
     id: 0,
@@ -900,6 +902,7 @@ function App() {
   const [syncStatus, setSyncStatus] = useState('Historial local');
   const [productionLoading, setProductionLoading] = useState(false);
   const [productionError, setProductionError] = useState('');
+  const [productionSyncStatus, setProductionSyncStatus] = useState('Producción local');
   const [lastSyncAt, setLastSyncAt] = useState('');
   const [planView, setPlanView] = useState('3d');
   const [planRotation, setPlanRotation] = useState(0);
@@ -1161,6 +1164,17 @@ function App() {
     ));
   }
 
+  function upsertActiveProductionOrder(order) {
+    const saved = ProductionStorage.upsertProductionOrder(order);
+    if (!saved) return null;
+
+    const activeOrders = ProductionStorage.loadProductionOrders()
+      .filter((item) => item.workspaceId === saved.workspaceId);
+    productionOrdersRef.current = activeOrders;
+    setProductionOrders(activeOrders);
+    return saved;
+  }
+
   async function loadRemoteProductionOrders() {
     const userId = authSession?.user?.id;
     const workspaceId = activeWorkspace?.id;
@@ -1195,9 +1209,11 @@ function App() {
       }
 
       const pendingLocalOrders = ProductionStorage.findLocalProductionOrders(workspaceId);
+      const pendingUpdatedOrders = ProductionStorage.findPendingProductionOrders(workspaceId);
       setActiveProductionOrders(workspaceId, [
         ...(Array.isArray(data) ? data : []),
         ...pendingLocalOrders,
+        ...pendingUpdatedOrders,
       ]);
       setProductionError('');
     } catch {
@@ -1219,11 +1235,88 @@ function App() {
     }
   }
 
+  async function syncPendingProductionOrders(workspaceId, userId) {
+    if (!workspaceId || !userId || !navigator.onLine || productionSyncRef.current) return;
+
+    productionSyncRef.current = true;
+    let syncFailed = false;
+
+    try {
+      const pendingOrders = ProductionStorage.findPendingProductionOrders(workspaceId);
+
+      for (const pendingOrder of pendingOrders) {
+        const currentContext = productionContextRef.current;
+        if (currentContext.userId !== userId || currentContext.workspaceId !== workspaceId) return;
+
+        const expectedVersion = pendingOrder.pendingExpectedVersion || pendingOrder.version;
+        const result = await ProductionOrderRepository.updateProductionOrderRemote(
+          workspaceId,
+          pendingOrder.id,
+          pendingOrder,
+          expectedVersion
+        );
+
+        if (result.error?.code === 'PRODUCTION_ORDER_VERSION_CONFLICT') {
+          const remote = await ProductionOrderRepository.getProductionOrder(
+            workspaceId,
+            pendingOrder.id
+          );
+         if (remote.data && !remote.error) {
+           upsertActiveProductionOrder(remote.data);
+           setProductionError(
+             'La orden fue modificada en otro dispositivo. Se cargó la versión remota.'
+           );
+           setProductionSyncStatus(
+             'Conflicto de producción · versión remota cargada'
+           );
+         } else {
+           syncFailed = true;
+         }
+         continue;
+      }
+
+        if (result.error || !result.data) {
+          syncFailed = true;
+          continue;
+        }
+
+        if (productionContextRef.current.workspaceId !== workspaceId) return;
+        const latestLocalOrder = ProductionStorage.loadProductionOrders().find((order) => (
+          order.workspaceId === workspaceId && order.id === pendingOrder.id
+        ));
+        if (
+          latestLocalOrder?.pendingSync
+          && latestLocalOrder.updatedAt !== pendingOrder.updatedAt
+        ) {
+          upsertActiveProductionOrder({
+            ...latestLocalOrder,
+            version: result.data.version,
+            pendingExpectedVersion: result.data.version,
+          });
+          syncFailed = true;
+          continue;
+        }
+
+        upsertActiveProductionOrder(result.data);
+      }
+
+      if (syncFailed) {
+        setProductionError('Cambios locales pendientes de sincronizar.');
+      } else if (pendingOrders.length > 0) {
+        setProductionError('');
+        setProductionSyncStatus('Cambios de producción sincronizados');
+      }
+    } finally {
+      productionSyncRef.current = false;
+    }
+  }
+
   async function migrateLocalProductionOrders(workspaceId, userId) {
     if (!workspaceId || !userId || productionMigrationRef.current === workspaceId) return;
 
     if (!navigator.onLine) {
       setProductionError('No se pudieron cargar las órdenes en nube. Mostrando copia local.');
+      setProductionSyncStatus('No se pudieron cargar las órdenes en nube. Mostrando copia local.');
       return;
     }
 
@@ -1314,6 +1407,7 @@ function App() {
       setSelectedProductionOrderId(null);
       setProductionLoading(false);
       setProductionError('');
+      setProductionSyncStatus('Producción local');
       return undefined;
     }
 
@@ -1325,20 +1419,21 @@ function App() {
       current && cachedOrders.some((order) => order.id === current) ? current : null
     ));
 
-    const refreshProductionOrders = () => {
+    const refreshProductionOrders = async () => {
       if (!navigator.onLine) {
         setProductionLoading(false);
         setProductionError('No se pudieron cargar las órdenes en nube. Mostrando copia local.');
         return;
       }
 
-      void migrateLocalProductionOrders(workspaceId, userId);
+      await syncPendingProductionOrders(workspaceId, userId);
+      await migrateLocalProductionOrders(workspaceId, userId);
     };
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') refreshProductionOrders();
     };
 
-    refreshProductionOrders();
+    void refreshProductionOrders();
     window.addEventListener('focus', refreshProductionOrders);
     window.addEventListener('online', refreshProductionOrders);
     document.addEventListener('visibilitychange', onVisibilityChange);
@@ -2724,6 +2819,83 @@ function App() {
     setActiveSection('cotizador');
   }
 
+  async function handleUpdateProductionOrder(orderId, changes) {
+    const workspaceId = activeWorkspace?.id;
+    const userId = authSession?.user?.id;
+    const currentOrder = productionOrdersRef.current.find((order) => order.id === orderId);
+
+    if (!workspaceId || !userId || !currentOrder || currentOrder.workspaceId !== workspaceId) {
+      setProductionError('No fue posible preparar la actualización de la orden.');
+      return false;
+    }
+
+    const now = new Date().toISOString();
+    const nextStatus = changes?.estado || currentOrder.estado;
+    const timeline = Array.isArray(currentOrder.timeline) ? [...currentOrder.timeline] : [];
+
+    if (nextStatus !== currentOrder.estado) {
+      timeline.push({
+        evento: `Estado cambiado a ${nextStatus}`,
+        fecha: now,
+        usuario: userId,
+        comentario: `${currentOrder.estado} → ${nextStatus}`,
+      });
+    }
+
+    const expectedVersion = currentOrder.pendingExpectedVersion || currentOrder.version;
+    const optimisticOrder = {
+      ...updateProductionOrder(
+        currentOrder,
+        { ...(changes || {}), timeline },
+        now
+      ),
+      version: currentOrder.version,
+      pendingSync: true,
+      pendingExpectedVersion: expectedVersion,
+    };
+
+    if (!upsertActiveProductionOrder(optimisticOrder)) {
+      setProductionError('No fue posible guardar el cambio local.');
+      return false;
+    }
+
+    if (!navigator.onLine) {
+      setProductionError('Cambios locales pendientes de sincronizar.');
+      setSyncStatus('Producción guardada localmente · pendiente de sincronizar');
+      return true;
+    }
+
+    const result = await ProductionOrderRepository.updateProductionOrderRemote(
+      workspaceId,
+      orderId,
+      optimisticOrder,
+      expectedVersion
+    );
+
+    if (result.error?.code === 'PRODUCTION_ORDER_VERSION_CONFLICT') {
+      const remote = await ProductionOrderRepository.getProductionOrder(orderId);
+      if (remote.data && !remote.error) {
+        upsertActiveProductionOrder(remote.data);
+        setProductionError('La orden fue modificada en otro dispositivo. Se cargó la versión remota.');
+        setSyncStatus('Conflicto de producción · versión remota cargada');
+      } else {
+        setProductionError('No se pudo cargar la versión remota de la orden.');
+      }
+      return false;
+    }
+
+    if (result.error || !result.data) {
+      setProductionError('Cambios locales pendientes de sincronizar.');
+      setSyncStatus('Producción guardada localmente · pendiente de sincronizar');
+      return false;
+    }
+
+    upsertActiveProductionOrder(result.data);
+    setProductionError('');
+    setSyncStatus('Orden de producción actualizada en nube');
+    return true;
+  }
+
   async function generateProductionOrderFromCurrentQuote() {
     const workspaceId = activeWorkspace?.id;
     const userId = authSession?.user?.id;
@@ -3590,6 +3762,7 @@ function App() {
             selectedProductionOrderId={selectedProductionOrderId}
             onSelectProductionOrder={setSelectedProductionOrderId}
             onOpenQuote={openQuoteFromProduction}
+            onUpdateProductionOrder={handleUpdateProductionOrder}
             productionLoading={productionLoading}
             productionError={productionError}
           />

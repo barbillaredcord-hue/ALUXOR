@@ -61,13 +61,12 @@ export async function loadProductionOrders(workspaceId) {
   if (!workspaceId) {
     return { data: [], error: readableError('Falta el identificador del workspace.') };
   }
-
-  const result = await execute(() => supabase
-    .from('production_orders')
-    .select(productionOrderColumns)
-    .eq('workspace_id', workspaceId)
-    .is('deleted_at', null)
-    .order('updated_at', { ascending: false }));
+const result = await execute(() => supabase
+  .from('production_orders')
+  .select(productionOrderColumns)
+  .eq('workspace_id', workspaceId)
+  .is('deleted_at', null)
+  .order('updated_at', { ascending: false }));
 
   return {
     data: Array.isArray(result.data) ? result.data.map(productionOrderRowToModel) : [],
@@ -75,17 +74,23 @@ export async function loadProductionOrders(workspaceId) {
   };
 }
 
-export async function getProductionOrder(id) {
-  if (!id) {
-    return { data: null, error: readableError('Falta el identificador de la orden de producción.') };
+export async function getProductionOrder(workspaceId, id) {
+  if (!workspaceId || !id) {
+    return {
+      data: null,
+      error: readableError(
+        'Faltan identificadores para consultar la orden de producción.'
+      ),
+    };
   }
 
   return adaptSingle(await execute(() => supabase
-  .from('production_orders')
-  .select(productionOrderColumns)
-  .eq('id', id)
-  .is('deleted_at', null)
-  .maybeSingle()));
+    .from('production_orders')
+    .select(productionOrderColumns)
+    .eq('workspace_id', workspaceId)
+    .eq('id', id)
+    .is('deleted_at', null)
+    .maybeSingle()));
 }
 
 export async function getProductionOrderByQuoteId(workspaceId, quoteId) {
@@ -204,34 +209,37 @@ export async function updateProductionOrderRemote(
   id,
   order,
   expectedVersion
-) {  
+) {
   if (!workspaceId || !id) {
-  return {
-    data: null,
-    error: readableError(
-      'Faltan identificadores para actualizar la orden de producción.'
-    ),
-  };
-}
+    return {
+      data: null,
+      error: readableError(
+        'Faltan identificadores para actualizar la orden de producción.'
+      ),
+    };
+  }
 
-  const result = await execute(async () => {
-    let query = supabase
-      .from('production_orders')
-      .update(productionOrderToUpdatePayload(order))
-        .eq('workspace_id', workspaceId)
-      .eq('id', id)
-      .is('deleted_at', null);
+  if (!Number.isInteger(expectedVersion) || expectedVersion < 1) {
+    return {
+      data: null,
+      error: readableError(
+        'Falta una versión válida para actualizar la orden de producción.',
+        'PRODUCTION_ORDER_VERSION_REQUIRED'
+      ),
+    };
+  }
 
-    if (Number.isInteger(expectedVersion) && expectedVersion > 0) {
-      query = query.eq('version', expectedVersion);
-    }
+  const result = await execute(() => supabase
+    .from('production_orders')
+    .update(productionOrderToUpdatePayload(order))
+    .eq('workspace_id', workspaceId)
+    .eq('id', id)
+    .eq('version', expectedVersion)
+    .is('deleted_at', null)
+    .select(productionOrderColumns)
+    .maybeSingle());
 
-    return query
-      .select(productionOrderColumns)
-      .maybeSingle();
-  });
-
-  if (!result.error && !result.data && Number.isInteger(expectedVersion) && expectedVersion > 0) {
+  if (!result.error && !result.data) {
     return {
       data: null,
       error: readableError(
@@ -243,7 +251,6 @@ export async function updateProductionOrderRemote(
 
   return adaptSingle(result);
 }
-
 export function subscribeProductionOrders(workspaceId, callback) {
   if (!workspaceId || typeof callback !== 'function') {
     return function unsubscribe() {};
