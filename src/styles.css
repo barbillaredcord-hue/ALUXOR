@@ -8060,3 +8060,142 @@ body,
     flex-direction: column;
   }
 }
+
+/* Cotizador rellenado: captura manual sobre el mismo modelo de cotización. */
+.quote-filled-layout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.quote-filled-layout > .filled-quote-editor {
+  flex: 999 1 640px;
+  min-width: 0;
+}
+
+.quote-filled-layout > .quote-summary-dock {
+  flex: 1 1 300px;
+  width: auto;
+  min-width: 280px;
+}
+
+.filled-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(280px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.filled-quote-card {
+  min-width: 0;
+  padding: 18px;
+  background: #fffdf8;
+  border: 1px solid #dce5e0;
+  border-radius: 14px;
+}
+
+.filled-quote-card h3,
+.filled-quote-card p {
+  margin-top: 0;
+}
+
+.filled-form-grid,
+.filled-form-grid > *,
+.filled-line-item > * {
+  min-width: 0;
+}
+
+.filled-line-items-section {
+  margin-top: 16px;
+}
+
+.filled-line-items {
+  display: grid;
+  gap: 14px;
+}
+
+.filled-line-item {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(130px, 1fr));
+  gap: 12px;
+  align-items: end;
+  min-width: 0;
+  padding: 14px;
+  background: #f7faf8;
+  border: 1px solid #dce5e0;
+  border-radius: 12px;
+}
+
+.filled-line-item input,
+.filled-line-item select,
+.filled-line-item textarea,
+.filled-form-grid input,
+.filled-form-grid select,
+.filled-form-grid textarea {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.filled-line-total {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px;
+  background: #eef5f1;
+  border-radius: 10px;
+}
+
+.filled-line-total span {
+  color: #617068;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.filled-remove-button {
+  align-self: end;
+}
+
+.filled-summary-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 1099px) {
+  .filled-card-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .filled-line-item {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .quote-filled-layout > .quote-summary-dock {
+    position: static;
+    flex-basis: 100%;
+    min-width: 0;
+    max-height: none;
+  }
+}
+
+@media (max-width: 620px) {
+  .filled-line-item,
+  .filled-summary-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .filled-quote-card {
+    padding: 14px;
+  }
+
+  .filled-quote-editor .actions,
+  .quote-filled-layout .quote-summary-dock .actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .filled-quote-editor .actions button,
+  .quote-filled-layout .quote-summary-dock .actions button {
+    width: 100%;
+    min-width: 0;
+  }
+}

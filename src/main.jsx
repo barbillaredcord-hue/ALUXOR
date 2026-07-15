@@ -890,8 +890,15 @@ function App() {
   });
   const supabaseTransportActiveRef = useRef(false);
   const quoteSaveInFlightRef = useRef(false);
+  const quoteAutoSaveTimerRef = useRef(null);
+  const quoteAutoSavePendingRef = useRef(false);
+  const quoteAutoSaveInitializedRef = useRef(false);
+  const quoteAutoSaveConflictRetryRef = useRef(false);
+  const quoteRealtimeReloadPendingRef = useRef(false);
   const offlineQueueProcessingRef = useRef(false);
   const [activeQuoteIdentity, setActiveQuoteIdentity] = useState(null);
+  const activeQuoteIdentityRef = useRef(activeQuoteIdentity);
+  const latestQuoteFormRef = useRef(form);
   const [selectedHistoryPreview, setSelectedHistoryPreview] = useState(null);
   const [pendingOfflineCount, setPendingOfflineCount] = useState(
     () => OfflineQueue.getPendingCount()
@@ -900,6 +907,7 @@ function App() {
   const [copied, setCopied] = useState('');
   const [largeText, setLargeText] = useState(false);
   const [activeSection, setActiveSection] = useState('inicio');
+  const previousActiveSectionRef = useRef(activeSection);
   const [syncStatus, setSyncStatus] = useState('Historial local');
   const [productionLoading, setProductionLoading] = useState(false);
   const [productionError, setProductionError] = useState('');
@@ -924,6 +932,14 @@ function App() {
     userId: authSession?.user?.id || null,
     workspaceId: activeWorkspace?.id || null,
   };
+
+  useEffect(() => {
+    activeQuoteIdentityRef.current = activeQuoteIdentity;
+  }, [activeQuoteIdentity]);
+
+  useEffect(() => {
+    latestQuoteFormRef.current = form;
+  }, [form]);
 
   useEffect(() => {
     let isMounted = true;
@@ -1123,6 +1139,7 @@ function App() {
   const menuItems = [
     { id: 'inicio', label: 'Inicio', icon: LayoutDashboard },
     { id: 'anuncio', label: 'Anuncio', icon: Package },
+    { id: 'cotizador-rellenado', label: 'Cotizador rellenado', icon: FileText },
     { id: 'cotizador', label: 'Cotizador', icon: Calculator },
     { id: 'produccion', label: 'Producción', icon: ClipboardList },
     { id: 'compras', label: 'Compras', icon: Store },
@@ -1481,8 +1498,17 @@ function App() {
     const userId = authSession?.user?.id;
     const workspaceId = activeWorkspace?.id;
     const preserveStatus = Boolean(options?.preserveStatus);
+    const fromRealtime = Boolean(options?.fromRealtime);
 
     if (!userId || !workspaceId) return;
+
+    if (
+      fromRealtime
+      && (quoteSaveInFlightRef.current || quoteAutoSavePendingRef.current)
+    ) {
+      quoteRealtimeReloadPendingRef.current = true;
+      return;
+    }
 
     if (remoteQuotesRequestRef.current.inFlight) {
       remoteQuotesRequestRef.current = {
@@ -1644,11 +1670,16 @@ function App() {
 
     let debounceId = null;
     const unsubscribe = QuoteRepository.subscribeQuotes(workspaceId, () => {
+      if (quoteSaveInFlightRef.current || quoteAutoSavePendingRef.current) {
+        quoteRealtimeReloadPendingRef.current = true;
+        return;
+      }
+
       if (debounceId !== null) window.clearTimeout(debounceId);
 
       debounceId = window.setTimeout(() => {
         debounceId = null;
-        void loadRemoteQuotes();
+        void loadRemoteQuotes({ fromRealtime: true });
       }, 300);
     });
 
@@ -1870,7 +1901,7 @@ function App() {
     });
   }
 
-  function updateMaterialItem(id, field, value) {
+  function updateMaterialItem(id, field, value, manualCapture = false) {
     setForm((current) => {
       const areaTotal = Quote.quoteAreaTotal(current, quoteHelpers);
       const materialItems = Quote.materialItemsFromForm(current, areaTotal, quoteHelpers).map((item) => {
@@ -1897,13 +1928,25 @@ function App() {
             next.margen || current.margenMaterial
           ));
         }
+        if (manualCapture) {
+          Object.assign(next, {
+            calculo: 'manual',
+            tipoCompra: 'manual',
+            baseCalculo: 'manual_qty',
+            usarArea: false,
+            unidad: 'pieza',
+            merma: 0,
+            margen: 0,
+            precioManual: true,
+          });
+        }
         return next;
       });
       return { ...current, materialItems };
     });
   }
 
-  function addMaterialItem() {
+  function addMaterialItem(manualCapture = false) {
     setForm((current) => ({
       ...current,
       materialItems: [
@@ -1915,6 +1958,7 @@ function App() {
           usarArea: false,
           calculo: 'manual',
           tipoCompra: 'manual',
+          baseCalculo: 'manual_qty',
           cantidad: 1,
           ancho: 0,
           alto: 0,
@@ -1923,8 +1967,8 @@ function App() {
           costoUnitario: 0,
           precioUnitario: 0,
           merma: 0,
-          margen: current.margenMaterial,
-          precioManual: false,
+          margen: manualCapture ? 0 : current.margenMaterial,
+          precioManual: manualCapture,
           nota: '',
         },
       ],
@@ -2266,13 +2310,13 @@ function App() {
   ) {
     if (!localItem?.id) return false;
 
-    const isActiveQuote = activeQuoteIdentity?.id === localItem.id;
+    const isActiveQuote = activeQuoteIdentityRef.current?.id === localItem.id;
     if (!allowPrompt || !isActiveQuote) {
       if (queuedOperation?.id) {
         OfflineQueue.updateOperation(queuedOperation.id, { conflict: true });
         refreshPendingOfflineCount();
       }
-      setSyncStatus('Conflicto de versión · requiere revisión');
+      setSyncStatus('Conflicto de versión · cambios pendientes de revisión');
       return false;
     }
 
@@ -2313,14 +2357,16 @@ function App() {
     StorageEngine.saveHistory(resolvedHistory);
     setForm({ ...defaults, ...resolvedItem.form });
     setSelectedHistoryPreview(null);
-    setActiveQuoteIdentity({
+    const nextIdentity = {
       id: resolvedItem.id,
       workspaceId: activeWorkspace?.id || null,
       folio: resolvedItem.folio,
       createdAt: resolvedItem.createdAt,
       version: resolvedItem.version,
       remote: true,
-    });
+    };
+    activeQuoteIdentityRef.current = nextIdentity;
+    setActiveQuoteIdentity(nextIdentity);
 
     const workspaceId = queuedOperation?.workspaceId || activeWorkspace?.id;
     if (workspaceId) {
@@ -2419,11 +2465,16 @@ function App() {
                 historyRef.current = retryHistory;
                 setHistory(retryHistory);
                 StorageEngine.saveHistory(retryHistory);
-                setActiveQuoteIdentity((current) => (
-                  current?.id === operation.quoteId
-                    ? { ...current, folio: retryFolio, version: null, remote: false }
-                    : current
-                ));
+                if (activeQuoteIdentityRef.current?.id === operation.quoteId) {
+                  const nextIdentity = {
+                    ...activeQuoteIdentityRef.current,
+                    folio: retryFolio,
+                    version: null,
+                    remote: false,
+                  };
+                  activeQuoteIdentityRef.current = nextIdentity;
+                  setActiveQuoteIdentity(nextIdentity);
+                }
 
                 result = await QuoteRepository.createQuote(workspaceId, retryPayload);
               }
@@ -2487,9 +2538,10 @@ function App() {
           historyRef.current = nextHistory;
           setHistory(nextHistory);
           StorageEngine.saveHistory(nextHistory);
-          setActiveQuoteIdentity((current) => (
-            current?.id === operation.quoteId ? null : current
-          ));
+          if (activeQuoteIdentityRef.current?.id === operation.quoteId) {
+            activeQuoteIdentityRef.current = null;
+            setActiveQuoteIdentity(null);
+          }
           lastSuccessMessage = 'Eliminación sincronizada';
           continue;
         }
@@ -2505,18 +2557,21 @@ function App() {
         historyRef.current = nextHistory;
         setHistory(nextHistory);
         StorageEngine.saveHistory(nextHistory);
-        setActiveQuoteIdentity((current) => (
-          current?.id === operation.quoteId || current?.id === remoteItem.id
-            ? {
-              id: remoteItem.id,
-              workspaceId,
-              folio: remoteItem.folio,
-              createdAt: remoteItem.createdAt,
-              version: remoteItem.version,
-              remote: true,
-            }
-            : current
-        ));
+        if (
+          activeQuoteIdentityRef.current?.id === operation.quoteId
+          || activeQuoteIdentityRef.current?.id === remoteItem.id
+        ) {
+          const nextIdentity = {
+            id: remoteItem.id,
+            workspaceId,
+            folio: remoteItem.folio,
+            createdAt: remoteItem.createdAt,
+            version: remoteItem.version,
+            remote: true,
+          };
+          activeQuoteIdentityRef.current = nextIdentity;
+          setActiveQuoteIdentity(nextIdentity);
+        }
         lastSuccessMessage = operation.type === 'create'
           ? 'Cotización sincronizada'
           : 'Cambios sincronizados';
@@ -2535,7 +2590,7 @@ function App() {
       if (stoppedByNetwork) {
         setSyncStatus('Sin conexión');
       } else if (hasConflict) {
-        setSyncStatus('Conflicto de versión · requiere revisión');
+        setSyncStatus('Conflicto de versión · cambios pendientes de revisión');
       } else if (syncedCount > 1 && remainingCount === 0) {
         setSyncStatus('Cola sincronizada');
       } else if (lastSuccessMessage) {
@@ -2550,12 +2605,22 @@ function App() {
     }
   }
 
-  function saveToHistory() {
-    if (quoteSaveInFlightRef.current) return;
+  function saveToHistory(options = {}) {
+    const silent = Boolean(options.silent);
+    const autoConflictRetry = Boolean(options.autoConflictRetry);
+    const navigateToHistory = !silent && options.navigateToHistory !== false;
+
+    if (quoteSaveInFlightRef.current) {
+      if (silent) {
+        quoteAutoSavePendingRef.current = true;
+      }
+      return;
+    }
+
     quoteSaveInFlightRef.current = true;
 
     const now = Date.now();
-    const currentIdentity = activeQuoteIdentity;
+    const currentIdentity = activeQuoteIdentityRef.current;
     const hasRemoteIdentity = Boolean(
       currentIdentity?.remote && isRemoteQuoteId(currentIdentity.id)
     );
@@ -2593,16 +2658,31 @@ function App() {
     setHistory(nextHistory);
     StorageEngine.saveHistory(nextHistory);
     const legacySave = saveHistoryRemote(nextHistory);
-    setSyncStatus('Guardada localmente · pendiente de sincronizar');
-    setActiveSection('historial');
-    setActiveQuoteIdentity({
+    if (!silent) {
+      setSyncStatus('Guardada localmente · pendiente de sincronizar');
+    }
+
+    if (navigateToHistory) {
+      setActiveSection('historial');
+    }
+    const localIdentity = {
       id: item.id,
       workspaceId: activeWorkspace?.id || null,
       folio,
       createdAt: item.createdAt,
       version: currentIdentity?.version || null,
       remote: hasRemoteIdentity,
-    });
+    };
+    activeQuoteIdentityRef.current = localIdentity;
+    setActiveQuoteIdentity(localIdentity);
+
+    if (hasRemoteIdentity) {
+      syncProductionOrderFromQuote(
+        currentIdentity.id,
+        historyForm,
+        currentIdentity.version
+      );
+    }
 
     const workspaceId = activeWorkspace?.id;
     const userId = authSession?.user?.id;
@@ -2684,14 +2764,16 @@ function App() {
         historyRef.current = retryHistory;
         setHistory(retryHistory);
         StorageEngine.saveHistory(retryHistory);
-        setActiveQuoteIdentity({
+        const retryIdentity = {
           id: item.id,
           workspaceId,
           folio: retryFolio,
           createdAt: item.createdAt,
           version: null,
           remote: false,
-        });
+        };
+        activeQuoteIdentityRef.current = retryIdentity;
+        setActiveQuoteIdentity(retryIdentity);
 
         return QuoteRepository.createQuote(workspaceId, {
           ...payload,
@@ -2702,13 +2784,102 @@ function App() {
     void remoteSave
       .then(async ({ data, error }) => {
         if (error?.code === 'QUOTE_VERSION_CONFLICT') {
-          const queuedOperation = enqueueOfflineQuoteOperation({
+          let queuedOperation = enqueueOfflineQuoteOperation({
             type: 'update',
             workspaceId,
             quoteId: item.id,
             expectedVersion: currentIdentity?.version || null,
             payload,
           });
+
+          if (silent) {
+            const remoteResult = await QuoteRepository.getQuote(item.id);
+            const remoteMatchesPreviousSave = !remoteResult.error
+              && remoteResult.data
+              && queuedCreateMatchesRow(remoteResult.data, payload);
+
+            if (remoteMatchesPreviousSave) {
+              const remoteItem = QuoteAdapter.quoteRowToHistoryItem(remoteResult.data);
+              const remoteHistory = HistoryEngine.mergeHistoryItems(
+                [remoteItem],
+                historyRef.current.filter((historyItem) => historyItem.id !== remoteItem.id),
+              );
+              const nextIdentity = {
+                id: remoteItem.id,
+                workspaceId,
+                folio: remoteItem.folio,
+                createdAt: remoteItem.createdAt,
+                version: remoteItem.version,
+                remote: true,
+              };
+              activeQuoteIdentityRef.current = nextIdentity;
+              setActiveQuoteIdentity(nextIdentity);
+              historyRef.current = remoteHistory;
+              setHistory(remoteHistory);
+              StorageEngine.saveHistory(remoteHistory);
+              removeQueuedQuoteOperations('update', workspaceId, item.id);
+
+              const latestForm = latestQuoteFormRef.current;
+              const latestQuote = Quote.calculateQuote(latestForm, quoteHelpers);
+              const latestPayloadResult = QuoteAdapter.quoteFormToPayload({
+                form: latestForm,
+                quote: latestQuote,
+                workspaceId,
+                folio: remoteItem.folio,
+              });
+              const hasNewerLocalChanges = Boolean(
+                latestPayloadResult.payload
+                && !queuedCreateMatchesRow(remoteResult.data, latestPayloadResult.payload)
+              );
+
+              if (hasNewerLocalChanges && !autoConflictRetry) {
+                quoteAutoSaveConflictRetryRef.current = true;
+                quoteAutoSavePendingRef.current = true;
+              } else if (hasNewerLocalChanges) {
+                queuedOperation = enqueueOfflineQuoteOperation({
+                  type: 'update',
+                  workspaceId,
+                  quoteId: item.id,
+                  expectedVersion: remoteItem.version,
+                  payload: latestPayloadResult.payload,
+                });
+                if (queuedOperation?.id) {
+                  OfflineQueue.updateOperation(queuedOperation.id, { conflict: true });
+                }
+                quoteAutoSavePendingRef.current = false;
+                setSyncStatus('Conflicto de versión · cambios pendientes de revisión');
+              } else {
+                setSyncStatus('Cotización sincronizada');
+              }
+              return;
+            }
+
+            const latestForm = latestQuoteFormRef.current;
+            const latestQuote = Quote.calculateQuote(latestForm, quoteHelpers);
+            const latestPayloadResult = QuoteAdapter.quoteFormToPayload({
+              form: latestForm,
+              quote: latestQuote,
+              workspaceId,
+              folio: currentIdentity?.folio || folio,
+            });
+            if (latestPayloadResult.payload) {
+              queuedOperation = enqueueOfflineQuoteOperation({
+                type: 'update',
+                workspaceId,
+                quoteId: item.id,
+                expectedVersion: remoteResult.data?.version || currentIdentity?.version || null,
+                payload: latestPayloadResult.payload,
+              });
+            }
+            if (queuedOperation?.id) {
+              OfflineQueue.updateOperation(queuedOperation.id, { conflict: true });
+              refreshPendingOfflineCount();
+            }
+            quoteAutoSavePendingRef.current = false;
+            setSyncStatus('Conflicto de versión · cambios pendientes de revisión');
+            return;
+          }
+
           if (queuedOperation) {
             OfflineQueue.updateOperation(queuedOperation.id, { conflict: true });
             refreshPendingOfflineCount();
@@ -2755,14 +2926,23 @@ function App() {
         historyRef.current = remoteHistory;
         setHistory(remoteHistory);
         StorageEngine.saveHistory(remoteHistory);
-        setActiveQuoteIdentity({
+        const nextIdentity = {
           id: remoteItem.id,
           workspaceId,
           folio: remoteItem.folio,
           createdAt: remoteItem.createdAt,
           version: remoteItem.version,
           remote: true,
-        });
+        };
+        activeQuoteIdentityRef.current = nextIdentity;
+        setActiveQuoteIdentity(nextIdentity);
+
+        syncProductionOrderFromQuote(
+          remoteItem.id,
+          remoteItem.form || historyForm,
+          remoteItem.version
+        );
+
         removeQueuedQuoteOperations(
           hasRemoteIdentity ? 'update' : 'create',
           workspaceId,
@@ -2810,8 +2990,131 @@ function App() {
       })
       .finally(() => {
         quoteSaveInFlightRef.current = false;
+
+        if (quoteAutoSavePendingRef.current) {
+          quoteAutoSavePendingRef.current = false;
+          const autoConflictRetryPending = quoteAutoSaveConflictRetryRef.current;
+          quoteAutoSaveConflictRetryRef.current = false;
+
+          queueMicrotask(() => {
+            saveToHistory({
+              silent: true,
+              autoConflictRetry: autoConflictRetryPending,
+            });
+          });
+          return;
+        }
+
+        if (quoteRealtimeReloadPendingRef.current) {
+          quoteRealtimeReloadPendingRef.current = false;
+          void loadRemoteQuotes({ preserveStatus: true, fromRealtime: true });
+        }
       });
+
   }
+
+  useEffect(() => {
+    if (activeSection !== 'cotizador-rellenado') return;
+
+    setForm((current) => {
+      const currentQuote = Quote.calculateQuote(current, quoteHelpers);
+      const requiresManualConversion = currentQuote.materialRows.some((item) => (
+        item.calculo !== 'manual'
+        || item.tipoCompra !== 'manual'
+        || item.usarArea
+        || item.merma !== 0
+        || !item.precioManual
+      )) || currentQuote.accessoryRows.length > 0;
+
+      if (!requiresManualConversion) return current;
+
+      const materialItems = [
+        ...currentQuote.materialRows.map((item) => ({
+          id: item.id,
+          nombre: item.nombre,
+          unidad: 'pieza',
+          usarArea: false,
+          calculo: 'manual',
+          tipoCompra: 'manual',
+          baseCalculo: 'manual_qty',
+          cantidad: 1,
+          costoUnitario: item.costTotal,
+          precioUnitario: item.saleTotal,
+          merma: 0,
+          margen: 0,
+          precioManual: true,
+          nota: item.nota,
+        })),
+        ...currentQuote.accessoryRows.map((item) => ({
+          id: `filled-${item.id}`,
+          nombre: item.nombre,
+          unidad: 'pieza',
+          usarArea: false,
+          calculo: 'manual',
+          tipoCompra: 'manual',
+          baseCalculo: 'manual_qty',
+          cantidad: 1,
+          costoUnitario: item.costTotal,
+          precioUnitario: item.saleTotal,
+          merma: 0,
+          margen: 0,
+          precioManual: true,
+          nota: item.nota,
+        })),
+      ];
+
+      return {
+        ...current,
+        materialItems,
+        accessoryItems: [],
+        herrajes: 'Sin herrajes',
+        costoHerrajes: 0,
+        precioHerrajes: 0,
+      };
+    });
+  }, [activeSection]);
+
+  useEffect(() => {
+    if (!quoteAutoSaveInitializedRef.current) {
+      quoteAutoSaveInitializedRef.current = true;
+      return undefined;
+    }
+
+    if (!['cotizador', 'cotizador-rellenado'].includes(activeSection)) return undefined;
+
+    if (quoteAutoSaveTimerRef.current !== null) {
+      window.clearTimeout(quoteAutoSaveTimerRef.current);
+    }
+
+    quoteAutoSaveTimerRef.current = window.setTimeout(() => {
+      quoteAutoSaveTimerRef.current = null;
+
+      saveToHistory({ silent: true });
+    }, 700);
+
+    return () => {
+      if (quoteAutoSaveTimerRef.current !== null) {
+        window.clearTimeout(quoteAutoSaveTimerRef.current);
+        quoteAutoSaveTimerRef.current = null;
+      }
+    };
+  }, [form, activeSection]);
+  useEffect(() => {
+    const previousSection = previousActiveSectionRef.current;
+    previousActiveSectionRef.current = activeSection;
+
+    if (
+      ['cotizador', 'cotizador-rellenado'].includes(previousSection)
+      && !['cotizador', 'cotizador-rellenado'].includes(activeSection)
+    ) {
+      if (quoteAutoSaveTimerRef.current !== null) {
+        window.clearTimeout(quoteAutoSaveTimerRef.current);
+        quoteAutoSaveTimerRef.current = null;
+      }
+
+      saveToHistory({ silent: true });
+    }
+  }, [activeSection]);
 
   function loadHistoryItem(item) {
     if (!item?.form) return;
@@ -2828,6 +3131,47 @@ function App() {
     });
     setActiveSection('cotizador');
   }
+function syncProductionOrderFromQuote(quoteId, nextForm, quoteVersion) {
+  if (!quoteId || !nextForm) return;
+
+  const currentOrder = productionOrdersRef.current.find((order) => (
+    order.workspaceId === activeWorkspace?.id
+    && order.quoteId === quoteId
+  ));
+
+  if (!currentOrder) return;
+
+  const nextChanges = {
+    cliente: clean(nextForm.clienteNombre),
+    producto: clean(nextForm.producto),
+    fechaCompromiso: nextForm.entrega || '',
+    observaciones: clean(
+      nextForm.notasInternas || nextForm.notasCliente
+    ),
+    formSnapshot: nextForm,
+    quoteVersion:
+      Number.isInteger(Number(quoteVersion))
+      && Number(quoteVersion) >= 1
+        ? Number(quoteVersion)
+        : currentOrder.quoteVersion,
+  };
+
+  const hasChanges =
+    currentOrder.cliente !== nextChanges.cliente
+    || currentOrder.producto !== nextChanges.producto
+    || currentOrder.fechaCompromiso !== nextChanges.fechaCompromiso
+    || currentOrder.observaciones !== nextChanges.observaciones
+    || currentOrder.quoteVersion !== nextChanges.quoteVersion
+    || JSON.stringify(currentOrder.formSnapshot || {})
+      !== JSON.stringify(nextChanges.formSnapshot || {});
+
+  if (!hasChanges) return;
+
+  void handleUpdateProductionOrder(
+    currentOrder.id,
+    nextChanges
+  );
+}
 
   async function handleUpdateProductionOrder(orderId, changes) {
     const workspaceId = activeWorkspace?.id;
@@ -3661,7 +4005,7 @@ function App() {
           <div className="hero-actions hero-actions-compact">
             <button type="button" className="ghost" onClick={refreshInstalledApp}><RefreshCw size={16} /> Actualizar</button>
             <button type="button" className="ghost" onClick={startNewQuote}><History size={16} /> Nueva cotización</button>
-            {activeSection === 'cotizador' && activeQuoteIdentity && (
+            {['cotizador', 'cotizador-rellenado'].includes(activeSection) && activeQuoteIdentity && (
               <button
                 type="button"
                 className="ghost"
@@ -3716,8 +4060,9 @@ function App() {
           />
         )}
 
-        {activeSection === 'cotizador' && (
+        {['cotizador', 'cotizador-rellenado'].includes(activeSection) && (
           <QuoteSection
+            mode={activeSection === 'cotizador-rellenado' ? 'filled' : 'full'}
             quoteProfiles={quoteProfiles}
             applyQuoteProfile={applyQuoteProfile}
             quickCalc={quickCalc}

@@ -19,6 +19,7 @@ import Field from '../components/Field.jsx';
 import { Quote } from '../lib/br-engine/index.js';
 
 export default function QuoteSection({
+  mode = 'full',
   quoteProfiles,
   applyQuoteProfile,
   quickCalc,
@@ -68,8 +69,109 @@ export default function QuoteSection({
   chainInsights,
   professionalAnalysis,
 }) {
+  const isFilled = mode === 'filled';
+
   return (
-          <section className="quote-workspace quote-operational-layout">
+          <section className={`quote-workspace quote-operational-layout ${isFilled ? 'quote-filled-layout' : ''}`}>
+            {isFilled ? (
+              <article className="panel quote-editor quote-main-editor filled-quote-editor">
+                <div className="section-head quote-head">
+                  <div>
+                    <h2>Cotizador rellenado</h2>
+                    <p>Captura una cotización que ya fue calculada externamente. Registra costos internos y precios al cliente sin recalcular medidas ni materiales.</p>
+                  </div>
+                </div>
+
+                <div className="filled-card-grid">
+                  <section className="filled-quote-card">
+                    <h3>Cliente y proyecto</h3>
+                    <div className="form-grid filled-form-grid">
+                      <Field id="clienteNombre" label="Cliente">{input('clienteNombre')}</Field>
+                      <Field id="clienteTelefono" label="Teléfono">{input('clienteTelefono')}</Field>
+                      <Field id="producto" label="Producto / trabajo">{input('producto')}</Field>
+                      <Field id="tipoTrabajo" label="Tipo de trabajo">
+                        <select id="tipoTrabajo" value={form.tipoTrabajo} onChange={(event) => update('tipoTrabajo', event.target.value)}>
+                          {currentTypeOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+                        </select>
+                      </Field>
+                      <Field id="ciudad" label="Ciudad">{input('ciudad')}</Field>
+                      <Field id="estadoCotizacion" label="Estado de cotización">
+                        <select id="estadoCotizacion" value={form.estadoCotizacion} onChange={(event) => update('estadoCotizacion', event.target.value)}>
+                          <option>Pendiente</option>
+                          <option>Enviada</option>
+                          <option>Aceptada</option>
+                          <option>En fabricación</option>
+                          <option>Instalación</option>
+                          <option>Terminada</option>
+                          <option>Cancelada</option>
+                        </select>
+                      </Field>
+                    </div>
+                  </section>
+
+                  <section className="filled-quote-card">
+                    <h3>Cargos y condiciones</h3>
+                    <div className="form-grid filled-form-grid">
+                      <Field id="filledLaborInternal" label="Mano de obra interna">
+                        <input id="filledLaborInternal" type="number" value="0" readOnly />
+                      </Field>
+                      <Field id="filledLaborClient" label="Mano de obra cliente">
+                        <input id="filledLaborClient" type="number" value={form.manoObra ?? ''} onChange={(event) => update('manoObra', numberValue(event.target.value))} />
+                      </Field>
+                      <Field id="filledExtrasInternal" label="Extras internos">
+                        <input id="filledExtrasInternal" type="number" value={form.extras ?? ''} onChange={(event) => update('extras', numberValue(event.target.value))} />
+                      </Field>
+                      <Field id="filledExtrasClient" label="Extras cliente">
+                        <input id="filledExtrasClient" type="number" value={form.extras ?? ''} onChange={(event) => update('extras', numberValue(event.target.value))} />
+                      </Field>
+                      <Field id="descuento" label="Descuento %">{input('descuento', 'number')}</Field>
+                      <Field id="anticipo" label="Anticipo %">{input('anticipo', 'number')}</Field>
+                      <Field id="entrega" label="Entrega">{input('entrega')}</Field>
+                      <Field id="formaPago" label="Forma de pago">{input('formaPago')}</Field>
+                      <Field id="vigencia" label="Vigencia días">{input('vigencia', 'number')}</Field>
+                      <Field id="notasCliente" label="Notas para cliente">{textareaInput('notasCliente')}</Field>
+                      <Field id="notasInternas" label="Notas internas">{textareaInput('notasInternas')}</Field>
+                      <Field id="condiciones" label="Condiciones">{textareaInput('condiciones')}</Field>
+                    </div>
+                    <p className="advanced-note">El modelo actual considera la mano de obra como ingreso operativo y utiliza el mismo importe de extras para costo interno y precio cliente.</p>
+                  </section>
+                </div>
+
+                <section className="filled-quote-card filled-line-items-section">
+                  <div className="section-head">
+                    <div>
+                      <h3>Partidas capturadas</h3>
+                      <p>Captura conceptos manuales sin medidas, merma ni optimización.</p>
+                    </div>
+                  </div>
+                  <div className="filled-line-items">
+                    {quote.materialRows.map((item) => (
+                      <article key={item.id} className="filled-line-item">
+                        <Field id={`filledConcept-${item.id}`} label="Concepto">
+                          <input id={`filledConcept-${item.id}`} value={item.nombre} onChange={(event) => updateMaterialItem(item.id, 'nombre', event.target.value, true)} />
+                        </Field>
+                        <Field id={`filledQuantity-${item.id}`} label="Cantidad">
+                          <input id={`filledQuantity-${item.id}`} type="number" min="0" value={item.cantidad} onChange={(event) => updateMaterialItem(item.id, 'cantidad', numberValue(event.target.value), true)} />
+                        </Field>
+                        <Field id={`filledCost-${item.id}`} label="Costo unitario interno">
+                          <input id={`filledCost-${item.id}`} type="number" min="0" value={item.costoUnitario} onChange={(event) => updateMaterialItem(item.id, 'costoUnitario', numberValue(event.target.value), true)} />
+                        </Field>
+                        <Field id={`filledPrice-${item.id}`} label="Precio unitario cliente">
+                          <input id={`filledPrice-${item.id}`} type="number" min="0" value={item.precioUnitario} onChange={(event) => updateMaterialItem(item.id, 'precioUnitario', numberValue(event.target.value), true)} />
+                        </Field>
+                        <div className="filled-line-total"><span>Subtotal interno</span><strong>{money(numberValue(item.cantidad) * numberValue(item.costoUnitario))}</strong></div>
+                        <div className="filled-line-total"><span>Subtotal cliente</span><strong>{money(numberValue(item.cantidad) * numberValue(item.precioUnitario))}</strong></div>
+                        <Field id={`filledNote-${item.id}`} label="Nota">
+                          <input id={`filledNote-${item.id}`} value={item.nota} onChange={(event) => updateMaterialItem(item.id, 'nota', event.target.value, true)} />
+                        </Field>
+                        <button type="button" className="ghost filled-remove-button" onClick={() => removeMaterialItem(item.id)} aria-label={`Eliminar ${item.nombre}`}><Eraser size={16} /> Eliminar</button>
+                      </article>
+                    ))}
+                  </div>
+                  <button type="button" className="ghost add-row-button" onClick={() => addMaterialItem(true)}>Agregar partida</button>
+                </section>
+              </article>
+            ) : (
             <article className="panel quote-editor quote-main-editor">
               <div className="section-head quote-head">
                 <div>
@@ -454,6 +556,7 @@ export default function QuoteSection({
                 </details>
               </div>
             </article>
+            )}
 
             <aside
               className={`quote-summary-dock ${floatingSummary.compact ? 'compact' : ''} ${floatingSummary.minimized ? 'minimized' : ''}`}
@@ -461,7 +564,7 @@ export default function QuoteSection({
               aria-live="polite"
             >
               <div className="quote-floating-head">
-                <strong>Resumen de cotización</strong>
+                <strong>{isFilled ? 'Resumen del cotizador rellenado' : 'Resumen de cotización'}</strong>
                 <div>
                   <button type="button" onClick={() => setFloatingSummary((current) => ({ ...current, compact: !current.compact }))}>Compacta</button>
                   <button type="button" onClick={() => setFloatingSummary((current) => ({ ...current, minimized: !current.minimized }))}>{floatingSummary.minimized ? 'Abrir' : 'Cerrar'}</button>
@@ -470,22 +573,29 @@ export default function QuoteSection({
               {!floatingSummary.minimized && (
                 <div className="quote-floating-body">
                   <div className="total-number">{money(quote.total)}</div>
-                  <div className="live-summary-grid">
+                  <div className={`live-summary-grid ${isFilled ? 'filled-summary-grid' : ''}`}>
+                    {isFilled && <div className="live-summary-item"><span>Total material interno</span><strong>{money(quote.internalMaterialCost)}</strong></div>}
+                    {isFilled && <div className="live-summary-item"><span>Total material cliente</span><strong>{money(quote.material)}</strong></div>}
+                    {isFilled && <div className="live-summary-item"><span>Total interno</span><strong>{money(quote.internalTotal)}</strong></div>}
                     <div className="live-summary-item"><span>Total cliente</span><strong>{money(quote.total)}</strong></div>
                     <div className="live-summary-item"><span>Anticipo</span><strong>{money(quote.deposit)}</strong></div>
                     <div className="live-summary-item"><span>Saldo</span><strong>{money(quote.rest)}</strong></div>
                     <div className="live-summary-item"><span>Utilidad</span><strong>{money(quote.profit)}</strong></div>
+                    {isFilled && <div className="live-summary-item"><span>Porcentaje de utilidad</span><strong>{decimal(quote.profitPercent, 1)}%</strong></div>}
                     <div className="live-summary-item"><span>Estado</span><strong>{form.estadoCotizacion}</strong></div>
-                    <div className="live-summary-item"><span>Datos</span><strong>{dataHealth.score}%</strong></div>
+                    {!isFilled && <div className="live-summary-item"><span>Datos</span><strong>{dataHealth.score}%</strong></div>}
                   </div>
                   {dataHealth.warnings.length > 0 && (
                     <p className="live-summary-warning" role="status" aria-live="polite">{dataHealth.warnings[0]}</p>
                   )}
                   <div className="actions compact">
                     <button type="button" onClick={saveToHistory}><Save size={18} /> Guardar</button>
-                    <button type="button" className="ghost" onClick={() => openPrint('client')}><FileText size={18} /> Editar PDF</button>
+                    {isFilled && <button type="button" className="ghost" onClick={() => openPrint('business')}><FileText size={18} /> PDF interno</button>}
+                    <button type="button" className="ghost" onClick={() => openPrint('client')}><FileText size={18} /> {isFilled ? 'PDF cliente' : 'Editar PDF'}</button>
                     <button type="button" className="ghost" onClick={openWhatsApp}><MessageCircle size={18} /> WhatsApp</button>
                   </div>
+                  {!isFilled && (
+                    <>
                   <CalculationChain
                     title="Cadena del resumen"
                     defaultOpen={!floatingSummary.compact}
@@ -514,6 +624,8 @@ export default function QuoteSection({
                       </article>
                     ))}
                   </details>
+                    </>
+                  )}
                 </div>
               )}
             </aside>
