@@ -6957,7 +6957,7 @@ body,
 /* Fase 23.5 — Cotizador operativo sin panel flotante invasivo */
 .quote-operational-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
   align-items: start;
   width: 100%;
@@ -7025,8 +7025,21 @@ body,
 @media (min-width: 1100px) {
   .quote-accordion-list {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(280px, 1fr));
     align-items: start;
+  }
+
+  .quote-accordion-list > *,
+  .quote-accordion .form-grid > * {
+    min-width: 0;
+  }
+
+  .quote-accordion input,
+  .quote-accordion select,
+  .quote-accordion textarea,
+  .quote-accordion button {
+    max-width: 100%;
+    min-width: 0;
   }
 
   .quote-accordion summary.dashboard-summary {
@@ -7067,6 +7080,12 @@ body,
 
   .quote-editor {
     padding: 18px;
+  }
+}
+
+@media (max-width: 1099px) {
+  .quote-accordion-list {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 /* Fase 23.5 — Hero compacto de proyecto activo */
