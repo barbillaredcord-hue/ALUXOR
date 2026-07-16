@@ -69,6 +69,7 @@ export default function QuoteSection({
   chainInsights,
   professionalAnalysis,
   collaborationStatus,
+  legacyHistoryStatus,
   quoteFieldConflicts,
   onQuoteFieldFocus,
   onQuoteFieldBlur,
@@ -96,6 +97,7 @@ export default function QuoteSection({
                     <p>Captura una cotización que ya fue calculada externamente. Registra costos internos y precios al cliente sin recalcular medidas ni materiales.</p>
                   </div>
                   <span className="quote-collaboration-status" role="status" aria-live="polite">{collaborationStatus}</span>
+                  {legacyHistoryStatus && <span className="quote-collaboration-status" role="status">{legacyHistoryStatus}</span>}
                 </div>
 
                 <div className="filled-card-grid">
@@ -195,6 +197,7 @@ export default function QuoteSection({
                   <p>Captura por secciones, con medidas y materiales listos para editar.</p>
                 </div>
                 <span className="quote-collaboration-status" role="status" aria-live="polite">{collaborationStatus}</span>
+                {legacyHistoryStatus && <span className="quote-collaboration-status" role="status">{legacyHistoryStatus}</span>}
               </div>
               <div className="actions compact">
                 {Object.keys(quoteProfiles).map((key) => (

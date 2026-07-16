@@ -118,11 +118,17 @@ export async function requestHistory(options = {}, helpers = {}) {
   const contentType = response.headers.get('content-type') || '';
 
   if (!response.ok) {
-    throw new Error('No se pudo sincronizar el historial');
+    const error = new Error(`No se pudo sincronizar el historial (${response.status})`);
+    error.code = 'LEGACY_HISTORY_HTTP_ERROR';
+    error.status = response.status;
+    throw error;
   }
 
   if (!contentType.includes('application/json')) {
-    throw new Error('Servidor de historial no disponible; usando copia local');
+    const error = new Error('Servidor de historial no disponible; usando copia local');
+    error.code = 'LEGACY_HISTORY_INVALID_RESPONSE';
+    error.status = response.status;
+    throw error;
   }
 
   const data = await response.json();

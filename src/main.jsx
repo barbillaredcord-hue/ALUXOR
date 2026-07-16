@@ -61,6 +61,7 @@ const APP_VERSION = '2026.05.39';
 const APP_VERSION_QUERY = '20260539';
 const BRAND_NAME = 'ALUXOR/BosqueReal';
 const HISTORY_API = '/api/history';
+const LEGACY_HISTORY_COOLDOWN_MS = 60_000;
 
 const defaults = {
   giro: 'Carpintería',
@@ -509,6 +510,54 @@ function quoteValuesEqual(left, right) {
   }
 }
 
+function isNumericQuoteFieldPath(fieldPath) {
+  const path = String(fieldPath || '');
+
+  const topLevelNumericFields = new Set([
+    'ancho',
+    'alto',
+    'fondo',
+    'grosorMaterial',
+    'cantidad',
+    'precioM2',
+    'costoMaterialM2',
+    'merma',
+    'margenMaterial',
+    'costoHerrajes',
+    'precioHerrajes',
+    'manoObra',
+    'extras',
+    'descuento',
+    'anticipo',
+    'vigencia',
+  ]);
+
+  if (topLevelNumericFields.has(path)) return true;
+
+  return /^(measureItems|materialItems|accessoryItems|planItems)\.[^.]+\.(ancho|alto|fondo|grosorMaterial|cantidad|grosor|costoUnitario|precioUnitario|merma|margen)$/.test(path);
+}
+
+function quoteFieldValuesEqual(fieldPath, left, right) {
+  if (isNumericQuoteFieldPath(fieldPath)) {
+    if (left === '' || left === null || left === undefined) {
+      return right === '' || right === null || right === undefined;
+    }
+
+    if (right === '' || right === null || right === undefined) {
+      return false;
+    }
+
+    const leftNumber = Number(left);
+    const rightNumber = Number(right);
+
+    if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) {
+      return leftNumber === rightNumber;
+    }
+  }
+
+  return quoteValuesEqual(left, right);
+}
+
 function quoteFormChanges(baseForm = {}, nextForm = {}) {
   const changes = new Map();
   const keys = new Set([
@@ -615,7 +664,7 @@ const historyHelpers = {
   clean,
   numberValue,
   defaults,
-  historyApi: HISTORY_API,
+  historyApi: import.meta.env.VITE_HISTORY_API_URL || HISTORY_API,
 };
 
 function formatDimensions(data) {
@@ -998,6 +1047,14 @@ function App() {
   const remoteQuoteBufferRef = useRef({ fields: new Map(), pendingRow: null });
   const quoteFieldConflictsRef = useRef(new Set());
   const quoteRealtimeDebounceRef = useRef(null);
+  const quoteRealtimePendingRowRef = useRef(null);
+  const quoteRealtimeNeedsReloadRef = useRef(false);
+  const quoteRemoteApplyRef = useRef(false);
+  const legacyHistoryAvailabilityRef = useRef({
+    unavailableUntil: 0,
+    noticeShown: false,
+    inFlight: false,
+  });
   const offlineQueueProcessingRef = useRef(false);
   const [activeQuoteIdentity, setActiveQuoteIdentity] = useState(null);
   const activeQuoteIdentityRef = useRef(activeQuoteIdentity);
@@ -1005,6 +1062,7 @@ function App() {
   const [selectedHistoryPreview, setSelectedHistoryPreview] = useState(null);
   const [quoteCollaborationStatus, setQuoteCollaborationStatus] = useState('Sincronizado');
   const [quoteFieldConflicts, setQuoteFieldConflicts] = useState([]);
+  const [legacyHistoryStatus, setLegacyHistoryStatus] = useState('');
   const [pendingOfflineCount, setPendingOfflineCount] = useState(
     () => OfflineQueue.getPendingCount()
   );
@@ -1057,23 +1115,51 @@ function App() {
     latestQuoteFormRef.current = nextForm;
   }
 
-  function confirmQuoteForm(remoteForm) {
+  function confirmQuoteForm(remoteForm, savedForm = remoteForm, confirmedVersion = null) {
     const localForm = latestQuoteFormRef.current;
     lastConfirmedQuoteFormRef.current = remoteForm;
+    const normalizedConfirmedVersion = Number(confirmedVersion);
+    const hasConfirmedVersion = Number.isInteger(normalizedConfirmedVersion);
 
     dirtyQuoteFieldsRef.current.forEach((fieldPath) => {
-      if (quoteValuesEqual(
-        quoteFormValue(localForm, fieldPath),
-        quoteFormValue(remoteForm, fieldPath),
-      )) {
+      const savedValue = quoteFormValue(savedForm, fieldPath);
+      const remoteValue = quoteFormValue(remoteForm, fieldPath);
+      const localValue = quoteFormValue(localForm, fieldPath);
+
+      if (
+        quoteFieldValuesEqual(fieldPath, savedValue, remoteValue)
+        && quoteFieldValuesEqual(fieldPath, localValue, savedValue)
+      ) {
         dirtyQuoteFieldsRef.current.delete(fieldPath);
         quoteFieldConflictsRef.current.delete(fieldPath);
+        const bufferedVersion = Number(
+          remoteQuoteBufferRef.current.fields.get(fieldPath)?.version || 0
+        );
+        if (!hasConfirmedVersion || bufferedVersion <= normalizedConfirmedVersion) {
+          remoteQuoteBufferRef.current.fields.delete(fieldPath);
+        }
       }
     });
+
+    remoteQuoteBufferRef.current.fields.forEach((buffered, fieldPath) => {
+      const obsoleteByVersion = hasConfirmedVersion
+        && Number(buffered.version || 0) <= normalizedConfirmedVersion;
+      if (obsoleteByVersion) {
+        remoteQuoteBufferRef.current.fields.delete(fieldPath);
+      }
+    });
+
+    const pendingVersion = Number(remoteQuoteBufferRef.current.pendingRow?.version || 0);
+    if (
+      hasConfirmedVersion
+      && pendingVersion > 0
+      && pendingVersion <= normalizedConfirmedVersion
+    ) {
+      remoteQuoteBufferRef.current.pendingRow = null;
+    }
+
     publishQuoteFieldConflicts();
-    setQuoteCollaborationStatus(
-      quoteFieldConflictsRef.current.size ? 'Cambios pendientes de revisión' : 'Sincronizado'
-    );
+    setQuoteCollaborationStatus('Sincronizado');
   }
 
   function applyRemoteQuoteRow(row, { ignoreSaveLock = false } = {}) {
@@ -1087,7 +1173,7 @@ function App() {
       && (quoteSaveInFlightRef.current || quoteAutoSavePendingRef.current)
     ) {
       remoteQuoteBufferRef.current.pendingRow = row;
-      setQuoteCollaborationStatus('Cambios remotos pendientes');
+      setQuoteCollaborationStatus('Guardando…');
       return { applied: false, hasConflicts: false };
     }
 
@@ -1095,6 +1181,7 @@ function App() {
     const remoteForm = remoteItem.form || {};
     const confirmedForm = lastConfirmedQuoteFormRef.current || {};
     const changes = quoteFormChanges(confirmedForm, remoteForm);
+    const hasRemoteChanges = changes.size > 0;
     let nextForm = latestQuoteFormRef.current;
     let changedVisibleForm = false;
 
@@ -1106,26 +1193,35 @@ function App() {
         remoteQuoteBufferRef.current.fields.set(fieldPath, {
           baseValue,
           remoteValue,
+          version: remoteItem.version,
         });
         return;
       }
 
       if (dirtyQuoteFieldsRef.current.has(fieldPath)) {
-        if (quoteValuesEqual(localValue, remoteValue)) {
+        if (quoteFieldValuesEqual(fieldPath, localValue, remoteValue)) {
           dirtyQuoteFieldsRef.current.delete(fieldPath);
           quoteFieldConflictsRef.current.delete(fieldPath);
-        } else if (quoteValuesEqual(localValue, baseValue)) {
+          remoteQuoteBufferRef.current.fields.delete(fieldPath);
+        } else if (quoteFieldValuesEqual(fieldPath, localValue, baseValue)) {
           nextForm = withQuoteFormValue(nextForm, fieldPath, remoteValue);
           dirtyQuoteFieldsRef.current.delete(fieldPath);
           quoteFieldConflictsRef.current.delete(fieldPath);
+          remoteQuoteBufferRef.current.fields.delete(fieldPath);
           changedVisibleForm = true;
         } else {
-          quoteFieldConflictsRef.current.add(fieldPath);
+          remoteQuoteBufferRef.current.fields.set(fieldPath, {
+            baseValue,
+            remoteValue,
+            version: remoteItem.version,
+          });
+          quoteFieldConflictsRef.current.delete(fieldPath);
         }
         return;
       }
 
       nextForm = withQuoteFormValue(nextForm, fieldPath, remoteValue);
+      remoteQuoteBufferRef.current.fields.delete(fieldPath);
       quoteFieldConflictsRef.current.delete(fieldPath);
       changedVisibleForm = true;
     });
@@ -1133,6 +1229,7 @@ function App() {
     lastConfirmedQuoteFormRef.current = remoteForm;
     if (changedVisibleForm) {
       latestQuoteFormRef.current = nextForm;
+      quoteRemoteApplyRef.current = dirtyQuoteFieldsRef.current.size === 0;
       setForm(nextForm);
     }
 
@@ -1156,7 +1253,11 @@ function App() {
     publishQuoteFieldConflicts();
 
     const hasConflicts = quoteFieldConflictsRef.current.size > 0;
-    setQuoteCollaborationStatus(hasConflicts ? 'Cambios pendientes de revisión' : 'Sincronizado');
+    setQuoteCollaborationStatus(
+      hasConflicts
+        ? 'Guardando…'
+        : hasRemoteChanges ? 'Actualizado por otro usuario' : 'Sincronizado'
+    );
     return { applied: true, hasConflicts };
   }
 
@@ -1164,50 +1265,76 @@ function App() {
     const pendingRow = remoteQuoteBufferRef.current.pendingRow;
     remoteQuoteBufferRef.current.pendingRow = null;
     if (pendingRow) applyRemoteQuoteRow(pendingRow);
+
+    Array.from(remoteQuoteBufferRef.current.fields.keys()).forEach((fieldPath) => {
+      if (focusedQuoteFieldRef.current !== fieldPath) handleQuoteFieldBlur(fieldPath);
+    });
   }
 
   function handleQuoteFieldFocus(fieldPath) {
     if (!fieldPath) return;
     focusedQuoteFieldRef.current = fieldPath;
-    setQuoteCollaborationStatus('Editando...');
   }
 
   function handleQuoteFieldBlur(fieldPath) {
     if (!fieldPath) return;
     if (focusedQuoteFieldRef.current === fieldPath) focusedQuoteFieldRef.current = null;
 
+    if (quoteSaveInFlightRef.current || quoteAutoSavePendingRef.current) {
+      setQuoteCollaborationStatus('Guardando…');
+      return;
+    }
+
     const buffered = remoteQuoteBufferRef.current.fields.get(fieldPath);
     if (!buffered) {
       setQuoteCollaborationStatus(
-        quoteFieldConflictsRef.current.size ? 'Cambios pendientes de revisión' : 'Actualizando...'
+        dirtyQuoteFieldsRef.current.size ? 'Guardando…' : 'Sincronizado'
       );
       return;
     }
 
-    remoteQuoteBufferRef.current.fields.delete(fieldPath);
     const localValue = quoteFormValue(latestQuoteFormRef.current, fieldPath);
     const { baseValue, remoteValue } = buffered;
 
-    if (quoteValuesEqual(localValue, remoteValue)) {
+    if (!dirtyQuoteFieldsRef.current.has(fieldPath)) {
+      remoteQuoteBufferRef.current.fields.delete(fieldPath);
+      if (!quoteFieldValuesEqual(fieldPath, localValue, remoteValue)) {
+        const nextForm = withQuoteFormValue(
+          latestQuoteFormRef.current,
+          fieldPath,
+          remoteValue,
+        );
+        latestQuoteFormRef.current = nextForm;
+        quoteRemoteApplyRef.current = dirtyQuoteFieldsRef.current.size === 0;
+        setForm(nextForm);
+      }
+      quoteFieldConflictsRef.current.delete(fieldPath);
+    } else if (quoteFieldValuesEqual(fieldPath, localValue, remoteValue)) {
+      remoteQuoteBufferRef.current.fields.delete(fieldPath);
       dirtyQuoteFieldsRef.current.delete(fieldPath);
       quoteFieldConflictsRef.current.delete(fieldPath);
-    } else if (quoteValuesEqual(localValue, baseValue)) {
+    } else if (quoteFieldValuesEqual(fieldPath, localValue, baseValue)) {
+      remoteQuoteBufferRef.current.fields.delete(fieldPath);
       const nextForm = withQuoteFormValue(
         latestQuoteFormRef.current,
         fieldPath,
         remoteValue,
       );
       latestQuoteFormRef.current = nextForm;
-      setForm(nextForm);
       dirtyQuoteFieldsRef.current.delete(fieldPath);
       quoteFieldConflictsRef.current.delete(fieldPath);
-    } else if (!quoteValuesEqual(remoteValue, baseValue)) {
-      quoteFieldConflictsRef.current.add(fieldPath);
+      quoteRemoteApplyRef.current = dirtyQuoteFieldsRef.current.size === 0;
+      setForm(nextForm);
+    } else {
+      quoteFieldConflictsRef.current.delete(fieldPath);
+      setQuoteCollaborationStatus('Guardando…');
+      publishQuoteFieldConflicts();
+      return;
     }
 
     publishQuoteFieldConflicts();
     setQuoteCollaborationStatus(
-      quoteFieldConflictsRef.current.size ? 'Cambios pendientes de revisión' : 'Actualizando...'
+      quoteFieldConflictsRef.current.size ? 'Guardando…' : 'Actualizado por otro usuario'
     );
   }
 
@@ -1527,63 +1654,93 @@ function App() {
   }
 
   async function syncPendingProductionOrders(workspaceId, userId) {
-    if (!workspaceId || !userId || !navigator.onLine || productionSyncRef.current) return;
+    if (!workspaceId || !userId || productionSyncRef.current) return;
+
+    const pendingOrders =
+      ProductionStorage.findPendingProductionOrders(workspaceId);
+
+    if (pendingOrders.length === 0) return;
 
     productionSyncRef.current = true;
     let syncFailed = false;
 
     try {
-      const pendingOrders = ProductionStorage.findPendingProductionOrders(workspaceId);
-
       for (const pendingOrder of pendingOrders) {
         const currentContext = productionContextRef.current;
-        if (currentContext.userId !== userId || currentContext.workspaceId !== workspaceId) return;
 
-        const expectedVersion = pendingOrder.pendingExpectedVersion || pendingOrder.version;
-        const result = await ProductionOrderRepository.updateProductionOrderRemote(
-          workspaceId,
-          pendingOrder.id,
-          pendingOrder,
-          expectedVersion
-        );
+        if (
+          currentContext.userId !== userId
+          || currentContext.workspaceId !== workspaceId
+        ) {
+          return;
+        }
 
-        if (result.error?.code === 'PRODUCTION_ORDER_VERSION_CONFLICT') {
-          const remote = await ProductionOrderRepository.getProductionOrder(
+        const result =
+          await ProductionOrderRepository.updateProductionOrderRemote(
             workspaceId,
-            pendingOrder.id
+            pendingOrder.id,
+            pendingOrder,
+            pendingOrder.pendingExpectedVersion || pendingOrder.version
           );
-         if (remote.data && !remote.error) {
-           upsertActiveProductionOrder(remote.data);
-           setProductionError(
-             'La orden fue modificada en otro dispositivo. Se cargó la versión remota.'
-           );
-           setProductionSyncStatus(
-             'Conflicto de producción · versión remota cargada'
-           );
-         } else {
-           syncFailed = true;
-         }
-         continue;
-      }
+
+        if (
+          result.error?.code
+          === 'PRODUCTION_ORDER_VERSION_CONFLICT'
+        ) {
+          const remote =
+            await ProductionOrderRepository.getProductionOrder(
+              workspaceId,
+              pendingOrder.id
+            );
+
+          if (remote.data && !remote.error) {
+            upsertActiveProductionOrder(remote.data);
+
+            setProductionError(
+              'La orden fue modificada en otro dispositivo. Se cargó la versión remota.'
+            );
+
+            setProductionSyncStatus(
+              'Conflicto de producción · versión remota cargada'
+            );
+          } else {
+            syncFailed = true;
+          }
+
+          continue;
+        }
 
         if (result.error || !result.data) {
           syncFailed = true;
           continue;
         }
 
-        if (productionContextRef.current.workspaceId !== workspaceId) return;
-        const latestLocalOrder = ProductionStorage.loadProductionOrders().find((order) => (
-          order.workspaceId === workspaceId && order.id === pendingOrder.id
-        ));
+        if (
+          productionContextRef.current.workspaceId
+          !== workspaceId
+        ) {
+          return;
+        }
+
+        const latestLocalOrder =
+          ProductionStorage.loadProductionOrders().find(
+            (order) => (
+              order.workspaceId === workspaceId
+              && order.id === pendingOrder.id
+            )
+          );
+
         if (
           latestLocalOrder?.pendingSync
-          && latestLocalOrder.updatedAt !== pendingOrder.updatedAt
+          && latestLocalOrder.updatedAt
+            !== pendingOrder.updatedAt
         ) {
           upsertActiveProductionOrder({
             ...latestLocalOrder,
             version: result.data.version,
             pendingExpectedVersion: result.data.version,
           });
+
           syncFailed = true;
           continue;
         }
@@ -1592,10 +1749,14 @@ function App() {
       }
 
       if (syncFailed) {
-        setProductionError('Cambios locales pendientes de sincronizar.');
-      } else if (pendingOrders.length > 0) {
+        setProductionError(
+          'Cambios locales pendientes de sincronizar.'
+        );
+      } else {
         setProductionError('');
-        setProductionSyncStatus('Cambios de producción sincronizados');
+        setProductionSyncStatus(
+          'Cambios de producción sincronizados'
+        );
       }
     } finally {
       productionSyncRef.current = false;
@@ -1933,49 +2094,87 @@ function App() {
   }, [authSession?.user?.id, activeWorkspace?.id]);
 
   useEffect(() => {
-    const userId = authSession?.user?.id;
-    const workspaceId = activeWorkspace?.id;
+  const userId = authSession?.user?.id;
+  const workspaceId = activeWorkspace?.id;
 
-    if (!userId || !workspaceId) return undefined;
+  if (!userId || !workspaceId) return undefined;
 
-    const unsubscribe = QuoteRepository.subscribeQuotes(workspaceId, (payload) => {
-      const remoteRow = payload?.new?.id ? payload.new : null;
-      const activeQuoteId = activeQuoteIdentityRef.current?.id;
+  const unsubscribe = QuoteRepository.subscribeQuotes(workspaceId, (payload) => {
+    const remoteRow = payload?.new?.id ? payload.new : null;
+    const activeQuoteId = activeQuoteIdentityRef.current?.id;
 
-      if (quoteRealtimeDebounceRef.current !== null) {
-        window.clearTimeout(quoteRealtimeDebounceRef.current);
+    if (remoteRow?.id === activeQuoteId && !remoteRow.deleted_at) {
+      const previousPending = quoteRealtimePendingRowRef.current;
+      const previousVersion = Number(previousPending?.version || 0);
+      const incomingVersion = Number(remoteRow.version || 0);
+
+      if (!previousPending || incomingVersion >= previousVersion) {
+        quoteRealtimePendingRowRef.current = remoteRow;
+      }
+    } else {
+      quoteRealtimeNeedsReloadRef.current = true;
+    }
+
+    if (quoteRealtimeDebounceRef.current !== null) {
+      window.clearTimeout(quoteRealtimeDebounceRef.current);
+    }
+
+    quoteRealtimeDebounceRef.current = window.setTimeout(() => {
+      quoteRealtimeDebounceRef.current = null;
+
+      const pendingRow = quoteRealtimePendingRowRef.current;
+      const needsReload = quoteRealtimeNeedsReloadRef.current;
+
+      quoteRealtimePendingRowRef.current = null;
+      quoteRealtimeNeedsReloadRef.current = false;
+
+      if (pendingRow) {
+        if (quoteSaveInFlightRef.current || quoteAutoSavePendingRef.current) {
+          const bufferedVersion = Number(
+            remoteQuoteBufferRef.current.pendingRow?.version || 0
+          );
+          const pendingVersion = Number(pendingRow.version || 0);
+
+          if (
+            !remoteQuoteBufferRef.current.pendingRow
+            || pendingVersion >= bufferedVersion
+          ) {
+            remoteQuoteBufferRef.current.pendingRow = pendingRow;
+          }
+
+          setQuoteCollaborationStatus('Guardando…');
+        } else {
+          const mergeResult = applyRemoteQuoteRow(pendingRow);
+
+          if (!mergeResult.applied) {
+            quoteRealtimeNeedsReloadRef.current = true;
+          }
+        }
       }
 
-      quoteRealtimeDebounceRef.current = window.setTimeout(() => {
-        quoteRealtimeDebounceRef.current = null;
-
-        if (remoteRow?.id === activeQuoteId && !remoteRow.deleted_at) {
-          if (quoteSaveInFlightRef.current || quoteAutoSavePendingRef.current) {
-            remoteQuoteBufferRef.current.pendingRow = remoteRow;
-            setQuoteCollaborationStatus('Cambios remotos pendientes');
-            return;
-          }
-          const mergeResult = applyRemoteQuoteRow(remoteRow);
-          if (!mergeResult.applied) void loadRemoteQuotes({ fromRealtime: true });
-          return;
-        }
+      if (needsReload || quoteRealtimeNeedsReloadRef.current) {
+        quoteRealtimeNeedsReloadRef.current = false;
 
         if (quoteSaveInFlightRef.current || quoteAutoSavePendingRef.current) {
           quoteRealtimeReloadPendingRef.current = true;
-          return;
+        } else {
+          void loadRemoteQuotes({ fromRealtime: true });
         }
-        void loadRemoteQuotes({ fromRealtime: true });
-      }, 280);
-    });
-
-    return () => {
-      if (quoteRealtimeDebounceRef.current !== null) {
-        window.clearTimeout(quoteRealtimeDebounceRef.current);
-        quoteRealtimeDebounceRef.current = null;
       }
-      unsubscribe();
-    };
-  }, [authSession?.user?.id, activeWorkspace?.id]);
+    }, 280);
+  });
+
+  return () => {
+    if (quoteRealtimeDebounceRef.current !== null) {
+      window.clearTimeout(quoteRealtimeDebounceRef.current);
+      quoteRealtimeDebounceRef.current = null;
+    }
+
+    quoteRealtimePendingRowRef.current = null;
+    quoteRealtimeNeedsReloadRef.current = false;
+    unsubscribe();
+  };
+}, [authSession?.user?.id, activeWorkspace?.id]);
 
   useEffect(() => {
     const userId = authSession?.user?.id;
@@ -2002,8 +2201,45 @@ function App() {
     };
   }, [authSession?.user?.id, activeWorkspace?.id]);
 
+  function markLegacyHistoryUnavailable() {
+    legacyHistoryAvailabilityRef.current.unavailableUntil =
+      Date.now() + LEGACY_HISTORY_COOLDOWN_MS;
+    legacyHistoryAvailabilityRef.current.inFlight = false;
+
+    if (!legacyHistoryAvailabilityRef.current.noticeShown) {
+      legacyHistoryAvailabilityRef.current.noticeShown = true;
+      setLegacyHistoryStatus(
+        'Historial legacy no disponible · usando almacenamiento actual'
+      );
+    }
+  }
+
+  function legacyHistoryIsAvailable() {
+    const isMissingViteRoute = import.meta.env.DEV
+      && historyHelpers.historyApi === HISTORY_API;
+
+    if (isMissingViteRoute) {
+      markLegacyHistoryUnavailable();
+      return false;
+    }
+
+    return !legacyHistoryAvailabilityRef.current.inFlight
+      && Date.now() >= legacyHistoryAvailabilityRef.current.unavailableUntil;
+  }
+
+  function markLegacyHistoryAvailable() {
+    legacyHistoryAvailabilityRef.current = {
+      unavailableUntil: 0,
+      noticeShown: false,
+      inFlight: false,
+    };
+    setLegacyHistoryStatus('');
+  }
+
   async function syncHistory(uploadLocal = false) {
     if (supabaseTransportActiveRef.current) return;
+    if (!legacyHistoryIsAvailable()) return;
+    legacyHistoryAvailabilityRef.current.inFlight = true;
 
     try {
       if (!navigator.onLine) {
@@ -2037,6 +2273,8 @@ function App() {
         setHistory(merged);
       }
 
+      markLegacyHistoryAvailable();
+
       setLastSyncAt(
         new Date().toLocaleTimeString('es-MX', {
           hour: '2-digit',
@@ -2046,15 +2284,24 @@ function App() {
 
       setSyncStatus('Historial sincronizado en la nube');
     } catch (error) {
+      markLegacyHistoryUnavailable(error);
       if (!supabaseTransportActiveRef.current) {
-        console.warn('Error de sincronización:', error);
-        setSyncStatus('Sin conexión: usando copia local');
+        setSyncStatus('Historial local');
       }
+    } finally {
+      legacyHistoryAvailabilityRef.current.inFlight = false;
     }
   }
 
   function saveHistoryRemote(nextHistory) {
+    if (supabaseTransportActiveRef.current) {
+      return Promise.resolve(nextHistory);
+    }
     const supabaseActive = supabaseTransportActiveRef.current;
+
+    if (!legacyHistoryIsAvailable()) {
+      return Promise.resolve(nextHistory);
+    }
 
     if (!navigator.onLine) {
       if (!supabaseActive) {
@@ -2062,12 +2309,14 @@ function App() {
       }
       return Promise.resolve(nextHistory);
     }
+    legacyHistoryAvailabilityRef.current.inFlight = true;
 
     return HistoryEngine.requestHistory({
       method: 'PUT',
       body: JSON.stringify({ history: nextHistory }),
     }, historyHelpers)
       .then((saved) => {
+        markLegacyHistoryAvailable();
         if (!supabaseActive && !supabaseTransportActiveRef.current) {
           historyRef.current = saved;
           setHistory(saved);
@@ -2081,9 +2330,9 @@ function App() {
         }
         return saved;
       })
-      .catch((error) => {
+      .catch(() => {
+        markLegacyHistoryUnavailable();
         if (!supabaseActive && !supabaseTransportActiveRef.current) {
-          console.warn('Guardado local; sincronización pendiente:', error);
           setSyncStatus('Guardado local; se sincroniza al volver internet');
         }
         return nextHistory;
@@ -2119,7 +2368,7 @@ function App() {
     };
   }, [authSession?.user?.id, activeWorkspace?.id]);
   function updateDirtyQuoteForm(updater) {
-    setQuoteCollaborationStatus('Actualizando...');
+    setQuoteCollaborationStatus('Guardando…');
     setForm((current) => {
       const next = typeof updater === 'function' ? updater(current) : updater;
       markQuoteFormDirty(current, next);
@@ -2222,7 +2471,7 @@ function App() {
         if (['costoUnitario', 'merma', 'margen'].includes(field) && !next.precioManual) {
           next.precioUnitario = Math.round(Pricing.aplicarMargenSobreCosto(
             positiveNumber(next.costoUnitario) * (1 + percentValue(next.merma) / 100),
-            next.margen || current.margenMaterial
+            next.margen ?? current.margenMaterial
           ));
         }
         if (manualCapture) {
@@ -2286,7 +2535,7 @@ function App() {
       const currentQuote = Quote.calculateQuote(current, quoteHelpers);
       const materialItems = Quote.materialItemsFromForm(current, areaTotal, quoteHelpers).map((item) => ({
         ...item,
-        precioUnitario: Math.round(positiveNumber(item.costoUnitario) * (1 + percentValue(item.merma) / 100) * (1 + positiveNumber(item.margen || current.margenMaterial) / 100)),
+        precioUnitario: Math.round(positiveNumber(item.costoUnitario) * (1 + percentValue(item.merma) / 100) * (1 + positiveNumber(item.margen ?? current.margenMaterial) / 100)),
       }));
       return {
         ...current,
@@ -2336,7 +2585,7 @@ function App() {
         if (['costoUnitario', 'merma', 'margen'].includes(field) && !next.precioManual) {
           next.precioUnitario = Math.round(Pricing.aplicarMargenSobreCosto(
             positiveNumber(next.costoUnitario) * (1 + percentValue(next.merma) / 100),
-            next.margen || current.margenMaterial
+            next.margen ?? current.margenMaterial
           ));
         }
         return next;
@@ -2875,7 +3124,11 @@ function App() {
           };
           activeQuoteIdentityRef.current = nextIdentity;
           setActiveQuoteIdentity(nextIdentity);
-          confirmQuoteForm(remoteItem.form || {});
+          confirmQuoteForm(
+            remoteItem.form || {},
+            operation.payload?.form_data || remoteItem.form || {},
+            remoteItem.version,
+          );
         }
         lastSuccessMessage = operation.type === 'create'
           ? 'Cotización sincronizada'
@@ -2922,6 +3175,14 @@ function App() {
       return;
     }
 
+    let clearedTemporaryConflict = false;
+    remoteQuoteBufferRef.current.fields.forEach((_, fieldPath) => {
+      if (quoteFieldConflictsRef.current.delete(fieldPath)) {
+        clearedTemporaryConflict = true;
+      }
+    });
+    if (clearedTemporaryConflict) publishQuoteFieldConflicts();
+
     if (quoteFieldConflictsRef.current.size > 0) {
       if (silent) {
         setSyncStatus('Conflicto de versión · cambios pendientes de revisión');
@@ -2939,6 +3200,7 @@ function App() {
     }
 
     quoteSaveInFlightRef.current = true;
+    setQuoteCollaborationStatus('Guardando…');
 
     const now = Date.now();
     const currentIdentity = activeQuoteIdentityRef.current;
@@ -2978,7 +3240,11 @@ function App() {
     historyRef.current = nextHistory;
     setHistory(nextHistory);
     StorageEngine.saveHistory(nextHistory);
-    const legacySave = saveHistoryRemote(nextHistory);
+    const shouldUseLegacyBackup = !supabaseTransportActiveRef.current;
+
+    const legacySave = shouldUseLegacyBackup
+      ? saveHistoryRemote(nextHistory)
+      : Promise.resolve(nextHistory);
     if (!silent) {
       setSyncStatus('Guardada localmente · pendiente de sincronizar');
     }
@@ -3010,8 +3276,7 @@ function App() {
 
     if (!workspaceId) {
       quoteSaveInFlightRef.current = false;
-      void Promise.resolve(legacySave).finally(() => {
-        setSyncStatus('Guardada localmente · esperando conexión al workspace');
+    void Promise.resolve(legacySave).finally(() => {        setSyncStatus('Guardada localmente · esperando conexión al workspace');
       });
       return;
     }
@@ -3138,7 +3403,11 @@ function App() {
               historyRef.current = remoteHistory;
               setHistory(remoteHistory);
               StorageEngine.saveHistory(remoteHistory);
-              confirmQuoteForm(remoteItem.form || {});
+              confirmQuoteForm(
+                remoteItem.form || {},
+                historyForm,
+                remoteItem.version,
+              );
               removeQueuedQuoteOperations('update', workspaceId, item.id);
 
               const latestForm = latestQuoteFormRef.current;
@@ -3271,7 +3540,11 @@ function App() {
         };
         activeQuoteIdentityRef.current = nextIdentity;
         setActiveQuoteIdentity(nextIdentity);
-        confirmQuoteForm(remoteItem.form || {});
+        confirmQuoteForm(
+          remoteItem.form || {},
+          historyForm,
+          remoteItem.version,
+        );
 
         syncProductionOrderFromQuote(
           remoteItem.id,
@@ -3297,9 +3570,10 @@ function App() {
         );
         void loadRemoteQuotes({ preserveStatus: true });
 
-        void Promise.resolve(legacySave).finally(() => {
-          void saveHistoryRemote(remoteHistory);
-        });
+        if (shouldUseLegacyBackup) {          void Promise.resolve(legacySave).finally(() => {
+            void saveHistoryRemote(remoteHistory);
+          });
+        }
       })
       .catch((error) => {
         if (isNetworkError(error)) {
@@ -3326,9 +3600,12 @@ function App() {
       })
       .finally(() => {
         quoteSaveInFlightRef.current = false;
+        const hasPendingAutoSave = quoteAutoSavePendingRef.current;
+        quoteAutoSavePendingRef.current = false;
 
-        if (quoteAutoSavePendingRef.current) {
-          quoteAutoSavePendingRef.current = false;
+        flushRemoteQuoteBuffer();
+
+        if (hasPendingAutoSave) {
           const autoConflictRetryPending = quoteAutoSaveConflictRetryRef.current;
           quoteAutoSaveConflictRetryRef.current = false;
 
@@ -3340,8 +3617,6 @@ function App() {
           });
           return;
         }
-
-        flushRemoteQuoteBuffer();
 
         if (quoteRealtimeReloadPendingRef.current) {
           quoteRealtimeReloadPendingRef.current = false;
@@ -3415,6 +3690,11 @@ function App() {
   useEffect(() => {
     if (!quoteAutoSaveInitializedRef.current) {
       quoteAutoSaveInitializedRef.current = true;
+      return undefined;
+    }
+
+    if (quoteRemoteApplyRef.current) {
+      quoteRemoteApplyRef.current = false;
       return undefined;
     }
 
@@ -4474,6 +4754,7 @@ function syncProductionOrderFromQuote(quoteId, nextForm, quoteVersion) {
             chainInsights={chainInsights}
             professionalAnalysis={professionalAnalysis}
             collaborationStatus={quoteCollaborationStatus}
+            legacyHistoryStatus={legacyHistoryStatus}
             quoteFieldConflicts={quoteFieldConflicts}
             onQuoteFieldFocus={handleQuoteFieldFocus}
             onQuoteFieldBlur={handleQuoteFieldBlur}
