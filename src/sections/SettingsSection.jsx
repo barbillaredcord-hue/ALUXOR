@@ -1,26 +1,70 @@
-export default function SettingsSection({ appLogo, brandName, handleLogoUpload, removeAppLogo }) {
+import { useEffect, useState } from 'react';
+
+export default function SettingsSection({
+  appLogo,
+  settings,
+  canManage,
+  saving,
+  error,
+  onSaveCompanyName,
+  onLogoUpload,
+  onRemoveLogo,
+}) {
+  const [companyName, setCompanyName] = useState(settings?.company_name || 'ALUXOR / BosqueReal');
+
+  useEffect(() => {
+    setCompanyName(settings?.company_name || 'ALUXOR / BosqueReal');
+  }, [settings?.company_name]);
+
   return (
     <section className="panel settings-panel">
       <div className="section-head">
         <div>
-          <h2>Ajustes</h2>
-          <p>Logo y vista de marca para sidebar, encabezado y PDF.</p>
+          <h2>Configuración del workspace</h2>
+          <p>Marca global sincronizada para todos los miembros activos.</p>
         </div>
       </div>
+      {error && <p role="alert">{error}</p>}
       <div className="settings-grid">
         <div className="logo-preview-box">
           {appLogo ? <img src={appLogo} alt="Vista previa del logo" /> : <div className="brand-mark">A</div>}
-          <strong>{brandName}</strong>
+          <strong>{settings?.company_name || 'ALUXOR / BosqueReal'}</strong>
         </div>
-        <div className="actions">
-          <label htmlFor="settingsLogoUpload" className="upload-logo">
-            Subir logo manualmente
-            <input id="settingsLogoUpload" type="file" accept="image/*" onChange={handleLogoUpload} />
-          </label>
-          <button type="button" className="ghost" onClick={removeAppLogo}>Quitar logo</button>
+        <div>
+          <label htmlFor="workspaceCompanyName">Nombre de empresa</label>
+          <input
+            id="workspaceCompanyName"
+            value={companyName}
+            maxLength={160}
+            disabled={!canManage || saving}
+            onChange={(event) => setCompanyName(event.target.value)}
+          />
+          <div className="actions">
+            <button type="button" disabled={!canManage || saving} onClick={() => onSaveCompanyName(companyName)}>
+              Guardar nombre
+            </button>
+            <label htmlFor="settingsLogoUpload" className="upload-logo">
+              Subir logo
+              <input
+                id="settingsLogoUpload"
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                disabled={!canManage || saving}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void onLogoUpload(file, companyName);
+                  event.target.value = '';
+                }}
+              />
+            </label>
+            <button type="button" className="ghost" disabled={!canManage || saving || !appLogo} onClick={() => onRemoveLogo(companyName)}>
+              Quitar logo
+            </button>
+          </div>
         </div>
       </div>
-      <p className="advanced-note">El logo se guarda automáticamente en localStorage y se reutiliza al abrir la app.</p>
+      {!canManage && <p className="advanced-note">Solo owner o admin pueden modificar esta configuración.</p>}
+      <p className="advanced-note">Los iconos de una PWA ya instalada dependen del sistema operativo y pueden conservarse hasta reinstalar o actualizar la app.</p>
     </section>
   );
 }

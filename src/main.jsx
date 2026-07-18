@@ -22,6 +22,7 @@ import {
   Sparkles,
   Store,
   TableProperties,
+  UserCheck,
 } from 'lucide-react';
 import './styles.css';
 import { registerServiceWorker } from './pwa';
@@ -46,8 +47,18 @@ import PurchasesSection from './sections/PurchasesSection.jsx';
 import ReceivingSection from './sections/ReceivingSection.jsx';
 import SettingsSection from './sections/SettingsSection.jsx';
 import TextSection from './sections/TextSection.jsx';
+import WorkspaceAccessRequestsSection, {
+  WorkspaceAccessGate,
+} from './sections/WorkspaceAccessRequestsSection.jsx';
 import { AuthService } from './lib/auth/authService.js';
 import { WorkspaceService } from './lib/workspace/workspaceService.js';
+import { applyWorkspaceBranding } from './lib/workspace/branding.js';
+import {
+  canAccessSection,
+  canManageQuotes,
+  canManageUsers,
+  canManageWorkspaceSettings,
+} from './lib/workspace/permissions.js';
 import { QuoteRepository } from './lib/quotes/quoteRepository.js';
 import { QuoteAdapter } from './lib/quotes/quoteAdapter.js';
 import { OfflineQueue } from './lib/quotes/offlineQueue.js';
@@ -1012,14 +1023,18 @@ function App() {
   const [activeMembership, setActiveMembership] = useState(null);
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
   const [workspaceError, setWorkspaceError] = useState('');
+  const [workspaceAccessStatus, setWorkspaceAccessStatus] = useState(null);
+  const [workspaceResolutionVersion, setWorkspaceResolutionVersion] = useState(0);
+  const [workspaceSettings, setWorkspaceSettings] = useState(null);
+  const [workspaceSettingsSaving, setWorkspaceSettingsSaving] = useState(false);
+  const [workspaceSettingsError, setWorkspaceSettingsError] = useState('');
+  const [hydratedWorkspaceId, setHydratedWorkspaceId] = useState(null);
   const [signOutLoading, setSignOutLoading] = useState(false);
   const [form, setForm] = useState(defaults);
-  const [catalog, setCatalog] = useState(() => StorageEngine.loadCatalog(storageHelpers));
-  const [history, setHistory] = useState(() => StorageEngine.loadHistory(storageHelpers));
+  const [catalog, setCatalog] = useState(catalogDefaults);
+  const [history, setHistory] = useState([]);
   const historyRef = useRef(history);
-  const [productionOrders, setProductionOrders] = useState(
-    () => ProductionStorage.loadProductionOrders()
-  );
+  const [productionOrders, setProductionOrders] = useState([]);
   const [selectedProductionOrderId, setSelectedProductionOrderId] = useState(null);
   const productionOrdersRef = useRef(productionOrders);
   const productionRemoteRequestRef = useRef({ id: 0, inFlight: false, pending: false });
@@ -1062,10 +1077,11 @@ function App() {
   const [selectedHistoryPreview, setSelectedHistoryPreview] = useState(null);
   const [quoteCollaborationStatus, setQuoteCollaborationStatus] = useState('Sincronizado');
   const [quoteFieldConflicts, setQuoteFieldConflicts] = useState([]);
+  const [quoteCollaborators, setQuoteCollaborators] = useState([]);
+  const [quotePresenceStatus, setQuotePresenceStatus] = useState('CLOSED');
+  const quotePresenceRef = useRef(null);
   const [legacyHistoryStatus, setLegacyHistoryStatus] = useState('');
-  const [pendingOfflineCount, setPendingOfflineCount] = useState(
-    () => OfflineQueue.getPendingCount()
-  );
+  const [pendingOfflineCount, setPendingOfflineCount] = useState(0);
   const [legacyRecoveredCount, setLegacyRecoveredCount] = useState(0);
   const [copied, setCopied] = useState('');
   const [largeText, setLargeText] = useState(false);
@@ -1079,8 +1095,8 @@ function App() {
   const [planView, setPlanView] = useState('3d');
   const [planRotation, setPlanRotation] = useState(0);
   const [planZoom, setPlanZoom] = useState(100);
-  const [typeDetails, setTypeDetails] = useState(() => StorageEngine.loadTypeDetails(storageHelpers));
-  const [appLogo, setAppLogo] = useState(() => StorageEngine.loadAppLogo());
+  const [typeDetails, setTypeDetails] = useState(defaultTypeDetails);
+  const [appLogo, setAppLogo] = useState('');
   const [floatingSummary, setFloatingSummary] = useState({ x: 24, y: 120, compact: false, minimized: false });
   const [quickCalc, setQuickCalc] = useState({ materialId: '', nombre: 'Melamina', categoria: 'Madera/Melamina', tipoCompra: 'hoja', baseUso: 'medidas', ancho: 122, alto: 244, largo: 100, cantidad: 1, precioTotal: 1200, areaManual: 0, linealManual: 0, cantidadManual: 1, merma: 8, margen: 35 });
   const [pdfEditor, setPdfEditor] = useState(null);
@@ -1273,13 +1289,22 @@ function App() {
 
   function handleQuoteFieldFocus(fieldPath) {
     if (!fieldPath) return;
+
     focusedQuoteFieldRef.current = fieldPath;
+
+    void quotePresenceRef.current?.track({
+      editing: true,
+      fieldPath,
+    });
   }
 
   function handleQuoteFieldBlur(fieldPath) {
     if (!fieldPath) return;
     if (focusedQuoteFieldRef.current === fieldPath) focusedQuoteFieldRef.current = null;
-
+    void quotePresenceRef.current?.track({
+      editing: false,
+      fieldPath: null,
+    });
     if (quoteSaveInFlightRef.current || quoteAutoSavePendingRef.current) {
       setQuoteCollaborationStatus('Guardando…');
       return;
@@ -1371,8 +1396,11 @@ function App() {
     if (!userId) {
       setActiveWorkspace(null);
       setActiveMembership(null);
+      setWorkspaceSettings(null);
+      setAppLogo('');
       setWorkspaceLoading(false);
       setWorkspaceError('');
+      setWorkspaceAccessStatus(null);
       return () => { active = false; };
     }
 
@@ -1382,9 +1410,8 @@ function App() {
     async function resolveWorkspace() {
       let result = await WorkspaceService.getCurrentWorkspace(userId);
 
-      if (!result.error && !result.workspace) {
+      if (!result.error && !result.workspace?.is_shared) {
         result = await WorkspaceService.createInitialWorkspace({
-          userId,
           name: 'ALUXOR / BosqueReal',
         });
       }
@@ -1394,12 +1421,18 @@ function App() {
       if (result.error) {
         setActiveWorkspace(null);
         setActiveMembership(null);
+        setWorkspaceAccessStatus(null);
         setWorkspaceError('No fue posible resolver tu workspace. Intenta nuevamente.');
         return;
       }
 
       setActiveWorkspace(result.workspace);
       setActiveMembership(result.membership);
+      setWorkspaceAccessStatus(
+        result.workspace
+          ? 'approved'
+          : result.accessRequest?.status || 'pending'
+      );
     }
 
     resolveWorkspace()
@@ -1407,6 +1440,7 @@ function App() {
         if (active) {
           setActiveWorkspace(null);
           setActiveMembership(null);
+          setWorkspaceAccessStatus(null);
           setWorkspaceError('No fue posible resolver tu workspace. Intenta nuevamente.');
         }
       })
@@ -1415,7 +1449,98 @@ function App() {
       });
 
     return () => { active = false; };
+  }, [authSession?.user?.id, workspaceResolutionVersion]);
+
+  useEffect(() => {
+    const userId = authSession?.user?.id;
+    if (!userId) return undefined;
+
+    const refreshWorkspace = () => setWorkspaceResolutionVersion((version) => version + 1);
+    const stopMembership = WorkspaceService.subscribeMembership(userId, refreshWorkspace);
+    const stopAccessRequest = WorkspaceService.subscribeAccessRequest(userId, refreshWorkspace);
+
+    return () => {
+      stopMembership();
+      stopAccessRequest();
+    };
   }, [authSession?.user?.id]);
+
+  useEffect(() => {
+    const userId = authSession?.user?.id;
+    const workspaceId = activeWorkspace?.id;
+    if (!userId || !workspaceId) return undefined;
+
+    let active = true;
+    const blockAccess = (status) => {
+      if (!active) return;
+      setActiveWorkspace(null);
+      setActiveMembership(null);
+      setWorkspaceSettings(null);
+      setAppLogo('');
+      setWorkspaceAccessStatus(status === 'suspended' ? 'suspended' : 'revoked');
+      setForm(defaults);
+      setCatalog(catalogDefaults);
+      setTypeDetails(defaultTypeDetails);
+      setHistory([]);
+      historyRef.current = [];
+      setProductionOrders([]);
+      productionOrdersRef.current = [];
+      setSelectedProductionOrderId(null);
+      setActiveQuoteIdentity(null);
+      setSelectedHistoryPreview(null);
+      setPendingOfflineCount(0);
+      setHydratedWorkspaceId(null);
+      OfflineQueue.clearQueue();
+      StorageEngine.saveHistory([]);
+      ProductionStorage.saveProductionOrders([]);
+    };
+
+    const validateMembership = async () => {
+      const result = await WorkspaceService.getWorkspaceMembership(workspaceId, userId);
+      if (!active || result.error) return;
+      if (!result.data || result.data.membership_status !== 'active') {
+        blockAccess(result.data?.membership_status || 'revoked');
+        return;
+      }
+      setActiveMembership(result.data);
+    };
+
+    void validateMembership();
+    const interval = window.setInterval(validateMembership, 30_000);
+    const onFocus = () => { void validateMembership(); };
+    window.addEventListener('focus', onFocus);
+
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [authSession?.user?.id, activeWorkspace?.id]);
+
+  useEffect(() => {
+    const workspaceId = activeWorkspace?.id;
+    if (!workspaceId) return undefined;
+    let active = true;
+
+    const loadSettings = async () => {
+      const result = await WorkspaceService.loadWorkspaceSettings(workspaceId);
+      if (!active) return;
+      if (result.error) {
+        setWorkspaceSettingsError('No fue posible cargar la configuración del workspace.');
+        return;
+      }
+      setWorkspaceSettings(result.data);
+      setAppLogo(applyWorkspaceBranding(result.data));
+      setWorkspaceSettingsError('');
+    };
+
+    void loadSettings();
+    const stopSettings = WorkspaceService.subscribeWorkspaceSettings(workspaceId, loadSettings);
+    return () => {
+      active = false;
+      stopSettings();
+    };
+  }, [activeWorkspace?.id]);
 
   const quote = useMemo(() => Quote.calculateQuote(form, quoteHelpers), [form]);
   const dataHealth = useMemo(() => quoteDataHealth(form, quote), [form, quote]);
@@ -1532,6 +1657,10 @@ function App() {
   const quickTotalClienteConMargen = quickCalc.tipoCompra === 'hoja' ? quickMaterialCalc.precioCliente : quickCalc.tipoCompra === 'lineal' ? quickLinealNecesario * quickPricing.precioCliente : quickCalc.tipoCompra === 'pieza' || quickCalc.tipoCompra === 'manual' ? quickCantidadNecesaria * quickPricing.precioCliente : quickAreaNecesaria * quickPricing.precioCliente;
   const quickProfit = quickCalc.tipoCompra === 'hoja' ? quickMaterialCalc.utilidad : quickTotalClienteConMargen - quickCompraConMerma;
   const quickProfitPercent = quickCompraConMerma > 0 ? (quickProfit / quickCompraConMerma) * 100 : 0;
+  const currentWorkspaceRole = activeMembership?.role;
+  const canManageWorkspaceAccess = canManageUsers(currentWorkspaceRole);
+  const canEditWorkspaceQuotes = canManageQuotes(currentWorkspaceRole);
+  const canEditWorkspaceSettings = canManageWorkspaceSettings(currentWorkspaceRole);
 
   const menuItems = [
     { id: 'inicio', label: 'Inicio', icon: LayoutDashboard },
@@ -1548,28 +1677,55 @@ function App() {
     { id: 'historial', label: 'Historial', icon: History },
     { id: 'textos', label: 'Textos', icon: Sparkles },
     { id: 'ajustes', label: 'Ajustes', icon: Accessibility },
-  ];
+  ].filter((item) => canAccessSection(currentWorkspaceRole, item.id));
+
+  if (canManageWorkspaceAccess) {
+    menuItems.push({ id: 'solicitudes-acceso', label: 'Solicitudes', icon: UserCheck });
+  }
 
   useEffect(() => {
+    const allowed = activeSection === 'solicitudes-acceso'
+      ? canManageWorkspaceAccess
+      : canAccessSection(currentWorkspaceRole, activeSection);
+    if (currentWorkspaceRole && !allowed) setActiveSection('inicio');
+  }, [activeSection, canManageWorkspaceAccess, currentWorkspaceRole]);
+
+  useEffect(() => {
+    if (!activeWorkspace?.id) {
+      setHydratedWorkspaceId(null);
+      return;
+    }
+    const storedHistory = StorageEngine.loadHistory(storageHelpers);
+    const storedProduction = ProductionStorage.loadProductionOrders();
+    setCatalog(StorageEngine.loadCatalog(storageHelpers));
+    setHistory(storedHistory);
+    historyRef.current = storedHistory;
+    setProductionOrders(storedProduction);
+    productionOrdersRef.current = storedProduction;
+    setTypeDetails(StorageEngine.loadTypeDetails(storageHelpers));
+    setPendingOfflineCount(OfflineQueue.getPendingCount());
+    setHydratedWorkspaceId(activeWorkspace.id);
+  }, [activeWorkspace?.id]);
+
+  useEffect(() => {
+    if (!activeWorkspace?.id || hydratedWorkspaceId !== activeWorkspace.id) return;
     StorageEngine.saveCatalog(catalog);
-  }, [catalog]);
+  }, [activeWorkspace?.id, catalog, hydratedWorkspaceId]);
 
   useEffect(() => {
     historyRef.current = history;
+    if (!activeWorkspace?.id || hydratedWorkspaceId !== activeWorkspace.id) return;
     StorageEngine.saveHistory(history);
-  }, [history]);
+  }, [activeWorkspace?.id, history, hydratedWorkspaceId]);
 
   useEffect(() => {
     productionOrdersRef.current = productionOrders;
   }, [productionOrders]);
 
   useEffect(() => {
+    if (!activeWorkspace?.id || hydratedWorkspaceId !== activeWorkspace.id) return;
     StorageEngine.saveTypeDetails(typeDetails);
-  }, [typeDetails]);
-
-  useEffect(() => {
-    StorageEngine.saveLogo(appLogo);
-  }, [appLogo]);
+  }, [activeWorkspace?.id, hydratedWorkspaceId, typeDetails]);
 
   function setActiveProductionOrders(workspaceId, orders) {
     const cache = ProductionStorage.replaceWorkspaceProductionOrders(workspaceId, orders);
@@ -1928,6 +2084,10 @@ function App() {
   async function loadRemoteQuotes(options = {}) {
     const userId = authSession?.user?.id;
     const workspaceId = activeWorkspace?.id;
+    console.log('loadRemoteQuotes', {
+    userId,
+      workspaceId,
+    });
     const preserveStatus = Boolean(options?.preserveStatus);
     const fromRealtime = Boolean(options?.fromRealtime);
 
@@ -1964,6 +2124,11 @@ function App() {
 
     try {
       const { data, error } = await QuoteRepository.loadQuotes(workspaceId);
+      console.log('loadQuotes result', {
+        error,
+        rows: data?.length,
+        data,
+      });
 
       if (requestId !== remoteQuotesRequestRef.current.id) return;
 
@@ -2013,6 +2178,7 @@ function App() {
       );
 
       historyRef.current = merged;
+      console.log('merged history', merged.length, merged);
       setHistory(merged);
       StorageEngine.saveHistory(merged);
       setLastSyncAt(
@@ -2068,6 +2234,7 @@ function App() {
     const reloadRemoteQuotes = () => {
       void loadRemoteQuotes();
     };
+
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         reloadRemoteQuotes();
@@ -2087,94 +2254,221 @@ function App() {
         pendingPreserveStatus: false,
         preserveCurrentStatus: false,
       };
+
       window.removeEventListener('focus', reloadRemoteQuotes);
       window.removeEventListener('online', reloadRemoteQuotes);
-      document.removeEventListener('visibilitychange', onVisibilityChange);
+      document.removeEventListener(
+        'visibilitychange',
+        onVisibilityChange
+      );
     };
   }, [authSession?.user?.id, activeWorkspace?.id]);
 
   useEffect(() => {
-  const userId = authSession?.user?.id;
-  const workspaceId = activeWorkspace?.id;
+    const userId = authSession?.user?.id;
+    const workspaceId = activeWorkspace?.id;
 
-  if (!userId || !workspaceId) return undefined;
+    if (!userId || !workspaceId) return undefined;
 
-  const unsubscribe = QuoteRepository.subscribeQuotes(workspaceId, (payload) => {
-    const remoteRow = payload?.new?.id ? payload.new : null;
-    const activeQuoteId = activeQuoteIdentityRef.current?.id;
+    const unsubscribe = QuoteRepository.subscribeQuotes(
+      workspaceId,
+      (payload) => {
+        const remoteRow = payload?.new?.id
+          ? payload.new
+          : null;
 
-    if (remoteRow?.id === activeQuoteId && !remoteRow.deleted_at) {
-      const previousPending = quoteRealtimePendingRowRef.current;
-      const previousVersion = Number(previousPending?.version || 0);
-      const incomingVersion = Number(remoteRow.version || 0);
+        const activeQuoteId =
+          activeQuoteIdentityRef.current?.id;
 
-      if (!previousPending || incomingVersion >= previousVersion) {
-        quoteRealtimePendingRowRef.current = remoteRow;
+        if (
+          remoteRow?.id === activeQuoteId
+          && !remoteRow.deleted_at
+        ) {
+          const previousPending =
+            quoteRealtimePendingRowRef.current;
+
+          const previousVersion = Number(
+            previousPending?.version || 0
+          );
+
+          const incomingVersion = Number(
+            remoteRow.version || 0
+          );
+
+          if (
+            !previousPending
+            || incomingVersion >= previousVersion
+          ) {
+            quoteRealtimePendingRowRef.current =
+              remoteRow;
+          }
+        } else {
+          quoteRealtimeNeedsReloadRef.current = true;
+        }
+
+        if (
+          quoteRealtimeDebounceRef.current !== null
+        ) {
+          window.clearTimeout(
+            quoteRealtimeDebounceRef.current
+          );
+        }
+
+        quoteRealtimeDebounceRef.current =
+          window.setTimeout(() => {
+            quoteRealtimeDebounceRef.current = null;
+
+            const pendingRow =
+              quoteRealtimePendingRowRef.current;
+
+            const needsReload =
+              quoteRealtimeNeedsReloadRef.current;
+
+            quoteRealtimePendingRowRef.current = null;
+            quoteRealtimeNeedsReloadRef.current = false;
+
+            if (pendingRow) {
+              if (
+                quoteSaveInFlightRef.current
+                || quoteAutoSavePendingRef.current
+              ) {
+                const bufferedVersion = Number(
+                  remoteQuoteBufferRef.current
+                    .pendingRow?.version || 0
+                );
+
+                const pendingVersion = Number(
+                  pendingRow.version || 0
+                );
+
+                if (
+                  !remoteQuoteBufferRef.current
+                    .pendingRow
+                  || pendingVersion >= bufferedVersion
+                ) {
+                  remoteQuoteBufferRef.current
+                    .pendingRow = pendingRow;
+                }
+
+                setQuoteCollaborationStatus(
+                  'Guardando…'
+                );
+              } else {
+                const mergeResult =
+                  applyRemoteQuoteRow(pendingRow);
+
+                if (!mergeResult.applied) {
+                  quoteRealtimeNeedsReloadRef.current =
+                    true;
+                }
+              }
+            }
+
+            if (
+              needsReload
+              || quoteRealtimeNeedsReloadRef.current
+            ) {
+              quoteRealtimeNeedsReloadRef.current =
+                false;
+
+              if (
+                quoteSaveInFlightRef.current
+                || quoteAutoSavePendingRef.current
+              ) {
+                quoteRealtimeReloadPendingRef.current =
+                  true;
+              } else {
+                void loadRemoteQuotes({
+                  fromRealtime: true,
+                });
+              }
+            }
+          }, 280);
       }
-    } else {
-      quoteRealtimeNeedsReloadRef.current = true;
-    }
+    );
 
-    if (quoteRealtimeDebounceRef.current !== null) {
-      window.clearTimeout(quoteRealtimeDebounceRef.current);
-    }
+    return () => {
+      if (
+        quoteRealtimeDebounceRef.current !== null
+      ) {
+        window.clearTimeout(
+          quoteRealtimeDebounceRef.current
+        );
 
-    quoteRealtimeDebounceRef.current = window.setTimeout(() => {
-      quoteRealtimeDebounceRef.current = null;
-
-      const pendingRow = quoteRealtimePendingRowRef.current;
-      const needsReload = quoteRealtimeNeedsReloadRef.current;
+        quoteRealtimeDebounceRef.current = null;
+      }
 
       quoteRealtimePendingRowRef.current = null;
       quoteRealtimeNeedsReloadRef.current = false;
+      unsubscribe();
+    };
+  }, [authSession?.user?.id, activeWorkspace?.id]);
 
-      if (pendingRow) {
-        if (quoteSaveInFlightRef.current || quoteAutoSavePendingRef.current) {
-          const bufferedVersion = Number(
-            remoteQuoteBufferRef.current.pendingRow?.version || 0
-          );
-          const pendingVersion = Number(pendingRow.version || 0);
+  useEffect(() => {
+    const user = authSession?.user;
+    const workspaceId = activeWorkspace?.id;
 
-          if (
-            !remoteQuoteBufferRef.current.pendingRow
-            || pendingVersion >= bufferedVersion
-          ) {
-            remoteQuoteBufferRef.current.pendingRow = pendingRow;
-          }
+    const quoteId =
+      activeQuoteIdentity?.remote
+        ? activeQuoteIdentity.id
+        : null;
 
-          setQuoteCollaborationStatus('Guardando…');
-        } else {
-          const mergeResult = applyRemoteQuoteRow(pendingRow);
-
-          if (!mergeResult.applied) {
-            quoteRealtimeNeedsReloadRef.current = true;
-          }
-        }
-      }
-
-      if (needsReload || quoteRealtimeNeedsReloadRef.current) {
-        quoteRealtimeNeedsReloadRef.current = false;
-
-        if (quoteSaveInFlightRef.current || quoteAutoSavePendingRef.current) {
-          quoteRealtimeReloadPendingRef.current = true;
-        } else {
-          void loadRemoteQuotes({ fromRealtime: true });
-        }
-      }
-    }, 280);
-  });
-
-  return () => {
-    if (quoteRealtimeDebounceRef.current !== null) {
-      window.clearTimeout(quoteRealtimeDebounceRef.current);
-      quoteRealtimeDebounceRef.current = null;
+    if (!user?.id || !workspaceId || !quoteId) {
+      setQuoteCollaborators([]);
+      setQuotePresenceStatus('CLOSED');
+      quotePresenceRef.current = null;
+      return undefined;
     }
 
-    quoteRealtimePendingRowRef.current = null;
-    quoteRealtimeNeedsReloadRef.current = false;
-    unsubscribe();
-  };
-}, [authSession?.user?.id, activeWorkspace?.id]);
+    const presence =
+      QuoteRepository.subscribeQuotePresence({
+        workspaceId,
+        quoteId,
+        user: {
+          id: user.id,
+          email: user.email || '',
+          name:
+            user.user_metadata?.full_name
+            || user.user_metadata?.name
+            || user.email
+            || 'Usuario',
+        },
+        onSync: (collaborators) => {
+          const uniqueByUser = new Map();
+
+          collaborators.forEach((collaborator) => {
+            if (!collaborator?.userId) return;
+
+            uniqueByUser.set(
+              collaborator.userId,
+              collaborator
+            );
+          });
+
+          setQuoteCollaborators(
+            Array.from(uniqueByUser.values())
+          );
+        },
+        onStatus: (status) => {
+          setQuotePresenceStatus(status);
+        },
+      });
+
+    quotePresenceRef.current = presence;
+
+    return () => {
+      quotePresenceRef.current = null;
+      setQuoteCollaborators([]);
+      setQuotePresenceStatus('CLOSED');
+      void presence.unsubscribe();
+    };
+  }, [
+    authSession?.user?.id,
+    authSession?.user?.email,
+    activeWorkspace?.id,
+    activeQuoteIdentity?.id,
+    activeQuoteIdentity?.remote,
+  ]);
 
   useEffect(() => {
     const userId = authSession?.user?.id;
@@ -2340,7 +2634,7 @@ function App() {
   }
 
   useEffect(() => {
-    if (authSession?.user?.id && activeWorkspace?.id) return undefined;
+    if (authSession?.user?.id) return undefined;
 
     syncHistory(true);
 
@@ -2366,7 +2660,7 @@ function App() {
       window.removeEventListener('online', onOnline);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
-  }, [authSession?.user?.id, activeWorkspace?.id]);
+  }, [authSession?.user?.id]);
   function updateDirtyQuoteForm(updater) {
     setQuoteCollaborationStatus('Guardando…');
     setForm((current) => {
@@ -4471,7 +4765,15 @@ function syncProductionOrderFromQuote(quoteId, nextForm, quoteVersion) {
   }
 
   function generateProfessionalPdf(mode = 'client') {
-    const html = Pdf.quotePrintHtml(form, quote, materials, mode, pdfEditor?.doc, appLogo, pdfHelpers);
+    const html = Pdf.quotePrintHtml(
+      form,
+      quote,
+      materials,
+      mode,
+      pdfEditor?.doc,
+      appLogo,
+      { ...pdfHelpers, brandName: workspaceSettings?.company_name || BRAND_NAME }
+    );
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
     printWindow.document.open();
@@ -4484,17 +4786,55 @@ function syncProductionOrderFromQuote(quoteId, nextForm, quoteVersion) {
     setPdfEditor(null);
   }
 
-  function handleLogoUpload(event) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = () => setAppLogo(String(reader.result || ''));
-    reader.readAsDataURL(file);
+  async function handleLogoUpload(file, companyName) {
+    if (!file || !activeWorkspace?.id || !canEditWorkspaceSettings) return;
+    setWorkspaceSettingsSaving(true);
+    setWorkspaceSettingsError('');
+    const result = await WorkspaceService.uploadWorkspaceLogo({
+      workspaceId: activeWorkspace.id,
+      companyName,
+      file,
+    });
+    if (result.error) setWorkspaceSettingsError(result.error.message || 'No fue posible guardar el logo.');
+    else {
+      setWorkspaceSettings(result.data);
+      setAppLogo(applyWorkspaceBranding(result.data));
+    }
+    setWorkspaceSettingsSaving(false);
   }
 
-  function removeAppLogo() {
-    setAppLogo('');
+  async function saveWorkspaceCompanyName(companyName) {
+    if (!activeWorkspace?.id || !canEditWorkspaceSettings) return;
+    setWorkspaceSettingsSaving(true);
+    setWorkspaceSettingsError('');
+    const result = await WorkspaceService.updateWorkspaceSettings({
+      workspaceId: activeWorkspace.id,
+      companyName,
+      logoUrl: workspaceSettings?.logo_url || null,
+    });
+    if (result.error) setWorkspaceSettingsError(result.error.message || 'No fue posible guardar el nombre.');
+    else {
+      setWorkspaceSettings(result.data);
+      setAppLogo(applyWorkspaceBranding(result.data));
+    }
+    setWorkspaceSettingsSaving(false);
+  }
+
+  async function removeAppLogo(companyName) {
+    if (!activeWorkspace?.id || !canEditWorkspaceSettings) return;
+    setWorkspaceSettingsSaving(true);
+    setWorkspaceSettingsError('');
+    const result = await WorkspaceService.updateWorkspaceSettings({
+      workspaceId: activeWorkspace.id,
+      companyName,
+      logoUrl: null,
+    });
+    if (result.error) setWorkspaceSettingsError(result.error.message || 'No fue posible quitar el logo.');
+    else {
+      setWorkspaceSettings(result.data);
+      setAppLogo(applyWorkspaceBranding(result.data));
+    }
+    setWorkspaceSettingsSaving(false);
   }
 
   const input = (field, type = 'text') => (
@@ -4533,6 +4873,7 @@ function syncProductionOrderFromQuote(quoteId, nextForm, quoteVersion) {
     setAuthSession(null);
     setActiveWorkspace(null);
     setActiveMembership(null);
+    setWorkspaceAccessStatus(null);
     setWorkspaceLoading(false);
     setWorkspaceError('');
     setSignOutLoading(false);
@@ -4540,6 +4881,18 @@ function syncProductionOrderFromQuote(quoteId, nextForm, quoteVersion) {
 
   return (
     <AuthGate session={authSession} loading={authLoading}>
+      {workspaceLoading || !activeWorkspace ? (
+        <WorkspaceAccessGate
+          status={workspaceAccessStatus}
+          error={workspaceError}
+          loading={
+            workspaceLoading
+            || signOutLoading
+            || (!workspaceAccessStatus && !workspaceError)
+          }
+          onSignOut={handleSignOut}
+        />
+      ) : (
       <main className={largeText ? 'workspace-shell large-text' : 'workspace-shell'}>
       <WorkspaceLayout
         sidebar={(
@@ -4547,7 +4900,7 @@ function syncProductionOrderFromQuote(quoteId, nextForm, quoteVersion) {
         <div className="brand-card">
           {appLogo ? <img src={appLogo} alt="Logo ALUXOR" className="brand-logo" /> : <div className="brand-mark">A</div>}
           <div>
-            <strong>{BRAND_NAME}</strong>
+            <strong>{workspaceSettings?.company_name || BRAND_NAME}</strong>
             <span>Cotizador profesional</span>
           </div>
         </div>
@@ -4580,6 +4933,7 @@ function syncProductionOrderFromQuote(quoteId, nextForm, quoteVersion) {
           onPdf={() => openPrint('client')}
           onGuardar={saveToHistory}
           onHistorial={() => setActiveSection('historial')}
+          canSave={canEditWorkspaceQuotes}
         />
 
         <nav className="menu" aria-label="Secciones principales">
@@ -4594,10 +4948,12 @@ function syncProductionOrderFromQuote(quoteId, nextForm, quoteVersion) {
               {label}
             </button>
           ))}
-          <button type="button" className={activeSection === 'plano' ? 'active' : ''} onClick={() => setActiveSection('plano')}>
-            <Box size={18} />
-            Plano 3D
-          </button>
+          {canAccessSection(currentWorkspaceRole, 'plano') && (
+            <button type="button" className={activeSection === 'plano' ? 'active' : ''} onClick={() => setActiveSection('plano')}>
+              <Box size={18} />
+              Plano 3D
+            </button>
+          )}
         </nav>
 
         <div className="sync-card">
@@ -4646,8 +5002,10 @@ function syncProductionOrderFromQuote(quoteId, nextForm, quoteVersion) {
 
           <div className="hero-actions hero-actions-compact">
             <button type="button" className="ghost" onClick={refreshInstalledApp}><RefreshCw size={16} /> Actualizar</button>
-            <button type="button" className="ghost" onClick={startNewQuote}><History size={16} /> Nueva cotización</button>
-            {['cotizador', 'cotizador-rellenado'].includes(activeSection) && activeQuoteIdentity && (
+            {canEditWorkspaceQuotes && (
+              <button type="button" className="ghost" onClick={startNewQuote}><History size={16} /> Nueva cotización</button>
+            )}
+            {canEditWorkspaceQuotes && ['cotizador', 'cotizador-rellenado'].includes(activeSection) && activeQuoteIdentity && (
               <button
                 type="button"
                 className="ghost"
@@ -4756,6 +5114,8 @@ function syncProductionOrderFromQuote(quoteId, nextForm, quoteVersion) {
             collaborationStatus={quoteCollaborationStatus}
             legacyHistoryStatus={legacyHistoryStatus}
             quoteFieldConflicts={quoteFieldConflicts}
+            quoteCollaborators={quoteCollaborators}
+            quotePresenceStatus={quotePresenceStatus}
             onQuoteFieldFocus={handleQuoteFieldFocus}
             onQuoteFieldBlur={handleQuoteFieldBlur}
           />
@@ -4890,9 +5250,20 @@ function syncProductionOrderFromQuote(quoteId, nextForm, quoteVersion) {
         {activeSection === 'ajustes' && (
           <SettingsSection
             appLogo={appLogo}
-            brandName={BRAND_NAME}
-            handleLogoUpload={handleLogoUpload}
-            removeAppLogo={removeAppLogo}
+            settings={workspaceSettings}
+            canManage={canEditWorkspaceSettings}
+            saving={workspaceSettingsSaving}
+            error={workspaceSettingsError}
+            onSaveCompanyName={saveWorkspaceCompanyName}
+            onLogoUpload={handleLogoUpload}
+            onRemoveLogo={removeAppLogo}
+          />
+        )}
+
+        {activeSection === 'solicitudes-acceso' && canManageWorkspaceAccess && (
+          <WorkspaceAccessRequestsSection
+            workspaceId={activeWorkspace.id}
+            currentMembership={activeMembership}
           />
         )}
 
@@ -4911,6 +5282,7 @@ function syncProductionOrderFromQuote(quoteId, nextForm, quoteVersion) {
             removeHistoryItem={removeHistoryItem}
             selectedHistoryPreview={selectedHistoryPreview}
             selectHistoryPreview={setSelectedHistoryPreview}
+            readOnly={!canEditWorkspaceQuotes}
           />
         )}
 
@@ -5027,6 +5399,7 @@ function syncProductionOrderFromQuote(quoteId, nextForm, quoteVersion) {
         )}
       />
       </main>
+      )}
     </AuthGate>
   );
 }

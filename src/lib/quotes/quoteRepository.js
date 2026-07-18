@@ -199,6 +199,78 @@ export function subscribeQuotes(workspaceId, callback) {
     }
   };
 }
+export function subscribeQuotePresence({
+  workspaceId,
+  quoteId,
+  user,
+  onSync,
+  onStatus,
+}) {
+  if (!workspaceId || !quoteId || !user?.id) {
+    return {
+      track: async () => {},
+      untrack: async () => {},
+      unsubscribe: async () => {},
+    };
+  }
+
+  const channel = supabase.channel(
+    `quote-presence:${workspaceId}:${quoteId}`,
+    {
+      config: {
+        presence: {
+          key: user.id,
+        },
+      },
+    }
+  );
+
+  channel
+    .on("presence", { event: "sync" }, () => {
+      const collaborators = Object
+        .values(channel.presenceState())
+        .flat();
+
+      onSync?.(collaborators);
+    })
+    .subscribe(async (status) => {
+      onStatus?.(status);
+
+      if (status === "SUBSCRIBED") {
+        await channel.track({
+          userId: user.id,
+          name: user.name || user.email || "Usuario",
+          email: user.email || "",
+          workspaceId,
+          quoteId,
+          editing: false,
+          fieldPath: null,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+    });
+
+  return {
+    track: (presence = {}) =>
+      channel.track({
+        userId: user.id,
+        name: user.name || user.email || "Usuario",
+        email: user.email || "",
+        workspaceId,
+        quoteId,
+        editing: !!presence.editing,
+        fieldPath: presence.fieldPath || null,
+        updatedAt: new Date().toISOString(),
+      }),
+
+    untrack: () => channel.untrack(),
+
+    unsubscribe: async () => {
+      await channel.untrack();
+      await channel.unsubscribe();
+    },
+  };
+}
 
 export const QuoteRepository = {
   loadQuotes,
@@ -208,4 +280,5 @@ export const QuoteRepository = {
   softDeleteQuote,
   restoreQuote,
   subscribeQuotes,
+  subscribeQuotePresence,
 };

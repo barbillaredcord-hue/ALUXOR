@@ -2,8 +2,7 @@
   "scripts": {
     "build": "vite build",
     "test": "vitest run",
-    "start": "vite --host 127.0.0.1"
-  },
+    "start": "vite --host 0.0.0.0"  },
   "dependencies": {
     "@supabase/ssr": "^0.12.1",
     "@supabase/supabase-js": "^2.110.3",

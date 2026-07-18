@@ -14,6 +14,7 @@ export default function SummaryPanel({
   onPdf,
   onGuardar,
   onHistorial,
+  canSave = true,
 }) {
   const progressValue = Math.min(100, Math.max(0, Number(progreso) || 0));
 
@@ -71,7 +72,7 @@ export default function SummaryPanel({
       <div className="summary-panel-actions">
         <button type="button" onClick={onWhatsApp}>WhatsApp</button>
         <button type="button" onClick={onPdf}>PDF</button>
-        <button type="button" onClick={onGuardar}>Guardar</button>
+        {canSave && <button type="button" onClick={onGuardar}>Guardar</button>}
         <button type="button" onClick={onHistorial}>Historial</button>
       </div>
     </aside>
