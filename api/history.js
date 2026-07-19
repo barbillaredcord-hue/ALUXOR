@@ -98,7 +98,7 @@ module.exports = async function handler(req, res) {
     }
 
     if (req.method === 'DELETE') {
-      const id = new URL(req.url, 'https://anunciapro.vercel.app').searchParams.get('id');
+      const id = new URL(req.url, 'https://brtunegocio.com').searchParams.get('id');
       const current = await readHistory();
       const history = await writeHistory(current.filter((item) => item.id !== id));
       return send(res, 200, { history });

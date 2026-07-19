@@ -1,4 +1,4 @@
-const CACHE_NAME = 'anunciapro-v19';
+const CACHE_NAME = 'brtunegocio-v20';
 const APP_SHELL = [
   './',
   './index.html',
