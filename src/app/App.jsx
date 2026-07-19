@@ -52,6 +52,7 @@ import useWorkspace from '../hooks/useWorkspace.js';
 import useQuotes from '../hooks/useQuotes.js';
 import useProduction from '../hooks/useProduction.js';
 import useQuickCalculator from '../hooks/useQuickCalculator.js';
+import usePlanEditor from '../hooks/usePlanEditor.js';
 import {
   Materials,
   Pricing,
@@ -95,9 +96,6 @@ function App() {
   const [catalog, setCatalog] = useState(catalogDefaults);
   const [largeText, setLargeText] = useState(false);
   const [activeSection, setActiveSection] = useState('inicio');
-  const [planView, setPlanView] = useState('3d');
-  const [planRotation, setPlanRotation] = useState(0);
-  const [planZoom, setPlanZoom] = useState(100);
   const [typeDetails, setTypeDetails] = useState(defaultTypeDetails);
   const [floatingSummary, setFloatingSummary] = useState({ x: 24, y: 120, compact: false, minimized: false });
   const productionQuoteSyncRef = useRef(null);
@@ -236,6 +234,27 @@ function App() {
     quickCalcText,
     applyQuickCalcToMaterial,
   } = quickCalculator;
+  const planEditor = usePlanEditor({
+    setForm,
+    setActiveSection,
+    updateDirtyQuoteForm,
+    PlanEngine,
+    planHelpers,
+    numberValue,
+  });
+  const {
+    planView,
+    setPlanView,
+    planRotation,
+    setPlanRotation,
+    planZoom,
+    setPlanZoom,
+    updatePlanItem,
+    addPlanItem,
+    removePlanItem,
+    syncPlanWithMeasures,
+    applyPlanTemplate,
+  } = planEditor;
   const {
     productionOrders,
     selectedProductionOrderId,
@@ -345,82 +364,6 @@ function App() {
 
   function removeTypeDetail(id) {
     setTypeDetails((items) => items.filter((item) => item.id !== id));
-  }
-
-  function updatePlanItem(id, field, value) {
-    updateDirtyQuoteForm((current) => ({
-      ...current,
-      planItems: PlanEngine.planItemsFromForm(current, planHelpers).map((item) => (
-        item.id === id ? { ...item, [field]: value } : item
-      )),
-    }));
-  }
-
-  function addPlanItem() {
-    updateDirtyQuoteForm((current) => ({
-      ...current,
-      planItems: [
-        ...PlanEngine.planItemsFromForm(current, planHelpers),
-        {
-          id: `plano-${Date.now()}`,
-          nombre: 'Nueva pieza',
-          forma: 'Pieza vertical',
-          ancho: current.ancho,
-          alto: current.alto,
-          fondo: current.fondo,
-          cantidad: 1,
-          nota: '',
-          posX: '',
-          posY: '',
-          posZ: '',
-        },
-      ],
-    }));
-  }
-
-  function removePlanItem(id) {
-    updateDirtyQuoteForm((current) => {
-      const items = PlanEngine.planItemsFromForm(current, planHelpers).filter((item) => item.id !== id);
-      return { ...current, planItems: items.length ? items : [] };
-    });
-  }
-
-  function syncPlanWithMeasures() {
-    setForm((current) => ({
-      ...current,
-      planItems: [
-        {
-          id: 'pieza-principal',
-          nombre: current.tipoTrabajo || 'Vista principal',
-          forma: 'Pieza vertical',
-          ancho: numberValue(current.ancho),
-          alto: numberValue(current.alto),
-          fondo: numberValue(current.fondo),
-          cantidad: Math.max(1, numberValue(current.cantidad) || 1),
-          nota: 'Medida general del proyecto',
-          posX: '',
-          posY: '',
-          posZ: '',
-        },
-      ],
-    }));
-    setActiveSection('plano');
-  }
-
-  function applyPlanTemplate(template) {
-    setForm((current) => ({
-      ...current,
-      giro: template.giro,
-      tipoTrabajo: template.tipoTrabajo,
-      producto: template.tipoTrabajo === 'Cancel'
-        ? 'Cancel a medida'
-        : template.tipoTrabajo === 'Ventana'
-          ? 'Ventana a medida'
-          : `${template.label} a medida`,
-      planItems: PlanEngine.planTemplateData(template.id, current, planHelpers),
-    }));
-    setPlanView('3d');
-    setActiveSection('plano');
   }
 
   function updateCatalogItem(id, field, value) {
