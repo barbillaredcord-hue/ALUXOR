@@ -54,11 +54,17 @@ export function getProductionSummary(orders = []) {
     if (!order || typeof order !== 'object' || Array.isArray(order)) return;
 
     const status = normalizeProductionStatus(order.estado ?? order.status);
-    const field = summaryFieldByStatus.get(status);
-    summary.total += 1;
-    summary[field] += 1;
-    if (inProgressStatuses.has(status)) summary.inProcess += 1;
+const field = summaryFieldByStatus.get(status);
 
+summary.total += 1;
+
+if (field) {
+  summary[field] += 1;
+}
+
+if (inProgressStatuses.has(status)) {
+  summary.inProcess += 1;
+}
     const orderTimestamp = timestamp(order);
     if (orderTimestamp !== null && (latestTimestamp === null || orderTimestamp > latestTimestamp)) {
       latestTimestamp = orderTimestamp;
