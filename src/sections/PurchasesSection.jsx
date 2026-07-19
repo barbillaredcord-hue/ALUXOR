@@ -1,10 +1,15 @@
 import { CheckCircle2, Circle, Clock3, Printer, ShoppingCart } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import {
+  PURCHASE_STATUSES,
+  getPurchasesSummary,
+  normalizePurchaseStatus,
+} from '../lib/purchases/purchaseSummary.js';
 
 const statusConfig = {
-  pendiente: { label: 'Pendiente', icon: Circle },
-  comprado: { label: 'Comprado', icon: Clock3 },
-  recibido: { label: 'Recibido', icon: CheckCircle2 },
+  [PURCHASE_STATUSES.PENDING]: { label: 'Pendiente', icon: Circle },
+  [PURCHASE_STATUSES.PURCHASED]: { label: 'Comprado', icon: Clock3 },
+  [PURCHASE_STATUSES.RECEIVED]: { label: 'Recibido', icon: CheckCircle2 },
 };
 
 function escapeHtml(value) {
@@ -51,18 +56,18 @@ export default function PurchasesSection({ form, quote, money, decimal }) {
   ].filter((item) => item.name), [quote, money, decimal]);
 
   const [statuses, setStatuses] = useState({});
-  const statusFor = (id) => statuses[id] || 'pendiente';
+  const statusFor = (id) => normalizePurchaseStatus(statuses[id]);
   const setStatus = (id, status) => setStatuses((current) => ({ ...current, [id]: status }));
   const markAllBought = () => {
-    setStatuses(Object.fromEntries(purchaseItems.map((item) => [item.id, 'comprado'])));
+    setStatuses(Object.fromEntries(
+      purchaseItems.map((item) => [item.id, PURCHASE_STATUSES.PURCHASED])
+    ));
   };
 
-  const counts = purchaseItems.reduce((acc, item) => {
-    acc[statusFor(item.id)] += 1;
-    return acc;
-  }, { pendiente: 0, comprado: 0, recibido: 0 });
-  const progress = purchaseItems.length > 0 ? ((counts.comprado + counts.recibido) / purchaseItems.length) * 100 : 0;
-  const pendingItems = purchaseItems.filter((item) => statusFor(item.id) === 'pendiente');
+  const summary = getPurchasesSummary(purchaseItems, statuses);
+  const pendingItems = purchaseItems.filter(
+    (item) => statusFor(item.id) === PURCHASE_STATUSES.PENDING
+  );
   const groups = purchaseItems.reduce((acc, item) => {
     acc[item.group] = [...(acc[item.group] || []), item];
     return acc;
@@ -94,10 +99,10 @@ export default function PurchasesSection({ form, quote, money, decimal }) {
       </header>
 
       <div className="purchase-stats">
-        <div><span>Pendientes</span><strong>{counts.pendiente}</strong></div>
-        <div><span>Comprados</span><strong>{counts.comprado}</strong></div>
-        <div><span>Recibidos</span><strong>{counts.recibido}</strong></div>
-        <div><span>Progreso</span><strong>{decimal(progress, 0)}%</strong><div className="purchase-progress"><i style={{ width: `${progress}%` }} /></div></div>
+        <div><span>Pendientes</span><strong>{summary.pending}</strong></div>
+        <div><span>Comprados</span><strong>{summary.purchased}</strong></div>
+        <div><span>Recibidos</span><strong>{summary.received}</strong></div>
+        <div><span>Progreso</span><strong>{decimal(summary.progress, 0)}%</strong><div className="purchase-progress"><i style={{ width: `${summary.progress}%` }} /></div></div>
       </div>
 
       <div className="purchase-actions">
@@ -121,9 +126,9 @@ export default function PurchasesSection({ form, quote, money, decimal }) {
                       <span>{item.quantity} · {item.detail}</span>
                     </div>
                     <select value={status} onChange={(event) => setStatus(item.id, event.target.value)}>
-                      <option value="pendiente">Pendiente</option>
-                      <option value="comprado">Comprado</option>
-                      <option value="recibido">Recibido</option>
+                      {Object.entries(statusConfig).map(([value, config]) => (
+                        <option key={value} value={value}>{config.label}</option>
+                      ))}
                     </select>
                   </div>
                 );
