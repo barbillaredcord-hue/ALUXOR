@@ -46,8 +46,8 @@ import TextSection from '../sections/TextSection.jsx';
 import WorkspaceAccessRequestsSection, {
   WorkspaceAccessGate,
 } from '../sections/WorkspaceAccessRequestsSection.jsx';
-import { AuthService } from '../lib/auth/authService.js';
 import { canAccessSection } from '../lib/workspace/permissions.js';
+import useAuth from '../hooks/useAuth.js';
 import useWorkspace from '../hooks/useWorkspace.js';
 import useQuotes from '../hooks/useQuotes.js';
 import useProduction from '../hooks/useProduction.js';
@@ -90,15 +90,21 @@ import {
 } from './config/helpers.js';
 
 function App() {
-  const [authSession, setAuthSession] = useState(null);
-  const [authLoading, setAuthLoading] = useState(true);
-  const [signOutLoading, setSignOutLoading] = useState(false);
   const [catalog, setCatalog] = useState(catalogDefaults);
   const [largeText, setLargeText] = useState(false);
   const [activeSection, setActiveSection] = useState('inicio');
   const [typeDetails, setTypeDetails] = useState(defaultTypeDetails);
   const [floatingSummary, setFloatingSummary] = useState({ x: 24, y: 120, compact: false, minimized: false });
+  const authWorkspaceRefreshRef = useRef(null);
   const productionQuoteSyncRef = useRef(null);
+  const {
+    authSession,
+    authLoading,
+    signOutLoading,
+    handleSignOut,
+  } = useAuth({
+    refreshWorkspace: (options) => authWorkspaceRefreshRef.current?.(options),
+  });
   const {
     activeWorkspace,
     activeMembership,
@@ -126,6 +132,7 @@ function App() {
     setTypeDetails,
     StorageEngine,
   });
+  authWorkspaceRefreshRef.current = refreshWorkspace;
   const {
     form,
     setForm,
@@ -278,32 +285,6 @@ function App() {
     setActiveSection,
   });
   productionQuoteSyncRef.current = syncProductionOrderFromQuote;
-
-  useEffect(() => {
-    let isMounted = true;
-
-    AuthService.getSession()
-      .then((session) => {
-        if (isMounted) setAuthSession(session);
-      })
-      .catch(() => {
-        if (isMounted) setAuthSession(null);
-      })
-      .finally(() => {
-        if (isMounted) setAuthLoading(false);
-      });
-
-    const subscription = AuthService.onAuthStateChange((_event, session) => {
-      if (!isMounted) return;
-      setAuthSession(session);
-      setAuthLoading(false);
-    });
-
-    return () => {
-      isMounted = false;
-      subscription?.unsubscribe();
-    };
-  }, []);
 
   const currentTypeOptions = typeOptionsFor(form.giro, typeDetails);
   const menuItems = [
@@ -462,23 +443,6 @@ function App() {
       onChange={(event) => update(field, event.target.value)}
     />
   );
-
-  async function handleSignOut() {
-    setSignOutLoading(true);
-    refreshWorkspace({ error: '' });
-
-    const { error } = await AuthService.signOut();
-
-    if (error) {
-      refreshWorkspace({ error: 'No fue posible cerrar la sesión. Intenta nuevamente.' });
-      setSignOutLoading(false);
-      return;
-    }
-
-    setAuthSession(null);
-    refreshWorkspace({ reset: true });
-    setSignOutLoading(false);
-  }
 
   return (
     <AuthGate session={authSession} loading={authLoading}>
