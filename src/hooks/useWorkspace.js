@@ -7,22 +7,13 @@ import {
   canManageWorkspaceSettings,
 } from '../lib/workspace/permissions.js';
 import { storageHelpers } from '../app/config/helpers.js';
-
 export default function useWorkspace({
   authSession,
   catalogDefaults,
   defaultTypeDetails,
-  defaults,
-  setForm,
   setCatalog,
   setTypeDetails,
-  setHistory,
-  setActiveQuoteIdentity,
-  setSelectedHistoryPreview,
-  setPendingOfflineCount,
   StorageEngine,
-  OfflineQueue,
-  historyRef,
 }) {
   const [activeWorkspace, setActiveWorkspace] = useState(null);
   const [activeMembership, setActiveMembership] = useState(null);
@@ -141,17 +132,9 @@ export default function useWorkspace({
       setWorkspaceSettings(null);
       setAppLogo('');
       setWorkspaceAccessStatus(status === 'suspended' ? 'suspended' : 'revoked');
-      setForm(defaults);
       setCatalog(catalogDefaults);
       setTypeDetails(defaultTypeDetails);
-      setHistory([]);
-      historyRef.current = [];
-      setActiveQuoteIdentity(null);
-      setSelectedHistoryPreview(null);
-      setPendingOfflineCount(0);
       setHydratedWorkspaceId(null);
-      OfflineQueue.clearQueue();
-      StorageEngine.saveHistory([]);
     };
 
     const validateMembership = async () => {
@@ -206,12 +189,8 @@ export default function useWorkspace({
       setHydratedWorkspaceId(null);
       return;
     }
-    const storedHistory = StorageEngine.loadHistory(storageHelpers);
     setCatalog(StorageEngine.loadCatalog(storageHelpers));
-    setHistory(storedHistory);
-    historyRef.current = storedHistory;
     setTypeDetails(StorageEngine.loadTypeDetails(storageHelpers));
-    setPendingOfflineCount(OfflineQueue.getPendingCount());
     setHydratedWorkspaceId(activeWorkspace.id);
   }, [activeWorkspace?.id]);
 
