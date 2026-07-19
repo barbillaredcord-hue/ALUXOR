@@ -5,14 +5,17 @@ import CatalogSettings from '../components/settings/CatalogSettings.jsx';
 import GeneralSettings from '../components/settings/GeneralSettings.jsx';
 import IntegrationsSettings from '../components/settings/IntegrationsSettings.jsx';
 import NotificationsSettings from '../components/settings/NotificationsSettings.jsx';
+import ProjectCenterSettings from '../components/settings/ProjectCenterSettings.jsx';
 import ProductionSettings from '../components/settings/ProductionSettings.jsx';
 import QuoteSettings from '../components/settings/QuoteSettings.jsx';
+import SystemProjectCenterSettings from '../components/settings/SystemProjectCenterSettings.jsx';
 import UsersSettings from '../components/settings/UsersSettings.jsx';
 
 export default function SettingsSection({
   appLogo,
   settings,
   canManage,
+  isOwner,
   saving,
   error,
   onSaveCompanyName,
@@ -20,6 +23,9 @@ export default function SettingsSection({
   onRemoveLogo,
 }) {
   const [activeTab, setActiveTab] = useState('general');
+  // TODO: Reemplazar esta validación por is_system_workspace cuando exista soporte multiempresa.
+  const isTemporarySystemWorkspace = isOwner
+    && settings?.company_name === 'ALUXOR / BosqueReal';
 
   return (
     <section className="panel settings-panel">
@@ -103,6 +109,26 @@ export default function SettingsSection({
           >
             Acerca de
           </button>
+
+          {isOwner && (
+            <button
+              type="button"
+              className={activeTab === 'project-center' ? 'active' : ''}
+              onClick={() => setActiveTab('project-center')}
+            >
+              FLDSMDFR
+            </button>
+          )}
+
+          {isTemporarySystemWorkspace && (
+            <button
+              type="button"
+              className={activeTab === 'system-project-center' ? 'active' : ''}
+              onClick={() => setActiveTab('system-project-center')}
+            >
+              FLDSMDFR · Sistema
+            </button>
+          )}
         </aside>
 
         <div className="settings-content">
@@ -125,6 +151,12 @@ export default function SettingsSection({
           {activeTab === 'integrations' && <IntegrationsSettings />}
           {activeTab === 'backups' && <BackupsSettings />}
           {activeTab === 'about' && <AboutSettings />}
+          {isOwner && activeTab === 'project-center' && (
+            <ProjectCenterSettings settings={settings} />
+          )}
+          {isTemporarySystemWorkspace && activeTab === 'system-project-center' && (
+            <SystemProjectCenterSettings />
+          )}
         </div>
       </div>
     </section>

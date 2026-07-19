@@ -733,6 +733,7 @@ function App() {
             appLogo={appLogo}
             settings={workspaceSettings}
             canManage={canEditWorkspaceSettings}
+            isOwner={currentWorkspaceRole === 'owner'}
             saving={workspaceSettingsSaving}
             error={workspaceSettingsError}
             onSaveCompanyName={saveWorkspaceCompanyName}
