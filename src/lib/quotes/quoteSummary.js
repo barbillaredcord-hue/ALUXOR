@@ -40,7 +40,9 @@ export function getQuotesSummary(quotes = []) {
 
     const field = summaryFieldByStatus.get(quoteRecordStatus(quote));
     summary.total += 1;
-    summary[field] += 1;
+    if (field) {
+      summary[field] += 1;
+    }
 
     const quoteTimestamp = timestamp(quote);
     if (quoteTimestamp !== null && (latestTimestamp === null || quoteTimestamp > latestTimestamp)) {

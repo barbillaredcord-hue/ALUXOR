@@ -1,12 +1,14 @@
-const PRODUCTION_STATUSES = Object.freeze([
-  'Pendiente',
-  'Programada',
-  'En corte',
-  'Fabricando',
-  'Armado',
-  'Listo',
-  'Entregado',
-]);
+export const PRODUCTION_STATUSES = Object.freeze({
+  PENDING: 'Pendiente',
+  SCHEDULED: 'Programada',
+  CUTTING: 'En corte',
+  FABRICATING: 'Fabricando',
+  ASSEMBLY: 'Armado',
+  READY: 'Listo',
+  DELIVERED: 'Entregado',
+});
+
+const productionStatuses = Object.freeze(Object.values(PRODUCTION_STATUSES));
 
 const PRODUCTION_PRIORITIES = Object.freeze([
   'Normal',
@@ -65,7 +67,7 @@ function normalizeQuoteVersion(value) {
 }
 
 export function productionStatusOptions() {
-  return [...PRODUCTION_STATUSES];
+  return [...productionStatuses];
 }
 
 export function productionPriorityOptions() {
@@ -80,6 +82,10 @@ export function cloneQuoteSnapshot(snapshot) {
   } catch {
     return {};
   }
+}
+
+export function normalizeProductionStatus(status) {
+  return productionStatuses.includes(status) ? status : PRODUCTION_STATUSES.PENDING;
 }
 
 export function generateProductionOrderNumber(orders = [], date = new Date()) {
@@ -105,7 +111,7 @@ export function generateProductionOrderNumber(orders = [], date = new Date()) {
 
 export function normalizeProductionOrder(order = {}) {
   const source = isObject(order) ? order : {};
-  const estado = PRODUCTION_STATUSES.includes(source.estado) ? source.estado : 'Pendiente';
+  const estado = normalizeProductionStatus(source.estado);
   const prioridad = PRODUCTION_PRIORITIES.includes(source.prioridad) ? source.prioridad : 'Normal';
 
   return {
@@ -220,7 +226,7 @@ export function isProductionOrder(value) {
   return requiredFields.every((field) => Object.prototype.hasOwnProperty.call(value, field))
     && clean(value.id) !== ''
     && /^OT-\d{8}-\d{3,}$/.test(clean(value.folio))
-    && PRODUCTION_STATUSES.includes(value.estado)
+    && productionStatuses.includes(value.estado)
     && PRODUCTION_PRIORITIES.includes(value.prioridad)
     && Array.isArray(value.timeline)
     && isObject(value.formSnapshot);

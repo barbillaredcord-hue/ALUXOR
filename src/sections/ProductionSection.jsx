@@ -1,9 +1,17 @@
 import { useEffect, useState } from 'react';
 import { ClipboardList, ExternalLink } from 'lucide-react';
+import {
+  PRODUCTION_STATUSES,
+  productionPriorityOptions,
+  productionStatusOptions,
+} from '../lib/production/productionEngine.js';
+import {
+  getProductionSummary,
+  isProductionInProgressStatus,
+} from '../lib/production/productionSummary.js';
 
-const IN_PROCESS_STATUSES = new Set(['Programada', 'En corte', 'Fabricando', 'Armado']);
-const STATUS_OPTIONS = ['Pendiente', 'Programada', 'En corte', 'Fabricando', 'Armado', 'Listo', 'Entregado'];
-const PRIORITY_OPTIONS = ['Normal', 'Alta', 'Urgente'];
+const STATUS_OPTIONS = productionStatusOptions();
+const PRIORITY_OPTIONS = productionPriorityOptions();
 
 function dateTimestamp(value) {
   const timestamp = Date.parse(value || '');
@@ -31,9 +39,9 @@ function abbreviatedId(value) {
 }
 
 function statusClass(status) {
-  if (status === 'Entregado') return 'delivered';
-  if (status === 'Listo') return 'ready';
-  if (IN_PROCESS_STATUSES.has(status)) return 'in-process';
+  if (status === PRODUCTION_STATUSES.DELIVERED) return 'delivered';
+  if (status === PRODUCTION_STATUSES.READY) return 'ready';
+  if (isProductionInProgressStatus(status)) return 'in-process';
   return 'pending';
 }
 
@@ -58,15 +66,9 @@ export default function ProductionSection({
     - dateTimestamp(a.updatedAt || a.fechaCreacion)
   ));
   const selectedOrder = sortedOrders.find((order) => order.id === selectedProductionOrderId) || null;
-  const metrics = {
-    total: sortedOrders.length,
-    pending: sortedOrders.filter((order) => order.estado === 'Pendiente').length,
-    inProcess: sortedOrders.filter((order) => IN_PROCESS_STATUSES.has(order.estado)).length,
-    ready: sortedOrders.filter((order) => order.estado === 'Listo').length,
-    delivered: sortedOrders.filter((order) => order.estado === 'Entregado').length,
-  };
+  const metrics = getProductionSummary(sortedOrders);
   const [draft, setDraft] = useState({
-    estado: 'Pendiente',
+    estado: PRODUCTION_STATUSES.PENDING,
     prioridad: 'Normal',
     responsable: '',
     fechaCompromiso: '',
