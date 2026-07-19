@@ -17,16 +17,12 @@ export default function useWorkspace({
   setCatalog,
   setTypeDetails,
   setHistory,
-  setProductionOrders,
-  setSelectedProductionOrderId,
   setActiveQuoteIdentity,
   setSelectedHistoryPreview,
   setPendingOfflineCount,
   StorageEngine,
   OfflineQueue,
-  ProductionStorage,
   historyRef,
-  productionOrdersRef,
 }) {
   const [activeWorkspace, setActiveWorkspace] = useState(null);
   const [activeMembership, setActiveMembership] = useState(null);
@@ -150,16 +146,12 @@ export default function useWorkspace({
       setTypeDetails(defaultTypeDetails);
       setHistory([]);
       historyRef.current = [];
-      setProductionOrders([]);
-      productionOrdersRef.current = [];
-      setSelectedProductionOrderId(null);
       setActiveQuoteIdentity(null);
       setSelectedHistoryPreview(null);
       setPendingOfflineCount(0);
       setHydratedWorkspaceId(null);
       OfflineQueue.clearQueue();
       StorageEngine.saveHistory([]);
-      ProductionStorage.saveProductionOrders([]);
     };
 
     const validateMembership = async () => {
@@ -215,12 +207,9 @@ export default function useWorkspace({
       return;
     }
     const storedHistory = StorageEngine.loadHistory(storageHelpers);
-    const storedProduction = ProductionStorage.loadProductionOrders();
     setCatalog(StorageEngine.loadCatalog(storageHelpers));
     setHistory(storedHistory);
     historyRef.current = storedHistory;
-    setProductionOrders(storedProduction);
-    productionOrdersRef.current = storedProduction;
     setTypeDetails(StorageEngine.loadTypeDetails(storageHelpers));
     setPendingOfflineCount(OfflineQueue.getPendingCount());
     setHydratedWorkspaceId(activeWorkspace.id);
