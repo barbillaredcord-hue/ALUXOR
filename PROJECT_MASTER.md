@@ -88,6 +88,12 @@ Cada módulo del ERP se conectará únicamente cuando exista una fuente reutiliz
 
 La independencia respecto a la interfaz es obligatoria: Business State no consultará componentes visuales ni dependerá de su implementación.
 
+# Fuentes reutilizables del ERP
+
+Cada módulo deberá exponer una fuente reutilizable de su estado. Business State consumirá dichas fuentes, al igual que Companion y los dashboards futuros.
+
+La lógica de negocio nunca deberá duplicarse entre consumidores.
+
 ## Estado actual conocido
 
 - Cotización

@@ -1,13 +1,23 @@
+export const QUOTE_STATUSES = Object.freeze({
+  PENDING: 'Pendiente',
+  SENT: 'Enviada',
+  ACCEPTED: 'Aceptada',
+  IN_PRODUCTION: 'En fabricación',
+  INSTALLATION: 'Instalación',
+  COMPLETED: 'Terminada',
+  CANCELLED: 'Cancelada',
+});
+
 const canonicalStatuses = new Map([
-  ['pendiente', 'Pendiente'],
-  ['enviada', 'Enviada'],
-  ['aceptada', 'Aceptada'],
-  ['en fabricación', 'En fabricación'],
-  ['instalación', 'Instalación'],
-  ['terminada', 'Terminada'],
-  ['cancelada', 'Cancelada'],
-  ['aprobada', 'Aceptada'],
-  ['instalada', 'Terminada'],
+  ['pendiente', QUOTE_STATUSES.PENDING],
+  ['enviada', QUOTE_STATUSES.SENT],
+  ['aceptada', QUOTE_STATUSES.ACCEPTED],
+  ['en fabricación', QUOTE_STATUSES.IN_PRODUCTION],
+  ['instalación', QUOTE_STATUSES.INSTALLATION],
+  ['terminada', QUOTE_STATUSES.COMPLETED],
+  ['cancelada', QUOTE_STATUSES.CANCELLED],
+  ['aprobada', QUOTE_STATUSES.ACCEPTED],
+  ['instalada', QUOTE_STATUSES.COMPLETED],
 ]);
 
 function isObject(value) {
@@ -25,7 +35,7 @@ function clean(value, fallback = '') {
 }
 
 function firstStatus(...values) {
-  return values.find((value) => clean(value)) || 'Pendiente';
+  return values.find((value) => clean(value)) || QUOTE_STATUSES.PENDING;
 }
 
 function numberValue(value, fallback = 0) {
@@ -93,7 +103,19 @@ function hasNumericValue(value) {
 
 export function normalizeQuoteStatus(status) {
   const normalized = clean(status).toLocaleLowerCase('es-MX');
-  return canonicalStatuses.get(normalized) || 'Pendiente';
+  return canonicalStatuses.get(normalized) || QUOTE_STATUSES.PENDING;
+}
+
+export function quoteRecordStatus(record) {
+  const source = isObject(record) ? record : {};
+
+  return normalizeQuoteStatus(firstStatus(
+    source.status,
+    source.estadoCotizacion,
+    source.form_data?.estadoCotizacion,
+    source.form?.estadoCotizacion,
+    QUOTE_STATUSES.PENDING,
+  ));
 }
 
 export function quoteRowToHistoryItem(row) {
@@ -102,7 +124,7 @@ export function quoteRowToHistoryItem(row) {
   const status = normalizeQuoteStatus(firstStatus(
     source.status,
     form.estadoCotizacion,
-    'Pendiente',
+    QUOTE_STATUSES.PENDING,
   ));
 
   form.estadoCotizacion = status;
@@ -137,7 +159,7 @@ export function historyItemToQuotePayload(item) {
     source.estadoCotizacion,
     source.status,
     formData.estadoCotizacion,
-    'Pendiente',
+    QUOTE_STATUSES.PENDING,
   ));
 
   formData.estadoCotizacion = status;
@@ -222,4 +244,5 @@ export const QuoteAdapter = {
   historyItemToQuotePayload,
   quoteFormToPayload,
   normalizeQuoteStatus,
+  quoteRecordStatus,
 };
