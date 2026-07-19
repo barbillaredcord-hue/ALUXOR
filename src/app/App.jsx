@@ -1,26 +1,15 @@
-// cSpell:words ALUXOR AnunciaPro anunciapro aluxor Clóset clóset clósets Cotizacion cotizacion Telefono telefono whatsapp promocion jaladera Jaladera jaladeras Jaladeras tornillería Silicón categoria bano economico descripcion triplay Triplay buro buró Buró burós pzas Vidrieria Carpinteria zoclo herrajes melamina merma cotizador metalness
-import { useEffect, useRef, useState } from 'react';
+// cSpell:words ALUXOR AnunciaPro anunciapro aluxor Clóset clóset clósets Cotizacion cotizacion Telefono telefono whatsapp promocion jaladera Jaladera jaladeras Jaladeras tornillería Silicón categoria bano economico descripcion triplay Triplay buro buró Buró burós pzas Vidrieria Carpinteria zoclo herrajes melamina merma cotizador metalnes
+import { useRef, useState } from 'react';
 import {
   Accessibility,
-  Archive,
   Box,
-  Calculator,
   ClipboardList,
-  DoorOpen,
   Eraser,
   FileText,
-  Hammer,
   History,
-  LayoutDashboard,
   MessageCircle,
-  Package,
   RefreshCw,
   Ruler,
-  Scissors,
-  Sparkles,
-  Store,
-  TableProperties,
-  UserCheck,
 } from 'lucide-react';
 import AuthGate from '../components/auth/AuthGate.jsx';
 import UserSessionCard from '../components/auth/UserSessionCard.jsx';
@@ -54,6 +43,7 @@ import useProduction from '../hooks/useProduction.js';
 import useQuickCalculator from '../hooks/useQuickCalculator.js';
 import usePlanEditor from '../hooks/usePlanEditor.js';
 import useCatalog from '../hooks/useCatalog.js';
+import useNavigation from '../hooks/useNavigation.js';
 import {
   Materials,
   Pricing,
@@ -320,33 +310,14 @@ function App() {
   });
   productionQuoteSyncRef.current = syncProductionOrderFromQuote;
 
-  const menuItems = [
-    { id: 'inicio', label: 'Inicio', icon: LayoutDashboard },
-    { id: 'anuncio', label: 'Anuncio', icon: Package },
-    { id: 'cotizador-rellenado', label: 'Cotizador rellenado', icon: FileText },
-    { id: 'cotizador', label: 'Cotizador', icon: Calculator },
-    { id: 'produccion', label: 'Producción', icon: ClipboardList },
-    { id: 'compras', label: 'Compras', icon: Store },
-    { id: 'recepcion', label: 'Recepción', icon: DoorOpen },
-    { id: 'inventario', label: 'Inventario', icon: Archive },
-    { id: 'fabricacion', label: 'Fabricación', icon: Hammer },
-    { id: 'corte', label: 'Cut Optimizer', icon: Scissors },
-    { id: 'catalogo', label: 'Catálogo', icon: TableProperties },
-    { id: 'historial', label: 'Historial', icon: History },
-    { id: 'textos', label: 'Textos', icon: Sparkles },
-    { id: 'ajustes', label: 'Ajustes', icon: Accessibility },
-  ].filter((item) => canAccessSection(currentWorkspaceRole, item.id));
-
-  if (canManageWorkspaceAccess) {
-    menuItems.push({ id: 'solicitudes-acceso', label: 'Solicitudes', icon: UserCheck });
-  }
-
-  useEffect(() => {
-    const allowed = activeSection === 'solicitudes-acceso'
-      ? canManageWorkspaceAccess
-      : canAccessSection(currentWorkspaceRole, activeSection);
-    if (currentWorkspaceRole && !allowed) setActiveSection('inicio');
-  }, [activeSection, canManageWorkspaceAccess, currentWorkspaceRole]);
+  const {
+    menuItems,
+  } = useNavigation({
+    activeSection,
+    setActiveSection,
+    currentWorkspaceRole,
+    canManageWorkspaceAccess,
+  });
 
   function startSummaryDrag(event) {
     if (event.target.closest('button')) return;
