@@ -1,5 +1,5 @@
 // cSpell:words ALUXOR AnunciaPro anunciapro aluxor Clóset clóset clósets Cotizacion cotizacion Telefono telefono whatsapp promocion jaladera Jaladera jaladeras Jaladeras tornillería Silicón categoria bano economico descripcion triplay Triplay buro buró Buró burós pzas Vidrieria Carpinteria zoclo herrajes melamina merma cotizador metalness
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Accessibility,
   Archive,
@@ -53,6 +53,7 @@ import useQuotes from '../hooks/useQuotes.js';
 import useProduction from '../hooks/useProduction.js';
 import useQuickCalculator from '../hooks/useQuickCalculator.js';
 import usePlanEditor from '../hooks/usePlanEditor.js';
+import useCatalog from '../hooks/useCatalog.js';
 import {
   Materials,
   Pricing,
@@ -90,12 +91,14 @@ import {
 } from './config/helpers.js';
 
 function App() {
-  const [catalog, setCatalog] = useState(catalogDefaults);
   const [largeText, setLargeText] = useState(false);
   const [activeSection, setActiveSection] = useState('inicio');
-  const [typeDetails, setTypeDetails] = useState(defaultTypeDetails);
   const [floatingSummary, setFloatingSummary] = useState({ x: 24, y: 120, compact: false, minimized: false });
   const authWorkspaceRefreshRef = useRef(null);
+  const catalogHydrationRef = useRef({
+    setCatalog: () => {},
+    setTypeDetails: () => {},
+  });
   const productionQuoteSyncRef = useRef(null);
   const {
     authSession,
@@ -128,8 +131,8 @@ function App() {
     authSession,
     catalogDefaults,
     defaultTypeDetails,
-    setCatalog,
-    setTypeDetails,
+    setCatalog: (...args) => catalogHydrationRef.current.setCatalog(...args),
+    setTypeDetails: (...args) => catalogHydrationRef.current.setTypeDetails(...args),
     StorageEngine,
   });
   authWorkspaceRefreshRef.current = refreshWorkspace;
@@ -205,6 +208,37 @@ function App() {
       productionQuoteSyncRef.current?.(...args)
     ),
   });
+  const {
+    catalog,
+    setCatalog,
+    typeDetails,
+    setTypeDetails,
+    currentTypeOptions,
+    addTypeDetail,
+    updateTypeDetail,
+    removeTypeDetail,
+    updateCatalogItem,
+    addCatalogItem,
+    removeCatalogItem,
+    applyCatalogItem,
+  } = useCatalog({
+    form,
+    setForm,
+    setActiveSection,
+    activeWorkspace,
+    hydratedWorkspaceId,
+    catalogDefaults,
+    defaultTypeDetails,
+    StorageEngine,
+    normalizeCatalogItem,
+    numberValue,
+    formatDimensions,
+    typeOptionsFor,
+  });
+  catalogHydrationRef.current = {
+    setCatalog,
+    setTypeDetails,
+  };
   const quickCalculator = useQuickCalculator({
     form,
     setForm,
@@ -286,7 +320,6 @@ function App() {
   });
   productionQuoteSyncRef.current = syncProductionOrderFromQuote;
 
-  const currentTypeOptions = typeOptionsFor(form.giro, typeDetails);
   const menuItems = [
     { id: 'inicio', label: 'Inicio', icon: LayoutDashboard },
     { id: 'anuncio', label: 'Anuncio', icon: Package },
@@ -314,94 +347,6 @@ function App() {
       : canAccessSection(currentWorkspaceRole, activeSection);
     if (currentWorkspaceRole && !allowed) setActiveSection('inicio');
   }, [activeSection, canManageWorkspaceAccess, currentWorkspaceRole]);
-
-  useEffect(() => {
-    if (!activeWorkspace?.id || hydratedWorkspaceId !== activeWorkspace.id) return;
-    StorageEngine.saveCatalog(catalog);
-  }, [activeWorkspace?.id, catalog, hydratedWorkspaceId]);
-
-  useEffect(() => {
-    if (!activeWorkspace?.id || hydratedWorkspaceId !== activeWorkspace.id) return;
-    StorageEngine.saveTypeDetails(typeDetails);
-  }, [activeWorkspace?.id, hydratedWorkspaceId, typeDetails]);
-
-  function addTypeDetail() {
-    setTypeDetails((items) => [
-      ...items,
-      {
-        id: `tipo-${Date.now()}`,
-        giro: form.giro,
-        tipo: form.giro === 'Vidriería' ? 'Nuevo tipo de vidrio' : 'Nuevo tipo de mueble',
-        descripcion: 'Describe cuándo se usa este tipo.',
-      },
-    ]);
-  }
-
-  function updateTypeDetail(id, field, value) {
-    setTypeDetails((items) => items.map((item) => (
-      item.id === id ? { ...item, [field]: value } : item
-    )));
-  }
-
-  function removeTypeDetail(id) {
-    setTypeDetails((items) => items.filter((item) => item.id !== id));
-  }
-
-  function updateCatalogItem(id, field, value) {
-    setCatalog((items) => items.map((item) => (
-      item.id === id ? { ...item, [field]: value } : item
-    )));
-  }
-
-  function addCatalogItem() {
-    setCatalog((items) => [
-      ...items,
-      normalizeCatalogItem({
-        id: `cat-${Date.now()}`,
-        categoria: form.giro,
-        tipoTrabajo: form.tipoTrabajo,
-        nombre: form.producto || 'Nuevo producto',
-        materialCotizacion: form.materialCotizacion,
-        herrajes: form.herrajes,
-        unidad: 'm²',
-        costo: numberValue(form.costoMaterialM2),
-        precio: numberValue(form.precioM2),
-        costoHerrajes: numberValue(form.costoHerrajes),
-        precioHerrajes: numberValue(form.precioHerrajes),
-        merma: numberValue(form.merma),
-        manoObra: numberValue(form.manoObra),
-        extras: numberValue(form.extras),
-      }),
-    ]);
-  }
-
-  function removeCatalogItem(id) {
-    setCatalog((items) => items.filter((item) => item.id !== id));
-  }
-
-  function applyCatalogItem(item) {
-    const next = {
-      ...form,
-      giro: item.categoria || form.giro,
-      tipoTrabajo: item.tipoTrabajo || form.tipoTrabajo,
-      producto: item.nombre || form.producto,
-      materialCotizacion: item.materialCotizacion || form.materialCotizacion,
-      herrajes: item.herrajes || form.herrajes,
-      costoMaterialM2: numberValue(item.costo),
-      precioM2: numberValue(item.precio),
-      costoHerrajes: numberValue(item.costoHerrajes),
-      precioHerrajes: numberValue(item.precioHerrajes),
-      merma: numberValue(item.merma),
-      manoObra: numberValue(item.manoObra),
-      extras: numberValue(item.extras),
-    };
-
-    setForm({
-      ...next,
-      medidas: formatDimensions(next),
-    });
-    setActiveSection('cotizador');
-  }
 
   function startSummaryDrag(event) {
     if (event.target.closest('button')) return;
