@@ -49,6 +49,148 @@ import {
   withQuoteFormValue,
 } from '../app/config/helpers.js';
 
+export function createCleanQuoteForm(baseDefaults) {
+  const cleanDefaults = typeof structuredClone === 'function'
+    ? structuredClone(baseDefaults)
+    : JSON.parse(JSON.stringify(baseDefaults));
+
+  return {
+    ...cleanDefaults,
+    giro: '',
+    tipoTrabajo: '',
+    producto: '',
+    material: '',
+    medidas: '',
+    acabado: '',
+    precioManual: '',
+    clienteNombre: '',
+    clienteTelefono: '',
+    ciudad: '',
+    whatsapp: '',
+    beneficio: '',
+    incluye: '',
+    entrega: '',
+    promocion: '',
+    objetivo: '',
+    ancho: 0,
+    alto: 0,
+    fondo: 0,
+    grosorMaterial: 0,
+    cantidad: 0,
+    measureItems: [],
+    materialCotizacion: '',
+    precioM2: 0,
+    costoMaterialM2: 0,
+    merma: 0,
+    margenMaterial: 0,
+    herrajes: '',
+    costoHerrajes: 0,
+    precioHerrajes: 0,
+    manoObra: 0,
+    extras: 0,
+    descuento: 0,
+    anticipo: 0,
+    vigencia: 0,
+    condiciones: '',
+    folioManual: '',
+    estadoCotizacion: 'Pendiente',
+    formaPago: '',
+    notasCliente: '',
+    notasInternas: '',
+    materialItems: [],
+    accessoryItems: [],
+    planItems: [],
+  };
+}
+
+export function isCurrentQuoteEditSession(editSessionRef, editSession) {
+  return editSessionRef.current === editSession;
+}
+
+export function canScheduleQuoteAutoSave(autoSaveSuppressed, activeSection) {
+  return !autoSaveSuppressed
+    && ['cotizador', 'cotizador-rellenado'].includes(activeSection);
+}
+
+export function hasRealQuoteFormChanges(confirmedForm, currentForm) {
+  return quoteFormChanges(confirmedForm, currentForm).size > 0;
+}
+
+export function invalidateQuoteAsyncWork({
+  editSessionRef,
+  saveOperationRef,
+  autoSaveTimerRef,
+  realtimeDebounceRef,
+  clearTimeout: clearScheduledTimeout,
+}) {
+  editSessionRef.current += 1;
+  saveOperationRef.current = null;
+
+  if (autoSaveTimerRef.current !== null) {
+    clearScheduledTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = null;
+  }
+
+  if (realtimeDebounceRef.current !== null) {
+    clearScheduledTimeout(realtimeDebounceRef.current);
+    realtimeDebounceRef.current = null;
+  }
+
+  return editSessionRef.current;
+}
+
+export function resetQuoteEditingState({
+  baseDefaults,
+  refs,
+  setters,
+  clearTimeout: clearScheduledTimeout,
+}) {
+  invalidateQuoteAsyncWork({
+    editSessionRef: refs.editSession,
+    saveOperationRef: refs.saveOperation,
+    autoSaveTimerRef: refs.autoSaveTimer,
+    realtimeDebounceRef: refs.realtimeDebounce,
+    clearTimeout: clearScheduledTimeout,
+  });
+
+  const cleanForm = createCleanQuoteForm(baseDefaults);
+
+  refs.saveInFlight.current = false;
+  refs.autoSavePending.current = false;
+  refs.autoSaveConflictRetry.current = false;
+  refs.autoSaveSuppressed.current = true;
+  refs.realtimeReloadPending.current = false;
+  refs.realtimePendingRow.current = null;
+  refs.realtimeNeedsReload.current = false;
+  refs.remoteApply.current = false;
+  refs.remoteRequest.current = {
+    id: refs.remoteRequest.current.id + 1,
+    inFlight: false,
+    pending: false,
+    pendingPreserveStatus: false,
+    preserveCurrentStatus: false,
+  };
+  refs.latestForm.current = cleanForm;
+  refs.lastConfirmedForm.current = cleanForm;
+  refs.dirtyFields.current.clear();
+  refs.fieldConflicts.current.clear();
+  refs.remoteBuffer.current = { fields: new Map(), pendingRow: null };
+  refs.focusedField.current = null;
+  refs.activeIdentity.current = null;
+
+  setters.setForm(cleanForm);
+  setters.setSelectedHistoryPreview(null);
+  setters.setActiveQuoteIdentity(null);
+  setters.setPdfEditor(null);
+  setters.setQuoteCollaborators([]);
+  setters.setQuotePresenceStatus('CLOSED');
+  setters.publishQuoteFieldConflicts();
+  setters.setQuoteCollaborationStatus('Sincronizado');
+  setters.setSyncStatus('Nueva cotización sin guardar');
+
+  return cleanForm;
+}
+
 export default function useQuotes({
   authSession,
   activeWorkspace,
@@ -71,9 +213,12 @@ export default function useQuotes({
   });
   const supabaseTransportActiveRef = useRef(false);
   const quoteSaveInFlightRef = useRef(false);
+  const quoteSaveOperationRef = useRef(null);
+  const quoteEditSessionRef = useRef(0);
   const quoteAutoSaveTimerRef = useRef(null);
   const quoteAutoSavePendingRef = useRef(false);
   const quoteAutoSaveInitializedRef = useRef(false);
+  const quoteAutoSaveSuppressedRef = useRef(false);
   const quoteAutoSaveConflictRetryRef = useRef(false);
   const quoteRealtimeReloadPendingRef = useRef(false);
   const dirtyQuoteFieldsRef = useRef(new Set());
@@ -165,6 +310,9 @@ export default function useQuotes({
     quoteFormChanges(previousForm, nextForm).forEach((_, fieldPath) => {
       dirtyQuoteFieldsRef.current.add(fieldPath);
     });
+    if (dirtyQuoteFieldsRef.current.size > 0) {
+      quoteAutoSaveSuppressedRef.current = false;
+    }
     latestQuoteFormRef.current = nextForm;
   }
 
@@ -215,7 +363,14 @@ export default function useQuotes({
     setQuoteCollaborationStatus('Sincronizado');
   }
 
-  function applyRemoteQuoteRow(row, { ignoreSaveLock = false } = {}) {
+  function applyRemoteQuoteRow(row, {
+    ignoreSaveLock = false,
+    editSession = quoteEditSessionRef.current,
+  } = {}) {
+    if (!isCurrentQuoteEditSession(quoteEditSessionRef, editSession)) {
+      return { applied: false, hasConflicts: false };
+    }
+
     const activeIdentity = activeQuoteIdentityRef.current;
     if (!row?.id || row.id !== activeIdentity?.id) {
       return { applied: false, hasConflicts: false };
@@ -656,6 +811,7 @@ export default function useQuotes({
     const unsubscribe = QuoteRepository.subscribeQuotes(
       workspaceId,
       (payload) => {
+        const eventEditSession = quoteEditSessionRef.current;
         const remoteRow = payload?.new?.id
           ? payload.new
           : null;
@@ -701,6 +857,10 @@ export default function useQuotes({
           window.setTimeout(() => {
             quoteRealtimeDebounceRef.current = null;
 
+            if (!isCurrentQuoteEditSession(quoteEditSessionRef, eventEditSession)) {
+              return;
+            }
+
             const pendingRow =
               quoteRealtimePendingRowRef.current;
 
@@ -738,7 +898,7 @@ export default function useQuotes({
                 );
               } else {
                 const mergeResult =
-                  applyRemoteQuoteRow(pendingRow);
+                  applyRemoteQuoteRow(pendingRow, { editSession: eventEditSession });
 
                 if (!mergeResult.applied) {
                   quoteRealtimeNeedsReloadRef.current =
@@ -790,6 +950,7 @@ export default function useQuotes({
   useEffect(() => {
     const user = authSession?.user;
     const workspaceId = activeWorkspace?.id;
+    const editSession = quoteEditSessionRef.current;
 
     const quoteId =
       activeQuoteIdentity?.remote
@@ -817,6 +978,7 @@ export default function useQuotes({
             || 'Usuario',
         },
         onSync: (collaborators) => {
+          if (!isCurrentQuoteEditSession(quoteEditSessionRef, editSession)) return;
           const uniqueByUser = new Map();
 
           collaborators.forEach((collaborator) => {
@@ -833,6 +995,7 @@ export default function useQuotes({
           );
         },
         onStatus: (status) => {
+          if (!isCurrentQuoteEditSession(quoteEditSessionRef, editSession)) return;
           setQuotePresenceStatus(status);
         },
       });
@@ -1377,7 +1540,10 @@ export default function useQuotes({
   async function resolveQuoteConflict(
     localItem,
     queuedOperation = null,
-    { allowPrompt = false } = {},
+    {
+      allowPrompt = false,
+      editSession = quoteEditSessionRef.current,
+    } = {},
   ) {
     if (!localItem?.id) return false;
 
@@ -1393,6 +1559,7 @@ export default function useQuotes({
 
     setSyncStatus('La cotización fue modificada desde otro dispositivo.');
     await new Promise((resolve) => window.setTimeout(resolve, 0));
+    if (!isCurrentQuoteEditSession(quoteEditSessionRef, editSession)) return false;
 
     const keepRemote = window.confirm(
       'La cotización fue modificada desde otro dispositivo.\n\nAceptar: usar versión remota.\nCancelar: conservar la mía.'
@@ -1400,6 +1567,8 @@ export default function useQuotes({
     const result = keepRemote
       ? await ConflictResolver.resolveKeepRemote(localItem)
       : await ConflictResolver.resolveKeepLocal(localItem);
+
+    if (!isCurrentQuoteEditSession(quoteEditSessionRef, editSession)) return false;
 
     if (result.error || !result.data) {
       if (queuedOperation?.id) {
@@ -1692,6 +1861,7 @@ export default function useQuotes({
     const silent = Boolean(options.silent);
     const autoConflictRetry = Boolean(options.autoConflictRetry);
     const navigateToHistory = !silent && options.navigateToHistory !== false;
+    const editSession = quoteEditSessionRef.current;
 
     if (quoteSaveInFlightRef.current) {
       if (silent) {
@@ -1725,6 +1895,8 @@ export default function useQuotes({
     }
 
     quoteSaveInFlightRef.current = true;
+    const saveOperation = { editSession };
+    quoteSaveOperationRef.current = saveOperation;
     setQuoteCollaborationStatus('Guardando…');
 
     const now = Date.now();
@@ -1801,7 +1973,11 @@ export default function useQuotes({
 
     if (!workspaceId) {
       quoteSaveInFlightRef.current = false;
-    void Promise.resolve(legacySave).finally(() => {        setSyncStatus('Guardada localmente · esperando conexión al workspace');
+      quoteSaveOperationRef.current = null;
+    void Promise.resolve(legacySave).finally(() => {
+        if (isCurrentQuoteEditSession(quoteEditSessionRef, editSession)) {
+          setSyncStatus('Guardada localmente · esperando conexión al workspace');
+        }
       });
       return;
     }
@@ -1818,8 +1994,11 @@ export default function useQuotes({
 
     if (payloadError || !payload) {
       quoteSaveInFlightRef.current = false;
+      quoteSaveOperationRef.current = null;
       void Promise.resolve(legacySave).finally(() => {
-        setSyncStatus('Guardada localmente · pendiente de sincronizar');
+        if (isCurrentQuoteEditSession(quoteEditSessionRef, editSession)) {
+          setSyncStatus('Guardada localmente · pendiente de sincronizar');
+        }
       });
       return;
     }
@@ -1833,6 +2012,7 @@ export default function useQuotes({
         payload,
       });
       quoteSaveInFlightRef.current = false;
+      quoteSaveOperationRef.current = null;
       setSyncStatus('Guardada localmente · pendiente de sincronizar');
       return;
     }
@@ -1845,6 +2025,9 @@ export default function useQuotes({
       )
       : (async () => {
         const firstAttempt = await QuoteRepository.createQuote(workspaceId, payload);
+        if (!isCurrentQuoteEditSession(quoteEditSessionRef, editSession)) {
+          return firstAttempt;
+        }
         if (!isWorkspaceFolioConflict(firstAttempt.error)) return firstAttempt;
 
         warnCreateQuoteError(firstAttempt.error);
@@ -1854,6 +2037,9 @@ export default function useQuotes({
           data: remoteQuotes,
           error: remoteQuotesError,
         } = await QuoteRepository.loadQuotes(workspaceId);
+        if (!isCurrentQuoteEditSession(quoteEditSessionRef, editSession)) {
+          return { data: null, error: remoteQuotesError };
+        }
         if (remoteQuotesError) return { data: null, error: remoteQuotesError };
 
         const existingRow = (Array.isArray(remoteQuotes) ? remoteQuotes : [])
@@ -1894,6 +2080,35 @@ export default function useQuotes({
 
     void remoteSave
       .then(async ({ data, error }) => {
+        if (!isCurrentQuoteEditSession(quoteEditSessionRef, editSession)) {
+          if (data) {
+            const remoteItem = QuoteAdapter.quoteRowToHistoryItem(data);
+            const remoteHistory = HistoryEngine.mergeHistoryItems(
+              [remoteItem],
+              historyRef.current.filter((historyItem) => (
+                historyItem.id !== item.id && historyItem.id !== remoteItem.id
+              )),
+            );
+            historyRef.current = remoteHistory;
+            setHistory(remoteHistory);
+            StorageEngine.saveHistory(remoteHistory);
+            removeQueuedQuoteOperations(
+              hasRemoteIdentity ? 'update' : 'create',
+              workspaceId,
+              item.id,
+            );
+          } else if (isNetworkError(error)) {
+            enqueueOfflineQuoteOperation({
+              type: hasRemoteIdentity ? 'update' : 'create',
+              workspaceId,
+              quoteId: item.id,
+              expectedVersion: currentIdentity?.version || null,
+              payload,
+            });
+          }
+          return;
+        }
+
         if (error?.code === 'QUOTE_VERSION_CONFLICT') {
           let queuedOperation = enqueueOfflineQuoteOperation({
             type: 'update',
@@ -1905,6 +2120,7 @@ export default function useQuotes({
 
           if (silent) {
             const remoteResult = await QuoteRepository.getQuote(item.id);
+            if (!isCurrentQuoteEditSession(quoteEditSessionRef, editSession)) return;
             const remoteMatchesPreviousSave = !remoteResult.error
               && remoteResult.data
               && queuedCreateMatchesRow(remoteResult.data, payload);
@@ -2013,7 +2229,10 @@ export default function useQuotes({
             OfflineQueue.updateOperation(queuedOperation.id, { conflict: true });
             refreshPendingOfflineCount();
           }
-          await resolveQuoteConflict(item, queuedOperation, { allowPrompt: true });
+          await resolveQuoteConflict(item, queuedOperation, {
+            allowPrompt: true,
+            editSession,
+          });
           return;
         }
 
@@ -2101,6 +2320,19 @@ export default function useQuotes({
         }
       })
       .catch((error) => {
+        if (!isCurrentQuoteEditSession(quoteEditSessionRef, editSession)) {
+          if (isNetworkError(error)) {
+            enqueueOfflineQuoteOperation({
+              type: hasRemoteIdentity ? 'update' : 'create',
+              workspaceId,
+              quoteId: item.id,
+              expectedVersion: currentIdentity?.version || null,
+              payload,
+            });
+          }
+          return;
+        }
+
         if (isNetworkError(error)) {
           if (!hasRemoteIdentity) warnCreateQuoteError(error);
           enqueueOfflineQuoteOperation({
@@ -2124,6 +2356,9 @@ export default function useQuotes({
         );
       })
       .finally(() => {
+        if (quoteSaveOperationRef.current !== saveOperation) return;
+
+        quoteSaveOperationRef.current = null;
         quoteSaveInFlightRef.current = false;
         const hasPendingAutoSave = quoteAutoSavePendingRef.current;
         quoteAutoSavePendingRef.current = false;
@@ -2135,6 +2370,7 @@ export default function useQuotes({
           quoteAutoSaveConflictRetryRef.current = false;
 
           queueMicrotask(() => {
+            if (!isCurrentQuoteEditSession(quoteEditSessionRef, editSession)) return;
             saveToHistory({
               silent: true,
               autoConflictRetry: autoConflictRetryPending,
@@ -2223,7 +2459,17 @@ export default function useQuotes({
       return undefined;
     }
 
-    if (!['cotizador', 'cotizador-rellenado'].includes(activeSection)) return undefined;
+    if (
+      quoteAutoSaveSuppressedRef.current
+      && hasRealQuoteFormChanges(lastConfirmedQuoteFormRef.current, form)
+    ) {
+      quoteAutoSaveSuppressedRef.current = false;
+    }
+
+    if (!canScheduleQuoteAutoSave(
+      quoteAutoSaveSuppressedRef.current,
+      activeSection,
+    )) return undefined;
 
     if (quoteAutoSaveTimerRef.current !== null) {
       window.clearTimeout(quoteAutoSaveTimerRef.current);
@@ -2286,6 +2532,7 @@ export default function useQuotes({
     setActiveSection('cotizador');
   }
   async function openQuoteFromProduction(order) {
+    const editSession = quoteEditSessionRef.current;
     const references = quoteReferencesFromProductionOrder(order);
     let relatedQuote = findQuoteByReferences(historyRef.current, references);
 
@@ -2295,6 +2542,7 @@ export default function useQuotes({
       for (const reference of references) {
         if (!isRemoteQuoteId(reference)) continue;
         const directResult = await QuoteRepository.getQuote(reference);
+        if (!isCurrentQuoteEditSession(quoteEditSessionRef, editSession)) return false;
         if (directResult.data && !directResult.data.deleted_at) {
           relatedRow = directResult.data;
           break;
@@ -2303,6 +2551,7 @@ export default function useQuotes({
 
       if (!relatedRow) {
         const remoteResult = await QuoteRepository.loadQuotes(activeWorkspace.id);
+        if (!isCurrentQuoteEditSession(quoteEditSessionRef, editSession)) return false;
         relatedRow = !remoteResult.error
           ? findQuoteByReferences(remoteResult.data, references)
           : null;
@@ -2316,6 +2565,7 @@ export default function useQuotes({
       return false;
     }
 
+    if (!isCurrentQuoteEditSession(quoteEditSessionRef, editSession)) return false;
     loadHistoryItem(relatedQuote);
     return true;
   }
@@ -2325,27 +2575,48 @@ export default function useQuotes({
       '¿Comenzar una nueva cotización?\n\nSe limpiarán los datos de la cotización actual. Esta acción no elimina historial, catálogo, precios ni configuración.'
     );
 
-    if (!confirmed) return;
+    if (!confirmed) return false;
 
-    const nextDefaults =
-      typeof structuredClone === 'function'
-        ? structuredClone(defaults)
-        : JSON.parse(JSON.stringify(defaults));
-
-    setForm(nextDefaults);
-    latestQuoteFormRef.current = nextDefaults;
-    lastConfirmedQuoteFormRef.current = nextDefaults;
-    dirtyQuoteFieldsRef.current.clear();
-    quoteFieldConflictsRef.current.clear();
-    remoteQuoteBufferRef.current = { fields: new Map(), pendingRow: null };
-    focusedQuoteFieldRef.current = null;
-    setSelectedHistoryPreview(null);
-    activeQuoteIdentityRef.current = null;
-    setActiveQuoteIdentity(null);
-    publishQuoteFieldConflicts();
-    setQuoteCollaborationStatus('Sincronizado');
+    resetQuoteEditingState({
+      baseDefaults: defaults,
+      refs: {
+        editSession: quoteEditSessionRef,
+        saveOperation: quoteSaveOperationRef,
+        saveInFlight: quoteSaveInFlightRef,
+        autoSaveTimer: quoteAutoSaveTimerRef,
+        autoSavePending: quoteAutoSavePendingRef,
+        autoSaveConflictRetry: quoteAutoSaveConflictRetryRef,
+        autoSaveSuppressed: quoteAutoSaveSuppressedRef,
+        realtimeDebounce: quoteRealtimeDebounceRef,
+        realtimeReloadPending: quoteRealtimeReloadPendingRef,
+        realtimePendingRow: quoteRealtimePendingRowRef,
+        realtimeNeedsReload: quoteRealtimeNeedsReloadRef,
+        remoteApply: quoteRemoteApplyRef,
+        remoteRequest: remoteQuotesRequestRef,
+        latestForm: latestQuoteFormRef,
+        lastConfirmedForm: lastConfirmedQuoteFormRef,
+        dirtyFields: dirtyQuoteFieldsRef,
+        fieldConflicts: quoteFieldConflictsRef,
+        remoteBuffer: remoteQuoteBufferRef,
+        focusedField: focusedQuoteFieldRef,
+        activeIdentity: activeQuoteIdentityRef,
+      },
+      setters: {
+        setForm,
+        setSelectedHistoryPreview,
+        setActiveQuoteIdentity,
+        setPdfEditor,
+        setQuoteCollaborators,
+        setQuotePresenceStatus,
+        publishQuoteFieldConflicts,
+        setQuoteCollaborationStatus,
+        setSyncStatus,
+      },
+      clearTimeout: window.clearTimeout.bind(window),
+    });
     setActiveSection('cotizador');
     setCopied('Nueva cotización lista');
+    return true;
   }
 
   function removeHistoryItem(id) {
@@ -2484,6 +2755,7 @@ export default function useQuotes({
   }
 
   async function updateHistoryStatus(id, nextStatus) {
+    const editSession = quoteEditSessionRef.current;
     const previousItem = historyRef.current.find((item) => item.id === id);
     if (!previousItem) return;
 
@@ -2563,15 +2835,19 @@ export default function useQuotes({
 
       if (error?.code === 'QUOTE_VERSION_CONFLICT') {
         enqueueStatusUpdate(true);
-        setSyncStatus('Conflicto de versión · requiere revisión');
+        if (isCurrentQuoteEditSession(quoteEditSessionRef, editSession)) {
+          setSyncStatus('Conflicto de versión · requiere revisión');
+        }
         return;
       }
 
       if (error || !data) {
         if (isNetworkError(error)) {
           enqueueStatusUpdate();
-          setSyncStatus('Estado guardado localmente · pendiente de sincronizar');
-        } else {
+          if (isCurrentQuoteEditSession(quoteEditSessionRef, editSession)) {
+            setSyncStatus('Estado guardado localmente · pendiente de sincronizar');
+          }
+        } else if (isCurrentQuoteEditSession(quoteEditSessionRef, editSession)) {
           setSyncStatus('Estado actualizado localmente');
         }
         return;
@@ -2593,20 +2869,23 @@ export default function useQuotes({
       historyRef.current = confirmedHistory;
       setHistory(confirmedHistory);
       StorageEngine.saveHistory(confirmedHistory);
-      setForm((current) => (
-        activeQuoteIdentity?.id === id
-          ? { ...current, estadoCotizacion: confirmedItem.estadoCotizacion }
-          : current
-      ));
-      setActiveQuoteIdentity((current) => (
-        current?.id === id
-          ? { ...current, version: confirmedItem.version }
-          : current
-      ));
-      setSelectedHistoryPreview((current) => (
-        current?.id === id ? { ...confirmedItem } : current
-      ));
+      if (isCurrentQuoteEditSession(quoteEditSessionRef, editSession)) {
+        setForm((current) => (
+          activeQuoteIdentityRef.current?.id === id
+            ? { ...current, estadoCotizacion: confirmedItem.estadoCotizacion }
+            : current
+        ));
+        setActiveQuoteIdentity((current) => (
+          current?.id === id
+            ? { ...current, version: confirmedItem.version }
+            : current
+        ));
+        setSelectedHistoryPreview((current) => (
+          current?.id === id ? { ...confirmedItem } : current
+        ));
+      }
       removeQueuedQuoteOperations('update', workspaceId, id);
+      if (!isCurrentQuoteEditSession(quoteEditSessionRef, editSession)) return;
       setLastSyncAt(
         new Date().toLocaleTimeString('es-MX', {
           hour: '2-digit',
@@ -2618,8 +2897,10 @@ export default function useQuotes({
     } catch (error) {
       if (isNetworkError(error)) {
         enqueueStatusUpdate();
-        setSyncStatus('Estado guardado localmente · pendiente de sincronizar');
-      } else {
+        if (isCurrentQuoteEditSession(quoteEditSessionRef, editSession)) {
+          setSyncStatus('Estado guardado localmente · pendiente de sincronizar');
+        }
+      } else if (isCurrentQuoteEditSession(quoteEditSessionRef, editSession)) {
         setSyncStatus('Estado actualizado localmente');
       }
     }

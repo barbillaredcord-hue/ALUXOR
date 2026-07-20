@@ -79,6 +79,15 @@ import {
   refreshInstalledApp,
   typeOptionsFor,
 } from './config/helpers.js';
+export function startNewQuoteAndClearProductionSelection(
+  startNewQuote,
+  setSelectedProductionOrderId,
+) {
+  const started = startNewQuote();
+  if (!started) return false;
+  setSelectedProductionOrderId(null);
+  return true;
+}
 
 function App() {
   const [largeText, setLargeText] = useState(false);
@@ -309,7 +318,12 @@ function App() {
     setActiveSection,
   });
   productionQuoteSyncRef.current = syncProductionOrderFromQuote;
-
+  function handleStartNewQuote() {
+    startNewQuoteAndClearProductionSelection(
+      startNewQuote,
+      setSelectedProductionOrderId,
+    );
+  }
   const {
     menuItems,
   } = useNavigation({
@@ -484,7 +498,7 @@ function App() {
           <div className="hero-actions hero-actions-compact">
             <button type="button" className="ghost" onClick={refreshInstalledApp}><RefreshCw size={16} /> Actualizar</button>
             {canEditWorkspaceQuotes && (
-              <button type="button" className="ghost" onClick={startNewQuote}><History size={16} /> Nueva cotización</button>
+              <button type="button" className="ghost" onClick={handleStartNewQuote}><History size={16} /> Nueva cotización</button>
             )}
             {canEditWorkspaceQuotes && ['cotizador', 'cotizador-rellenado'].includes(activeSection) && activeQuoteIdentity && (
               <button
