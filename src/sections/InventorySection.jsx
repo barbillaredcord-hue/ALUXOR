@@ -1,5 +1,11 @@
 import { Archive, PackageSearch } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import {
+  getInventoryMissingQuantity,
+  getInventoryStatus,
+  getInventorySummary,
+  normalizeInventoryQuantity,
+} from '../lib/inventory/inventorySummary.js';
 
 function normalizeGroup(value = '') {
   const label = String(value || '').toLowerCase();
@@ -42,20 +48,14 @@ export default function InventorySection({ form, quote, money, decimal }) {
   ].filter((item) => item.name), [quote, decimal]);
 
   const [available, setAvailable] = useState({});
-  const availableFor = (id) => Number(available[id] || 0);
-  const statusFor = (item) => {
-    const current = availableFor(item.id);
-    if (current >= item.required) return 'Disponible';
-    if (current > 0) return 'Bajo';
-    return 'Faltante';
-  };
-  const missingFor = (item) => Math.max(0, item.required - availableFor(item.id));
-  const counts = items.reduce((acc, item) => {
-    acc[statusFor(item)] += 1;
-    return acc;
-  }, { Disponible: 0, Bajo: 0, Faltante: 0 });
+  const availableFor = (id) => normalizeInventoryQuantity(available[id]);
+  const statusFor = (item) => getInventoryStatus(item.required, availableFor(item.id));
+  const missingFor = (item) => getInventoryMissingQuantity(
+    item.required,
+    availableFor(item.id)
+  );
+  const summary = getInventorySummary(items, available);
   const missingItems = items.filter((item) => missingFor(item) > 0);
-  const totalValue = items.reduce((sum, item) => sum + Number(item.value || 0), 0);
   const groups = items.reduce((acc, item) => {
     acc[item.category] = [...(acc[item.category] || []), item];
     return acc;
@@ -73,10 +73,10 @@ export default function InventorySection({ form, quote, money, decimal }) {
       </header>
 
       <div className="inventory-stats">
-        <div><span>Items totales</span><strong>{items.length}</strong></div>
-        <div><span>Disponibles</span><strong>{counts.Disponible}</strong></div>
-        <div><span>Faltantes</span><strong>{counts.Faltante + counts.Bajo}</strong></div>
-        <div><span>Valor estimado</span><strong>{money(totalValue)}</strong></div>
+        <div><span>Items totales</span><strong>{summary.total}</strong></div>
+        <div><span>Disponibles</span><strong>{summary.available}</strong></div>
+        <div><span>Faltantes</span><strong>{summary.missing}</strong></div>
+        <div><span>Valor estimado</span><strong>{money(summary.totalValue)}</strong></div>
       </div>
 
       <div className="inventory-layout">
