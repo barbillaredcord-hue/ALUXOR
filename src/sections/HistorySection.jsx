@@ -1,4 +1,5 @@
 import { Download, Eraser, RefreshCw, Upload } from 'lucide-react';
+import { getHistorySummary } from '../lib/history/historySummary.js';
 
 export default function HistorySection({
   syncStatus,
@@ -16,6 +17,7 @@ export default function HistorySection({
   selectHistoryPreview,
   readOnly = false,
 }) {
+  const historySummary = getHistorySummary(history);
 
   return (
     <section className="panel">
@@ -38,7 +40,7 @@ export default function HistorySection({
         )}
       </div>
       <div className="table-list">
-        {history.length === 0 && <p>No hay cotizaciones guardadas todavía.</p>}
+        {historySummary.records === 0 && <p>No hay cotizaciones guardadas todavía.</p>}
         {history.map((item) => (
           <article
             key={item.id}

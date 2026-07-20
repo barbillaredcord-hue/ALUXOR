@@ -1,5 +1,6 @@
 import { CheckCircle2, ClipboardCheck, Clock3, FileCheck2, PackageOpen } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { getReceptionSummary } from '../lib/history/historySummary.js';
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -43,11 +44,8 @@ export default function ReceivingSection({ form, quote, decimal }) {
     setRows(Object.fromEntries(items.map((item) => [item.id, { ...rowFor(item.id), status: 'recibido' }])));
   };
 
-  const counts = items.reduce((acc, item) => {
-    acc[rowFor(item.id).status] += 1;
-    return acc;
-  }, { pendiente: 0, parcial: 0, recibido: 0 });
-  const progress = items.length > 0 ? (counts.recibido / items.length) * 100 : 0;
+  const receptionSummary = getReceptionSummary(items, rows);
+  const progress = receptionSummary.progress;
   const receivedToday = items.filter((item) => rowFor(item.id).status === 'recibido');
 
   const printReceipt = () => {
@@ -79,9 +77,9 @@ export default function ReceivingSection({ form, quote, decimal }) {
       </header>
 
       <div className="receiving-stats">
-        <div><span>Pendientes</span><strong>{counts.pendiente}</strong></div>
-        <div><span>Parciales</span><strong>{counts.parcial}</strong></div>
-        <div><span>Recibidos</span><strong>{counts.recibido}</strong></div>
+        <div><span>Pendientes</span><strong>{receptionSummary.pending}</strong></div>
+        <div><span>Parciales</span><strong>{receptionSummary.partial}</strong></div>
+        <div><span>Recibidos</span><strong>{receptionSummary.received}</strong></div>
         <div><span>Progreso</span><strong>{decimal(progress, 0)}%</strong><div className="receiving-progress"><i style={{ width: `${progress}%` }} /></div></div>
       </div>
 
