@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getFabricationCutPlan } from '../FabricationSection.jsx';
+import { getFabricationCutPlan } from '../../lib/fabrication/fabricationSummary.js';
 
 describe('FabricationSection cut plan', () => {
   it('devuelve estado pendiente si no hay optimizacion', () => {

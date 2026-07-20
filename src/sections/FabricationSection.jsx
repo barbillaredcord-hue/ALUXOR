@@ -1,5 +1,9 @@
 import { Drill, Factory, Hammer, Ruler, Timer, Wrench } from 'lucide-react';
 import { useState } from 'react';
+import {
+  getFabricationCutPlan,
+  getFabricationSummary,
+} from '../lib/fabrication/fabricationSummary.js';
 
 const fabricationChecklist = [
   'Revisar medidas',
@@ -14,23 +18,12 @@ const fabricationChecklist = [
 
 const progressSteps = ['Pendiente', 'Corte', 'Armado', 'Control de calidad', 'Listo para instalar'];
 
-export function getFabricationCutPlan(material) {
-  const optimization = material?.cutOptimization || null;
-  return {
-    optimization,
-    summary: optimization?.summary || null,
-    validation: optimization?.validation || null,
-    placedPieces: optimization?.placedPieces || [],
-    unplacedPieces: optimization?.unplacedPieces || [],
-    status: optimization ? 'ready' : 'pending',
-  };
-}
-
 export default function FabricationSection({ form, quote, decimal }) {
   const [pieceStatus, setPieceStatus] = useState({});
   const [notes, setNotes] = useState('');
   const material = quote.materialRows?.[0];
   const cutPlan = getFabricationCutPlan(material);
+  const fabricationSummary = getFabricationSummary([quote]);
   const { optimization, summary: optimizationSummary, validation: optimizationValidation, placedPieces, unplacedPieces } = cutPlan;
 
   return (
@@ -49,8 +42,8 @@ export default function FabricationSection({ form, quote, decimal }) {
         <div><span>Estado</span><strong>{form.estadoCotizacion || 'Pendiente'}</strong></div>
         <div><span>Responsable</span><strong>Taller ALUXOR</strong></div>
         <div><span>Fecha compromiso</span><strong>{form.entrega || 'Por definir'}</strong></div>
-        <div><span>Plan de corte</span><strong>{optimizationSummary ? `${optimizationSummary.requiredSheets} hoja(s)` : 'Optimización pendiente'}</strong></div>
-        <div><span>Piezas de corte</span><strong>{optimization ? `${placedPieces.length} listas / ${unplacedPieces.length} pendientes` : 'Sin calcular'}</strong></div>
+        <div><span>Plan de corte</span><strong>{optimizationSummary ? `${fabricationSummary.requiredSheets} hoja(s)` : 'Optimización pendiente'}</strong></div>
+        <div><span>Piezas de corte</span><strong>{optimization ? `${fabricationSummary.placedPieces} listas / ${fabricationSummary.unplacedPieces} pendientes` : 'Sin calcular'}</strong></div>
       </div>
 
       <div className="fabrication-layout">
