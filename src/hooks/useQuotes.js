@@ -4,6 +4,10 @@ import { QuoteAdapter } from '../lib/quotes/quoteAdapter.js';
 import { OfflineQueue } from '../lib/quotes/offlineQueue.js';
 import { ConflictResolver } from '../lib/quotes/conflictResolver.js';
 import {
+  findQuoteByReferences,
+  quoteReferencesFromProductionOrder,
+} from '../lib/quotes/quoteReference.js';
+import {
   Pricing,
   Report,
   Quote,
@@ -2281,15 +2285,39 @@ export default function useQuotes({
     setQuoteCollaborationStatus('Sincronizado');
     setActiveSection('cotizador');
   }
-  function openQuoteFromProduction(quoteId) {
-    const relatedQuote = historyRef.current.find((item) => item.id === quoteId);
+  async function openQuoteFromProduction(order) {
+    const references = quoteReferencesFromProductionOrder(order);
+    let relatedQuote = findQuoteByReferences(historyRef.current, references);
+
+    if (!relatedQuote && activeWorkspace?.id && references.length) {
+      let relatedRow = null;
+
+      for (const reference of references) {
+        if (!isRemoteQuoteId(reference)) continue;
+        const directResult = await QuoteRepository.getQuote(reference);
+        if (directResult.data && !directResult.data.deleted_at) {
+          relatedRow = directResult.data;
+          break;
+        }
+      }
+
+      if (!relatedRow) {
+        const remoteResult = await QuoteRepository.loadQuotes(activeWorkspace.id);
+        relatedRow = !remoteResult.error
+          ? findQuoteByReferences(remoteResult.data, references)
+          : null;
+      }
+
+      relatedQuote = relatedRow ? QuoteAdapter.quoteRowToHistoryItem(relatedRow) : null;
+    }
 
     if (!relatedQuote) {
-      setSyncStatus('No se encontró la cotización relacionada.');
-      return;
+      setSyncStatus('La cotización original de esta orden ya no está disponible.');
+      return false;
     }
 
     loadHistoryItem(relatedQuote);
+    return true;
   }
 
   function startNewQuote() {

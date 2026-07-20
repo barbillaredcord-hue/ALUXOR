@@ -131,6 +131,7 @@ export function quoteRowToHistoryItem(row) {
 
   return {
     id: source.id ?? '',
+    legacyId: source.legacy_id ?? source.legacyId ?? '',
     createdAt: timestamp(source.created_at),
     updatedAt: timestamp(source.updated_at),
     status,
