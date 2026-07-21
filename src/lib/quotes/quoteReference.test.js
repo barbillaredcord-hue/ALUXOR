@@ -3,8 +3,12 @@ import { quoteRowToHistoryItem } from './quoteAdapter.js';
 import {
   findQuoteByReference,
   findQuoteByReferences,
+  findQuoteForProductionOrder,
   normalizeQuoteReference,
+  normalizeSharedProjectNote,
+  productionOrderMatchesQuote,
   quoteReferencesFromProductionOrder,
+  resolveSharedProjectNote,
 } from './quoteReference.js';
 
 describe('quoteReference', () => {
@@ -59,6 +63,19 @@ describe('quoteReference', () => {
     expect(findQuoteByReferences(quotes, ['missing'])).toBeNull();
   });
 
+  it('ofrece una resolución única para Summary y Ver cotización', () => {
+    const order = {
+      quoteId: 'missing-current',
+      formSnapshot: { legacy_id: 'legacy-original' },
+    };
+    const quotes = [{ id: 'remote-current', legacyId: 'legacy-original' }];
+
+    expect(findQuoteForProductionOrder(quotes, order)).toBe(quotes[0]);
+    expect(findQuoteForProductionOrder(quotes, order)).toBe(
+      findQuoteByReferences(quotes, quoteReferencesFromProductionOrder(order))
+    );
+  });
+
   it('conserva legacy_id al adaptar una cotización remota', () => {
     const historyItem = quoteRowToHistoryItem({
       id: 'remote-id',
@@ -74,5 +91,46 @@ describe('quoteReference', () => {
     expect(findQuoteByReference([{ id: 'quote-1' }], 'quote-2')).toBeNull();
     expect(findQuoteByReference([{ id: 'quote-1' }], null)).toBeNull();
     expect(findQuoteByReference(null, 'quote-1')).toBeNull();
+  });
+
+  it('normaliza la nota compartida y evita escrituras cuando coincide', () => {
+    expect(normalizeSharedProjectNote('  Nota común  ')).toBe('Nota común');
+    expect(resolveSharedProjectNote({
+      quoteNote: 'Nota común',
+      productionNote: ' Nota común ',
+    })).toMatchObject({
+      value: 'Nota común',
+      quoteNeedsUpdate: false,
+      productionNeedsUpdate: false,
+    });
+  });
+
+  it('no permite que un vacío borre una nota válida', () => {
+    expect(resolveSharedProjectNote({ quoteNote: 'Válida', productionNote: '' }))
+      .toMatchObject({ value: 'Válida', source: 'quote', productionNeedsUpdate: true });
+    expect(resolveSharedProjectNote({ quoteNote: '', productionNote: 'Válida' }))
+      .toMatchObject({ value: 'Válida', source: 'production', quoteNeedsUpdate: true });
+  });
+
+  it('elige el cambio más reciente cuando ambos valores son válidos', () => {
+    expect(resolveSharedProjectNote({
+      quoteNote: 'Cotización',
+      productionNote: 'Producción',
+      quoteUpdatedAt: '2026-07-20T10:00:00.000Z',
+      productionUpdatedAt: '2026-07-20T11:00:00.000Z',
+    }).value).toBe('Producción');
+    expect(resolveSharedProjectNote({
+      quoteNote: 'Cotización',
+      productionNote: 'Producción',
+      quoteUpdatedAt: '2026-07-20T12:00:00.000Z',
+      productionUpdatedAt: '2026-07-20T11:00:00.000Z',
+    }).value).toBe('Cotización');
+  });
+
+  it('reutiliza referencias heredadas al relacionar OT y cotización', () => {
+    expect(productionOrderMatchesQuote(
+      { formSnapshot: { legacy_id: 'quote-legacy' } },
+      { id: 'quote-current', legacyId: 'quote-legacy' },
+    )).toBe(true);
   });
 });

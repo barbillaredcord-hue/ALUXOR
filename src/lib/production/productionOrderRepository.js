@@ -251,7 +251,7 @@ export async function updateProductionOrderRemote(
 
   return adaptSingle(result);
 }
-export function subscribeProductionOrders(workspaceId, callback) {
+export function subscribeProductionOrders(workspaceId, callback, onStatus) {
   if (!workspaceId || typeof callback !== 'function') {
     return function unsubscribe() {};
   }
@@ -271,12 +271,18 @@ export function subscribeProductionOrders(workspaceId, callback) {
         },
         callback
       )
-      .subscribe();
-  } catch {
+      .subscribe((status, error) => {
+        onStatus?.(status, error || null);
+      });
+  } catch (error) {
+    onStatus?.('CHANNEL_ERROR', error);
     return function unsubscribe() {};
   }
 
+  let closed = false;
   return function unsubscribe() {
+    if (closed) return;
+    closed = true;
     try {
       void channel.unsubscribe();
     } catch {

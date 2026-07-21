@@ -4,8 +4,10 @@ import { QuoteAdapter } from '../lib/quotes/quoteAdapter.js';
 import { OfflineQueue } from '../lib/quotes/offlineQueue.js';
 import { ConflictResolver } from '../lib/quotes/conflictResolver.js';
 import {
-  findQuoteByReferences,
+  findQuoteForProductionOrder,
+  normalizeQuoteReference,
   quoteReferencesFromProductionOrder,
+  resolveSharedProjectNote,
 } from '../lib/quotes/quoteReference.js';
 import {
   Pricing,
@@ -103,6 +105,27 @@ export function createCleanQuoteForm(baseDefaults) {
   };
 }
 
+export function quoteNoteUpdateFromProduction(quotes, order) {
+  const quote = findQuoteForProductionOrder(quotes, order);
+  if (!quote) return { quote: null, nextQuote: null, resolution: null };
+
+  const resolution = resolveSharedProjectNote({
+    quoteNote: quote.form?.notasInternas ?? quote.notasInternas,
+    productionNote: order?.observaciones,
+    quoteUpdatedAt: quote.updatedAt,
+    productionUpdatedAt: order?.updatedAt,
+    preferredSource: 'production',
+  });
+  if (!resolution.quoteNeedsUpdate) return { quote, nextQuote: null, resolution };
+
+  const nextForm = { ...(quote.form || {}), notasInternas: resolution.value };
+  return {
+    quote,
+    resolution,
+    nextQuote: { ...quote, notasInternas: resolution.value, form: nextForm },
+  };
+}
+
 export function isCurrentQuoteEditSession(editSessionRef, editSession) {
   return editSessionRef.current === editSession;
 }
@@ -114,6 +137,103 @@ export function canScheduleQuoteAutoSave(autoSaveSuppressed, activeSection) {
 
 export function hasRealQuoteFormChanges(confirmedForm, currentForm) {
   return quoteFormChanges(confirmedForm, currentForm).size > 0;
+}
+
+function quoteRevisionTimestamp(value) {
+  const timestamp = typeof value === 'number' ? value : Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+export function compareQuoteRevisions(incoming = {}, current = {}) {
+  const incomingVersion = Number(incoming.version);
+  const currentVersion = Number(current.version);
+  const hasIncomingVersion = Number.isInteger(incomingVersion) && incomingVersion > 0;
+  const hasCurrentVersion = Number.isInteger(currentVersion) && currentVersion > 0;
+
+  if (hasIncomingVersion && hasCurrentVersion && incomingVersion !== currentVersion) {
+    return incomingVersion > currentVersion ? 1 : -1;
+  }
+
+  const incomingTimestamp = quoteRevisionTimestamp(incoming.updatedAt);
+  const currentTimestamp = quoteRevisionTimestamp(current.updatedAt);
+  if (incomingTimestamp && currentTimestamp && incomingTimestamp !== currentTimestamp) {
+    return incomingTimestamp > currentTimestamp ? 1 : -1;
+  }
+
+  if (hasIncomingVersion && hasCurrentVersion) return 0;
+  return 1;
+}
+
+export function isNewerRemoteQuoteVersion(remoteVersion, currentVersion) {
+  return compareQuoteRevisions(
+    { version: remoteVersion },
+    { version: currentVersion },
+  ) > 0;
+}
+
+export function shouldDeferRemoteQuoteField(focusedField, dirtyFields, fieldPath) {
+  return focusedField === fieldPath && dirtyFields.has(fieldPath);
+}
+
+export function mergeRemoteQuoteForms({
+  confirmedForm = {},
+  localForm = {},
+  remoteForm = {},
+  dirtyFields = new Set(),
+  fieldConflicts = new Set(),
+  bufferedFields = new Map(),
+  focusedField = null,
+  remoteVersion = 0,
+}) {
+  const nextDirtyFields = new Set(dirtyFields);
+  const nextFieldConflicts = new Set(fieldConflicts);
+  const nextBufferedFields = new Map(bufferedFields);
+  const changes = quoteFormChanges(confirmedForm, remoteForm);
+  let nextForm = localForm;
+  let changedVisibleForm = false;
+
+  changes.forEach((remoteValue, fieldPath) => {
+    const baseValue = quoteFormValue(confirmedForm, fieldPath);
+    const localValue = quoteFormValue(nextForm, fieldPath);
+
+    if (shouldDeferRemoteQuoteField(focusedField, nextDirtyFields, fieldPath)) {
+      nextBufferedFields.set(fieldPath, { baseValue, remoteValue, version: remoteVersion });
+      return;
+    }
+
+    if (nextDirtyFields.has(fieldPath)) {
+      if (quoteFieldValuesEqual(fieldPath, localValue, remoteValue)) {
+        nextDirtyFields.delete(fieldPath);
+        nextFieldConflicts.delete(fieldPath);
+        nextBufferedFields.delete(fieldPath);
+      } else if (quoteFieldValuesEqual(fieldPath, localValue, baseValue)) {
+        nextForm = withQuoteFormValue(nextForm, fieldPath, remoteValue);
+        nextDirtyFields.delete(fieldPath);
+        nextFieldConflicts.delete(fieldPath);
+        nextBufferedFields.delete(fieldPath);
+        changedVisibleForm = true;
+      } else {
+        nextBufferedFields.set(fieldPath, { baseValue, remoteValue, version: remoteVersion });
+        nextFieldConflicts.delete(fieldPath);
+      }
+      return;
+    }
+
+    nextForm = withQuoteFormValue(nextForm, fieldPath, remoteValue);
+    nextBufferedFields.delete(fieldPath);
+    nextFieldConflicts.delete(fieldPath);
+    changedVisibleForm = true;
+  });
+
+  return {
+    nextForm,
+    changedVisibleForm,
+    hasRemoteChanges: changes.size > 0,
+    dirtyFields: nextDirtyFields,
+    fieldConflicts: nextFieldConflicts,
+    bufferedFields: nextBufferedFields,
+    suppressAutoSave: nextDirtyFields.size === 0,
+  };
 }
 
 export function invalidateQuoteAsyncWork({
@@ -177,6 +297,10 @@ export function resetQuoteEditingState({
   refs.remoteBuffer.current = { fields: new Map(), pendingRow: null };
   refs.focusedField.current = null;
   refs.activeIdentity.current = null;
+
+  const previousPresence = refs.presence.current;
+  refs.presence.current = null;
+  void previousPresence?.unsubscribe?.();
 
   setters.setForm(cleanForm);
   setters.setSelectedHistoryPreview(null);
@@ -376,6 +500,17 @@ export default function useQuotes({
       return { applied: false, hasConflicts: false };
     }
 
+    const activeHistoryItem = historyRef.current.find((item) => item.id === activeIdentity.id);
+    if (compareQuoteRevisions(
+      { version: row.version, updatedAt: row.updated_at },
+      {
+        version: activeIdentity.version,
+        updatedAt: activeIdentity.updatedAt || activeHistoryItem?.updatedAt,
+      },
+    ) <= 0) {
+      return { applied: true, hasConflicts: false, ignoredStale: true };
+    }
+
     if (
       !ignoreSaveLock
       && (quoteSaveInFlightRef.current || quoteAutoSavePendingRef.current)
@@ -388,63 +523,36 @@ export default function useQuotes({
     const remoteItem = QuoteAdapter.quoteRowToHistoryItem(row);
     const remoteForm = remoteItem.form || {};
     const confirmedForm = lastConfirmedQuoteFormRef.current || {};
-    const changes = quoteFormChanges(confirmedForm, remoteForm);
-    const hasRemoteChanges = changes.size > 0;
-    let nextForm = latestQuoteFormRef.current;
-    let changedVisibleForm = false;
-
-    changes.forEach((remoteValue, fieldPath) => {
-      const baseValue = quoteFormValue(confirmedForm, fieldPath);
-      const localValue = quoteFormValue(nextForm, fieldPath);
-
-      if (focusedQuoteFieldRef.current === fieldPath) {
-        remoteQuoteBufferRef.current.fields.set(fieldPath, {
-          baseValue,
-          remoteValue,
-          version: remoteItem.version,
-        });
-        return;
-      }
-
-      if (dirtyQuoteFieldsRef.current.has(fieldPath)) {
-        if (quoteFieldValuesEqual(fieldPath, localValue, remoteValue)) {
-          dirtyQuoteFieldsRef.current.delete(fieldPath);
-          quoteFieldConflictsRef.current.delete(fieldPath);
-          remoteQuoteBufferRef.current.fields.delete(fieldPath);
-        } else if (quoteFieldValuesEqual(fieldPath, localValue, baseValue)) {
-          nextForm = withQuoteFormValue(nextForm, fieldPath, remoteValue);
-          dirtyQuoteFieldsRef.current.delete(fieldPath);
-          quoteFieldConflictsRef.current.delete(fieldPath);
-          remoteQuoteBufferRef.current.fields.delete(fieldPath);
-          changedVisibleForm = true;
-        } else {
-          remoteQuoteBufferRef.current.fields.set(fieldPath, {
-            baseValue,
-            remoteValue,
-            version: remoteItem.version,
-          });
-          quoteFieldConflictsRef.current.delete(fieldPath);
-        }
-        return;
-      }
-
-      nextForm = withQuoteFormValue(nextForm, fieldPath, remoteValue);
-      remoteQuoteBufferRef.current.fields.delete(fieldPath);
-      quoteFieldConflictsRef.current.delete(fieldPath);
-      changedVisibleForm = true;
+    const merge = mergeRemoteQuoteForms({
+      confirmedForm,
+      localForm: latestQuoteFormRef.current,
+      remoteForm,
+      dirtyFields: dirtyQuoteFieldsRef.current,
+      fieldConflicts: quoteFieldConflictsRef.current,
+      bufferedFields: remoteQuoteBufferRef.current.fields,
+      focusedField: focusedQuoteFieldRef.current,
+      remoteVersion: remoteItem.version,
     });
 
+    dirtyQuoteFieldsRef.current = merge.dirtyFields;
+    quoteFieldConflictsRef.current = merge.fieldConflicts;
+    remoteQuoteBufferRef.current = {
+      ...remoteQuoteBufferRef.current,
+      fields: merge.bufferedFields,
+    };
+
     lastConfirmedQuoteFormRef.current = remoteForm;
-    if (changedVisibleForm) {
-      latestQuoteFormRef.current = nextForm;
-      quoteRemoteApplyRef.current = dirtyQuoteFieldsRef.current.size === 0;
-      setForm(nextForm);
+    if (merge.changedVisibleForm) {
+      latestQuoteFormRef.current = merge.nextForm;
+      quoteRemoteApplyRef.current = merge.suppressAutoSave;
+      setForm(merge.nextForm);
     }
 
     const nextIdentity = {
       ...activeIdentity,
       folio: remoteItem.folio,
       createdAt: remoteItem.createdAt,
+      updatedAt: remoteItem.updatedAt,
       version: remoteItem.version,
       remote: true,
     };
@@ -464,7 +572,7 @@ export default function useQuotes({
     setQuoteCollaborationStatus(
       hasConflicts
         ? 'Guardando…'
-        : hasRemoteChanges ? 'Actualizado por otro usuario' : 'Sincronizado'
+        : merge.hasRemoteChanges ? 'Actualizado por otro usuario' : 'Sincronizado'
     );
     return { applied: true, hasConflicts };
   }
@@ -808,6 +916,7 @@ export default function useQuotes({
 
     if (!userId || !workspaceId) return undefined;
 
+    let subscriptionActive = true;
     const unsubscribe = QuoteRepository.subscribeQuotes(
       workspaceId,
       (payload) => {
@@ -823,6 +932,29 @@ export default function useQuotes({
           remoteRow?.id === activeQuoteId
           && !remoteRow.deleted_at
         ) {
+          const activeHistoryItem = historyRef.current.find(
+            (item) => item.id === activeQuoteId,
+          );
+          if (compareQuoteRevisions(
+            { version: remoteRow.version, updatedAt: remoteRow.updated_at },
+            {
+              version: activeQuoteIdentityRef.current?.version,
+              updatedAt:
+                activeQuoteIdentityRef.current?.updatedAt
+                || activeHistoryItem?.updatedAt,
+            },
+          ) <= 0) {
+            return;
+          }
+
+          if (
+            !quoteSaveInFlightRef.current
+            && !quoteAutoSavePendingRef.current
+          ) {
+            applyRemoteQuoteRow(remoteRow, { editSession: eventEditSession });
+            return;
+          }
+
           const previousPending =
             quoteRealtimePendingRowRef.current;
 
@@ -927,10 +1059,35 @@ export default function useQuotes({
               }
             }
           }, 280);
+      },
+      (status, error) => {
+        if (!subscriptionActive) return;
+
+        if (['CHANNEL_ERROR', 'TIMED_OUT'].includes(status)) {
+          console.warn('Realtime de cotizaciones no disponible:', status, error);
+          setQuoteCollaborationStatus('Realtime no disponible');
+          return;
+        }
+
+        if (status === 'CLOSED') {
+          setQuoteCollaborationStatus('Realtime cerrado');
+          return;
+        }
+
+        if (
+          status === 'SUBSCRIBED'
+          && !quoteSaveInFlightRef.current
+          && !quoteAutoSavePendingRef.current
+          && dirtyQuoteFieldsRef.current.size === 0
+          && quoteFieldConflictsRef.current.size === 0
+        ) {
+          setQuoteCollaborationStatus('Sincronizado');
+        }
       }
     );
 
     return () => {
+      subscriptionActive = false;
       if (
         quoteRealtimeDebounceRef.current !== null
       ) {
@@ -1608,6 +1765,7 @@ export default function useQuotes({
       workspaceId: activeWorkspace?.id || null,
       folio: resolvedItem.folio,
       createdAt: resolvedItem.createdAt,
+      updatedAt: resolvedItem.updatedAt,
       version: resolvedItem.version,
       remote: true,
     };
@@ -1813,6 +1971,7 @@ export default function useQuotes({
             workspaceId,
             folio: remoteItem.folio,
             createdAt: remoteItem.createdAt,
+            updatedAt: remoteItem.updatedAt,
             version: remoteItem.version,
             remote: true,
           };
@@ -1954,6 +2113,7 @@ export default function useQuotes({
       workspaceId: activeWorkspace?.id || null,
       folio,
       createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
       version: currentIdentity?.version || null,
       remote: hasRemoteIdentity,
     };
@@ -1964,7 +2124,9 @@ export default function useQuotes({
       syncProductionOrderFromQuote(
         currentIdentity.id,
         historyForm,
-        currentIdentity.version
+        currentIdentity.version,
+        item.updatedAt,
+        item,
       );
     }
 
@@ -2066,6 +2228,7 @@ export default function useQuotes({
           workspaceId,
           folio: retryFolio,
           createdAt: item.createdAt,
+          updatedAt: Date.now(),
           version: null,
           remote: false,
         };
@@ -2136,6 +2299,7 @@ export default function useQuotes({
                 workspaceId,
                 folio: remoteItem.folio,
                 createdAt: remoteItem.createdAt,
+                updatedAt: remoteItem.updatedAt,
                 version: remoteItem.version,
                 remote: true,
               };
@@ -2279,6 +2443,7 @@ export default function useQuotes({
           workspaceId,
           folio: remoteItem.folio,
           createdAt: remoteItem.createdAt,
+          updatedAt: remoteItem.updatedAt,
           version: remoteItem.version,
           remote: true,
         };
@@ -2293,7 +2458,9 @@ export default function useQuotes({
         syncProductionOrderFromQuote(
           remoteItem.id,
           remoteItem.form || historyForm,
-          remoteItem.version
+          remoteItem.version,
+          remoteItem.updatedAt,
+          remoteItem,
         );
 
         removeQueuedQuoteOperations(
@@ -2515,6 +2682,7 @@ export default function useQuotes({
       workspaceId: activeWorkspace?.id || null,
       folio: item.folio,
       createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
       version: version || null,
       remote: isRemoteQuoteId(item.id) && version > 0,
     };
@@ -2534,7 +2702,7 @@ export default function useQuotes({
   async function openQuoteFromProduction(order) {
     const editSession = quoteEditSessionRef.current;
     const references = quoteReferencesFromProductionOrder(order);
-    let relatedQuote = findQuoteByReferences(historyRef.current, references);
+    let relatedQuote = findQuoteForProductionOrder(historyRef.current, order);
 
     if (!relatedQuote && activeWorkspace?.id && references.length) {
       let relatedRow = null;
@@ -2553,7 +2721,7 @@ export default function useQuotes({
         const remoteResult = await QuoteRepository.loadQuotes(activeWorkspace.id);
         if (!isCurrentQuoteEditSession(quoteEditSessionRef, editSession)) return false;
         relatedRow = !remoteResult.error
-          ? findQuoteByReferences(remoteResult.data, references)
+          ? findQuoteForProductionOrder(remoteResult.data, order)
           : null;
       }
 
@@ -2600,6 +2768,7 @@ export default function useQuotes({
         remoteBuffer: remoteQuoteBufferRef,
         focusedField: focusedQuoteFieldRef,
         activeIdentity: activeQuoteIdentityRef,
+        presence: quotePresenceRef,
       },
       setters: {
         setForm,
@@ -2906,6 +3075,139 @@ export default function useQuotes({
     }
   }
 
+  async function syncQuoteNoteFromProduction(order) {
+    const editSession = quoteEditSessionRef.current;
+    const update = quoteNoteUpdateFromProduction(historyRef.current, order);
+    if (!update.nextQuote) {
+      if (update.quote && update.resolution?.productionNeedsUpdate) {
+        syncProductionOrderFromQuote(
+          update.quote.id,
+          update.quote.form || {},
+          update.quote.version,
+          update.quote.updatedAt,
+          update.quote,
+        );
+      }
+      return false;
+    }
+
+    const quoteId = update.quote.id;
+    const applyHistoryItem = (item) => {
+      const nextHistory = HistoryEngine.normalizeHistory(
+        historyRef.current.map((current) => (
+          normalizeQuoteReference(current.id) === normalizeQuoteReference(quoteId)
+            ? item
+            : current
+        )),
+      );
+      historyRef.current = nextHistory;
+      setHistory(nextHistory);
+      StorageEngine.saveHistory(nextHistory);
+      setSelectedHistoryPreview((current) => (
+        normalizeQuoteReference(current?.id) === normalizeQuoteReference(quoteId)
+          ? { ...item }
+          : current
+      ));
+    };
+    const applyActiveNote = (item) => {
+      if (!isCurrentQuoteEditSession(quoteEditSessionRef, editSession)) return;
+      if (normalizeQuoteReference(activeQuoteIdentityRef.current?.id)
+        !== normalizeQuoteReference(quoteId)) return;
+
+      quoteRemoteApplyRef.current = true;
+      dirtyQuoteFieldsRef.current.delete('notasInternas');
+      const nextForm = {
+        ...latestQuoteFormRef.current,
+        notasInternas: item.form?.notasInternas ?? item.notasInternas ?? '',
+      };
+      latestQuoteFormRef.current = nextForm;
+      lastConfirmedQuoteFormRef.current = nextForm;
+      setForm(nextForm);
+      setActiveQuoteIdentity((current) => (
+        normalizeQuoteReference(current?.id) === normalizeQuoteReference(quoteId)
+          ? { ...current, version: item.version, updatedAt: item.updatedAt }
+          : current
+      ));
+    };
+
+    applyHistoryItem(update.nextQuote);
+    applyActiveNote(update.nextQuote);
+
+    const workspaceId = activeWorkspace?.id;
+    const expectedVersion = Number(update.quote.version);
+    const canUpdateRemote = workspaceId
+      && authSession?.user?.id
+      && isRemoteQuoteId(quoteId)
+      && Number.isInteger(expectedVersion)
+      && expectedVersion > 0;
+    if (!canUpdateRemote) return true;
+
+    let pendingItem = update.nextQuote;
+    let pendingVersion = expectedVersion;
+    const enqueueUpdate = (conflict = false) => {
+      const queued = enqueueOfflineQuoteOperation({
+        type: 'update',
+        workspaceId,
+        quoteId,
+        expectedVersion: pendingVersion,
+        payload: QuoteAdapter.historyItemToQuotePayload(pendingItem),
+      });
+      if (conflict && queued?.id) OfflineQueue.updateOperation(queued.id, { conflict: true });
+      refreshPendingOfflineCount();
+    };
+
+    if (!navigator.onLine) {
+      enqueueUpdate();
+      return true;
+    }
+
+    let result = await QuoteRepository.updateQuote(
+      quoteId,
+      QuoteAdapter.historyItemToQuotePayload(pendingItem),
+      pendingVersion,
+    );
+
+    if (result.error?.code === 'QUOTE_VERSION_CONFLICT') {
+      const remoteResult = await QuoteRepository.getQuote(quoteId);
+      if (remoteResult.data && !remoteResult.error) {
+        const remoteItem = QuoteAdapter.quoteRowToHistoryItem(remoteResult.data);
+        const retry = quoteNoteUpdateFromProduction([remoteItem], order);
+        if (!retry.nextQuote) {
+          applyHistoryItem(remoteItem);
+          applyActiveNote(remoteItem);
+          if (retry.resolution?.productionNeedsUpdate) {
+            syncProductionOrderFromQuote(
+              remoteItem.id,
+              remoteItem.form || {},
+              remoteItem.version,
+              remoteItem.updatedAt,
+              remoteItem,
+            );
+          }
+          return false;
+        }
+        pendingItem = retry.nextQuote;
+        pendingVersion = Number(remoteItem.version);
+        result = await QuoteRepository.updateQuote(
+          quoteId,
+          QuoteAdapter.historyItemToQuotePayload(pendingItem),
+          pendingVersion,
+        );
+      }
+    }
+
+    if (result.error || !result.data) {
+      enqueueUpdate(Boolean(result.error?.code === 'QUOTE_VERSION_CONFLICT'));
+      return true;
+    }
+
+    const remoteItem = QuoteAdapter.quoteRowToHistoryItem(result.data);
+    applyHistoryItem(remoteItem);
+    applyActiveNote(remoteItem);
+    removeQueuedQuoteOperations('update', workspaceId, quoteId);
+    return true;
+  }
+
   function copyText(text, label = 'Texto') {
     navigator.clipboard?.writeText(text).then(() => {
       setCopied(`${label} copiado`);
@@ -3006,6 +3308,7 @@ export default function useQuotes({
     exportHistoryBackup,
     importHistoryBackup,
     updateHistoryStatus,
+    syncQuoteNoteFromProduction,
     copyText,
     openWhatsApp,
     openPrint,

@@ -1,5 +1,5 @@
 // cSpell:words ALUXOR AnunciaPro anunciapro aluxor Clóset clóset clósets Cotizacion cotizacion Telefono telefono whatsapp promocion jaladera Jaladera jaladeras Jaladeras tornillería Silicón categoria bano economico descripcion triplay Triplay buro buró Buró burós pzas Vidrieria Carpinteria zoclo herrajes melamina merma cotizador metalnes
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   Accessibility,
   Box,
@@ -44,6 +44,7 @@ import useQuickCalculator from '../hooks/useQuickCalculator.js';
 import usePlanEditor from '../hooks/usePlanEditor.js';
 import useCatalog from '../hooks/useCatalog.js';
 import useNavigation from '../hooks/useNavigation.js';
+import { resolveProductionOrderSummary } from './productionOrderSummary.js';
 import {
   Materials,
   Pricing,
@@ -99,6 +100,7 @@ function App() {
     setTypeDetails: () => {},
   });
   const productionQuoteSyncRef = useRef(null);
+  const productionQuoteNoteSyncRef = useRef(null);
   const {
     authSession,
     authLoading,
@@ -195,6 +197,7 @@ function App() {
     generateProfessionalPdf,
     handleQuoteFieldFocus,
     handleQuoteFieldBlur,
+    syncQuoteNoteFromProduction,
   } = useQuotes({
     authSession,
     activeWorkspace,
@@ -207,6 +210,7 @@ function App() {
       productionQuoteSyncRef.current?.(...args)
     ),
   });
+  productionQuoteNoteSyncRef.current = syncQuoteNoteFromProduction;
   const {
     catalog,
     setCatalog,
@@ -316,8 +320,32 @@ function App() {
     form,
     setSyncStatus,
     setActiveSection,
+    syncQuoteNoteFromProduction: (...args) => (
+      productionQuoteNoteSyncRef.current?.(...args)
+    ),
   });
   productionQuoteSyncRef.current = syncProductionOrderFromQuote;
+
+  const productionSummarySelection = useMemo(() => resolveProductionOrderSummary(
+    productionOrders,
+    selectedProductionOrderId,
+    history,
+  ), [history, productionOrders, selectedProductionOrderId]);
+  const selectedProductionOrder = productionSummarySelection.order;
+  const summaryPanelSource = useMemo(() => (
+    activeSection === 'produccion' && productionSummarySelection.summary
+      ? productionSummarySelection.summary
+      : contextualQuoteSummary
+  ), [
+    activeSection,
+    contextualQuoteSummary,
+    productionSummarySelection,
+  ]);
+
+  function handleSelectProductionOrder(orderId) {
+    setSelectedProductionOrderId(orderId);
+  }
+
   function handleStartNewQuote() {
     startNewQuoteAndClearProductionSelection(
       startNewQuote,
@@ -413,17 +441,18 @@ function App() {
         )}
 
         <SummaryPanel
-          proyecto={contextualQuoteSummary.nombre}
-          descripcion={contextualQuoteSummary.descripcion}
-          totalCliente={money(contextualQuoteSummary.quote.total)}
-          costoInterno={money(contextualQuoteSummary.quote.internalTotal)}
-          utilidad={money(contextualQuoteSummary.quote.profit)}
-          anticipo={money(contextualQuoteSummary.quote.deposit)}
-          saldo={money(contextualQuoteSummary.quote.rest)}
-          estadoProyecto={contextualQuoteSummary.estado}
-          riesgos={contextualQuoteSummary.riesgos}
-          indicadores={contextualQuoteSummary.indicadores}
-          progreso={contextualQuoteSummary.progreso}
+          key={activeSection === 'produccion' ? selectedProductionOrderId : 'quote-summary'}
+          proyecto={summaryPanelSource.nombre}
+          descripcion={summaryPanelSource.descripcion}
+          totalCliente={money(summaryPanelSource.quote.total)}
+          costoInterno={money(summaryPanelSource.quote.internalTotal)}
+          utilidad={money(summaryPanelSource.quote.profit)}
+          anticipo={money(summaryPanelSource.quote.deposit)}
+          saldo={money(summaryPanelSource.quote.rest)}
+          estadoProyecto={summaryPanelSource.estado}
+          riesgos={summaryPanelSource.riesgos}
+          indicadores={summaryPanelSource.indicadores}
+          progreso={summaryPanelSource.progreso}
           onWhatsApp={openWhatsApp}
           onPdf={() => openPrint('client')}
           onGuardar={saveToHistory}
@@ -692,7 +721,7 @@ function App() {
           <ProductionSection
             productionOrders={productionOrders}
             selectedProductionOrderId={selectedProductionOrderId}
-            onSelectProductionOrder={setSelectedProductionOrderId}
+            onSelectProductionOrder={handleSelectProductionOrder}
             onOpenQuote={openQuoteFromProduction}
             onUpdateProductionOrder={handleUpdateProductionOrder}
             productionLoading={productionLoading}

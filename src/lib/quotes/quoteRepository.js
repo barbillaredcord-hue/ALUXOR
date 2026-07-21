@@ -166,7 +166,7 @@ export async function restoreQuote(id) {
     .single());
 }
 
-export function subscribeQuotes(workspaceId, callback) {
+export function subscribeQuotes(workspaceId, callback, onStatus) {
   if (!workspaceId || typeof callback !== 'function') {
     return function unsubscribe() {};
   }
@@ -186,12 +186,18 @@ export function subscribeQuotes(workspaceId, callback) {
         },
         callback
       )
-      .subscribe();
+      .subscribe((status, error) => {
+        onStatus?.(status, error || null);
+      });
   } catch (error) {
+    onStatus?.('CHANNEL_ERROR', error);
     return function unsubscribe() {};
   }
 
+  let closed = false;
   return function unsubscribe() {
+    if (closed) return;
+    closed = true;
     try {
       void channel.unsubscribe();
     } catch {
@@ -250,6 +256,8 @@ export function subscribeQuotePresence({
       }
     });
 
+  let closed = false;
+
   return {
     track: (presence = {}) =>
       channel.track({
@@ -266,6 +274,8 @@ export function subscribeQuotePresence({
     untrack: () => channel.untrack(),
 
     unsubscribe: async () => {
+      if (closed) return;
+      closed = true;
       await channel.untrack();
       await channel.unsubscribe();
     },

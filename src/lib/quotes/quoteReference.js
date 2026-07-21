@@ -54,3 +54,58 @@ export function findQuoteByReferences(quotes = [], references = []) {
 export function findQuoteByReference(quotes = [], quoteId) {
   return findQuoteByReferences(quotes, [quoteId]);
 }
+
+export function findQuoteForProductionOrder(quotes = [], order) {
+  return findQuoteByReferences(
+    quotes,
+    quoteReferencesFromProductionOrder(order),
+  );
+}
+
+export function normalizeSharedProjectNote(value) {
+  return value === null || value === undefined ? '' : String(value).trim();
+}
+
+function timestampValue(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  const parsed = Date.parse(value || '');
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+export function resolveSharedProjectNote({
+  quoteNote,
+  productionNote,
+  quoteUpdatedAt,
+  productionUpdatedAt,
+  preferredSource = 'quote',
+} = {}) {
+  const quote = normalizeSharedProjectNote(quoteNote);
+  const production = normalizeSharedProjectNote(productionNote);
+
+  if (quote === production) {
+    return { value: quote, source: 'equal', quoteNeedsUpdate: false, productionNeedsUpdate: false };
+  }
+
+  let source;
+  if (!quote) source = 'production';
+  else if (!production) source = 'quote';
+  else {
+    const quoteTime = timestampValue(quoteUpdatedAt);
+    const productionTime = timestampValue(productionUpdatedAt);
+    source = quoteTime === productionTime
+      ? preferredSource
+      : quoteTime > productionTime ? 'quote' : 'production';
+  }
+
+  const value = source === 'production' ? production : quote;
+  return {
+    value,
+    source,
+    quoteNeedsUpdate: quote !== value,
+    productionNeedsUpdate: production !== value,
+  };
+}
+
+export function productionOrderMatchesQuote(order, quote) {
+  return Boolean(findQuoteForProductionOrder([quote], order));
+}

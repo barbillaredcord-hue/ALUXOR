@@ -6,7 +6,37 @@ import {
 import { ProductionStorage } from '../lib/production/productionStorage.js';
 import { ProductionOrderRepository } from '../lib/production/productionOrderRepository.js';
 import { QuoteAdapter } from '../lib/quotes/quoteAdapter.js';
+import {
+  normalizeSharedProjectNote,
+  productionOrderMatchesQuote,
+  resolveSharedProjectNote,
+} from '../lib/quotes/quoteReference.js';
 import { clean, isRemoteQuoteId } from '../app/config/helpers.js';
+
+export function productionChangesWithSharedNote(currentOrder, changes, updatedAt) {
+  if (!Object.prototype.hasOwnProperty.call(changes || {}, 'observaciones')) {
+    return changes || {};
+  }
+
+  const resolution = resolveSharedProjectNote({
+    quoteNote: currentOrder?.formSnapshot?.notasInternas,
+    productionNote: changes.observaciones,
+    quoteUpdatedAt: currentOrder?.quoteUpdatedAt,
+    productionUpdatedAt: updatedAt,
+    preferredSource: 'production',
+  });
+  const formSnapshot = {
+    ...(currentOrder?.formSnapshot || {}),
+    ...(changes?.formSnapshot || {}),
+    notasInternas: resolution.value,
+  };
+
+  return { ...changes, observaciones: resolution.value, formSnapshot };
+}
+
+export function productionOrderNoteFromQuote(form) {
+  return normalizeSharedProjectNote(form?.notasInternas);
+}
 
 export default function useProduction({
   authSession,
@@ -16,6 +46,7 @@ export default function useProduction({
   form,
   setSyncStatus,
   setActiveSection,
+  syncQuoteNoteFromProduction,
 }) {
   const [productionOrders, setProductionOrders] = useState([]);
   const [selectedProductionOrderId, setSelectedProductionOrderId] = useState(null);
@@ -394,6 +425,7 @@ export default function useProduction({
     if (!userId || !workspaceId) return undefined;
 
     let debounceId = null;
+    let subscriptionActive = true;
     const unsubscribe = ProductionOrderRepository.subscribeProductionOrders(
       workspaceId,
       () => {
@@ -402,32 +434,77 @@ export default function useProduction({
           debounceId = null;
           void loadRemoteProductionOrders();
         }, 300);
+      },
+      (status, error) => {
+        if (!subscriptionActive) return;
+
+        if (['CHANNEL_ERROR', 'TIMED_OUT'].includes(status)) {
+          console.warn('Realtime de producción no disponible:', status, error);
+          setProductionSyncStatus('Realtime de producción no disponible');
+          return;
+        }
+
+        if (status === 'CLOSED') {
+          setProductionSyncStatus('Realtime de producción cerrado');
+          return;
+        }
+
+        if (status === 'SUBSCRIBED') {
+          setProductionSyncStatus((current) => (
+            current.startsWith('Realtime de producción')
+              ? 'Producción conectada'
+              : current
+          ));
+        }
       }
     );
 
     return () => {
+      subscriptionActive = false;
       if (debounceId !== null) window.clearTimeout(debounceId);
       unsubscribe();
     };
   }, [authSession?.user?.id, activeWorkspace?.id]);
-function syncProductionOrderFromQuote(quoteId, nextForm, quoteVersion) {
+function syncProductionOrderFromQuote(
+  quoteId,
+  nextForm,
+  quoteVersion,
+  quoteUpdatedAt,
+  quoteRecord = null,
+) {
   if (!quoteId || !nextForm) return;
 
   const currentOrder = productionOrdersRef.current.find((order) => (
     order.workspaceId === activeWorkspace?.id
-    && order.quoteId === quoteId
+    && productionOrderMatchesQuote(order, quoteRecord || { id: quoteId })
   ));
 
   if (!currentOrder) return;
+
+  const noteResolution = resolveSharedProjectNote({
+    quoteNote: nextForm.notasInternas,
+    productionNote: currentOrder.observaciones,
+    quoteUpdatedAt,
+    productionUpdatedAt: currentOrder.updatedAt,
+    preferredSource: 'quote',
+  });
+
+  if (noteResolution.quoteNeedsUpdate) {
+    void syncQuoteNoteFromProduction?.(currentOrder);
+  }
+
+  const nextSnapshot = {
+    ...nextForm,
+    notasInternas: noteResolution.value,
+  };
 
   const nextChanges = {
     cliente: clean(nextForm.clienteNombre),
     producto: clean(nextForm.producto),
     fechaCompromiso: nextForm.entrega || '',
-    observaciones: clean(
-      nextForm.notasInternas || nextForm.notasCliente
-    ),
-    formSnapshot: nextForm,
+    observaciones: noteResolution.value,
+    formSnapshot: nextSnapshot,
+    quoteUpdatedAt: quoteUpdatedAt || currentOrder.quoteUpdatedAt,
     quoteVersion:
       Number.isInteger(Number(quoteVersion))
       && Number(quoteVersion) >= 1
@@ -463,7 +540,12 @@ function syncProductionOrderFromQuote(quoteId, nextForm, quoteVersion) {
     }
 
     const now = new Date().toISOString();
-    const nextStatus = changes?.estado || currentOrder.estado;
+    const normalizedChanges = productionChangesWithSharedNote(currentOrder, changes, now);
+    const observationChanged = Object.prototype.hasOwnProperty.call(
+      normalizedChanges,
+      'observaciones',
+    ) && normalizedChanges.observaciones !== clean(currentOrder.observaciones);
+    const nextStatus = normalizedChanges?.estado || currentOrder.estado;
     const timeline = Array.isArray(currentOrder.timeline) ? [...currentOrder.timeline] : [];
 
     if (nextStatus !== currentOrder.estado) {
@@ -479,7 +561,7 @@ function syncProductionOrderFromQuote(quoteId, nextForm, quoteVersion) {
     const optimisticOrder = {
       ...updateProductionOrderEngine(
         currentOrder,
-        { ...(changes || {}), timeline },
+        { ...normalizedChanges, timeline },
         now
       ),
       version: currentOrder.version,
@@ -490,6 +572,10 @@ function syncProductionOrderFromQuote(quoteId, nextForm, quoteVersion) {
     if (!upsertActiveProductionOrder(optimisticOrder)) {
       setProductionError('No fue posible guardar el cambio local.');
       return false;
+    }
+
+    if (observationChanged) {
+      void syncQuoteNoteFromProduction?.(optimisticOrder);
     }
 
     if (!navigator.onLine) {
@@ -509,6 +595,7 @@ function syncProductionOrderFromQuote(quoteId, nextForm, quoteVersion) {
       const remote = await ProductionOrderRepository.getProductionOrder(workspaceId, orderId);
       if (remote.data && !remote.error) {
         upsertActiveProductionOrder(remote.data);
+        void syncQuoteNoteFromProduction?.(remote.data);
         setProductionError('La orden fue modificada en otro dispositivo. Se cargó la versión remota.');
         setSyncStatus('Conflicto de producción · versión remota cargada');
       } else {
@@ -617,8 +704,8 @@ function syncProductionOrderFromQuote(quoteId, nextForm, quoteVersion) {
         responsable: '',
         fechaCreacion: new Date(),
         fechaCompromiso: form.entrega || '',
-        observaciones: form.notasInternas || form.notasCliente || '',
-        formSnapshot: form,
+        observaciones: productionOrderNoteFromQuote(form),
+        formSnapshot: { ...form, notasInternas: productionOrderNoteFromQuote(form) },
         quoteVersion: Number(activeQuoteIdentity.version),
         createdBy: userId,
       }, productionOrdersRef.current);
