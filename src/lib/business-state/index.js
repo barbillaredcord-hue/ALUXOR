@@ -1,4 +1,11 @@
-import { ProductionStorage } from '../production/productionStorage.js';
+import { getCustomerSummary } from '../customers/customerSummary.js';
+import { getFabricationSummary } from '../fabrication/fabricationSummary.js';
+import { getFinanceSummary } from '../finance/financeSummary.js';
+import { getHistorySummary } from '../history/historySummary.js';
+import { getInventorySummary } from '../inventory/inventorySummary.js';
+import { getProductionSummary } from '../production/productionSummary.js';
+import { getPurchasesSummary } from '../purchases/purchaseSummary.js';
+import { getQuotesSummary } from '../quotes/quoteSummary.js';
 
 const indicator = ({
   label,
@@ -12,19 +19,64 @@ const indicator = ({
   source,
 });
 
-export function getBusinessState({ settings } = {}) {
+function availableInput(value, fallback) {
+  if (Array.isArray(value)) return value;
+  return Array.isArray(fallback) ? fallback : [];
+}
+
+function hasInput(value, fallback) {
+  return Array.isArray(value) || Array.isArray(fallback);
+}
+
+function domainIndicator(label, value, available, source) {
+  return indicator({
+    label,
+    value: available ? value : null,
+    status: available ? 'available' : 'unavailable',
+    source: available ? source : null,
+  });
+}
+
+export function getBusinessState({
+  settings,
+  quotes,
+  productionOrders,
+  purchases,
+  purchaseStatusById,
+  inventoryItems,
+  inventoryAvailableById,
+  customerRecords,
+  financeRecords,
+  fabricationProjects,
+  historyRecords,
+} = {}) {
   const companyName = typeof settings?.company_name === 'string'
     ? settings.company_name.trim() || null
     : null;
-  const workspaceId = typeof settings?.workspace_id === 'string'
-    ? settings.workspace_id.trim() || null
-    : null;
-  const productionOrders = workspaceId
-    ? ProductionStorage.loadProductionOrders().filter(
-      (order) => order.workspaceId === workspaceId
-    )
-    : [];
-  const productionCount = workspaceId ? productionOrders.length : null;
+
+  const customerInput = availableInput(customerRecords, quotes);
+  const financeInput = availableInput(financeRecords, quotes);
+  const historyInput = availableInput(historyRecords, quotes);
+
+  const summaries = {
+    quotes: getQuotesSummary(availableInput(quotes)),
+    production: getProductionSummary(availableInput(productionOrders)),
+    purchases: getPurchasesSummary(availableInput(purchases), purchaseStatusById),
+    inventory: getInventorySummary(availableInput(inventoryItems), inventoryAvailableById),
+    customers: getCustomerSummary(customerInput),
+    finances: getFinanceSummary(financeInput),
+    fabrication: getFabricationSummary(availableInput(fabricationProjects)),
+    history: getHistorySummary(historyInput),
+  };
+
+  const availability = {
+    quotes: hasInput(quotes),
+    production: hasInput(productionOrders),
+    purchases: hasInput(purchases),
+    inventory: hasInput(inventoryItems),
+    customers: hasInput(customerRecords, quotes),
+    finances: hasInput(financeRecords, quotes),
+  };
 
   return {
     company: {
@@ -32,34 +84,50 @@ export function getBusinessState({ settings } = {}) {
     },
     status: {
       phase: null,
-      summary: productionCount === null
-        ? null
-        : `${productionCount} ${productionCount === 1 ? 'orden' : 'órdenes'} de producción registradas.`,
+      summary: availability.production
+        ? `${summaries.production.total} ${summaries.production.total === 1 ? 'orden' : 'órdenes'} de producción registradas.`
+        : null,
       health: null,
     },
     indicators: {
-  quotes: indicator({
-    label: 'Cotizaciones',
-  }),
-  production: indicator({
-    label: 'Producción',
-    value: productionCount,
-    status: productionCount === null ? 'unavailable' : 'available',
-    source: productionCount === null ? null : 'production-storage',
-  }),
-  purchases: indicator({
-    label: 'Compras',
-  }),
-  inventory: indicator({
-    label: 'Inventario',
-  }),
-  customers: indicator({
-    label: 'Clientes',
-  }),
-  finances: indicator({
-    label: 'Finanzas',
-  }),
-},
+      quotes: domainIndicator(
+        'Cotizaciones',
+        summaries.quotes.total,
+        availability.quotes,
+        'quotes-summary'
+      ),
+      production: domainIndicator(
+        'Producción',
+        summaries.production.total,
+        availability.production,
+        'production-summary'
+      ),
+      purchases: domainIndicator(
+        'Compras',
+        summaries.purchases.total,
+        availability.purchases,
+        'purchases-summary'
+      ),
+      inventory: domainIndicator(
+        'Inventario',
+        summaries.inventory.total,
+        availability.inventory,
+        'inventory-summary'
+      ),
+      customers: domainIndicator(
+        'Clientes',
+        summaries.customers.total,
+        availability.customers,
+        'customers-summary'
+      ),
+      finances: domainIndicator(
+        'Finanzas',
+        summaries.finances.quotedTotal,
+        availability.finances,
+        'finance-summary'
+      ),
+    },
+    summaries,
     objectives: [],
     roadmap: [],
     pending: [],
