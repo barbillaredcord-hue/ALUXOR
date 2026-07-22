@@ -1,13 +1,13 @@
-const CACHE_NAME = 'brtunegocio-v21';
+const CACHE_NAME = 'brtunegocio-v22';
 
 const APP_SHELL = [
   '/',
   '/index.html',
   '/manifest.webmanifest',
-  '/favicon.ico',
-  '/favicon-16x16.png',
-  '/favicon-32x32.png',
-  '/apple-touch-icon.png',
+  '/favicon-v22.ico',
+  '/favicon-16x16-v22.png',
+  '/favicon-32x32-v22.png',
+  '/apple-touch-icon-v22.png',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
   '/icons/maskable-512.png'
