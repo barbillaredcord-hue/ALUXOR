@@ -21,7 +21,7 @@ export function applyWorkspaceBranding(settings) {
 
   const companyName = settings?.company_name || 'ALUXOR / BosqueReal';
   const logoUrl = versionedLogoUrl(settings);
-  const iconUrl = logoUrl || '/icons/icon.svg';
+  const iconUrl = logoUrl || '/icons/icon-192.png';
 
   document.title = companyName;
   ensureLink('icon').href = iconUrl;
