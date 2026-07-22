@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ClipboardList, ExternalLink } from 'lucide-react';
+import { ClipboardList, ExternalLink, ShoppingCart } from 'lucide-react';
 import {
   PRODUCTION_STATUSES,
   normalizeProductionStatus,
@@ -106,6 +106,11 @@ export default function ProductionSection({
   selectedProductionOrderId,
   onSelectProductionOrder,
   onOpenQuote,
+  onCreatePurchase,
+  onOpenPurchase,
+  purchaseStatusForOrder = () => null,
+  purchasesForOrder = () => [],
+  canManagePurchases = false,
   onUpdateProductionOrder,
   productionLoading = false,
   productionError = '',
@@ -119,6 +124,8 @@ export default function ProductionSection({
   const [activeFilter, setActiveFilter] = useState(PRODUCTION_FILTERS.ALL);
   const filteredOrders = filterProductionOrders(sortedOrders, activeFilter);
   const selectedOrder = sortedOrders.find((order) => order.id === selectedProductionOrderId) || null;
+  const relatedPurchases = selectedOrder ? purchasesForOrder(selectedOrder.id) : [];
+  const relatedPurchase = relatedPurchases[0] || null;
   const selectedOrderQuoteAvailable = quoteReferencesFromProductionOrder(selectedOrder).length > 0;
   const metricFilters = [
     { id: PRODUCTION_FILTERS.ALL, label: 'Total OT', value: metrics.total },
@@ -407,7 +414,36 @@ export default function ProductionSection({
                   </p>
                 )) : <p>Sin eventos registrados.</p>}
               </article>
+              <article className="production-order-detail-notes">
+                <strong>
+                  Compra relacionada
+                  {purchaseStatusForOrder(selectedOrder.id)
+                    ? ` · ${purchaseStatusForOrder(selectedOrder.id)}`
+                    : ''}
+                </strong>
+                {relatedPurchase ? (
+                  <button
+                    key={relatedPurchase.id}
+                    type="button"
+                    className="ghost"
+                    onClick={() => onOpenPurchase?.(relatedPurchase.id)}
+                  >
+                    <ShoppingCart size={17} /> Ver compra · {relatedPurchase.status}
+                  </button>
+                ) : <p>Sin lista de compras.</p>}
+              </article>
               <div className="actions compact">
+                {!relatedPurchase && (
+                  <button
+                    type="button"
+                    disabled={!canManagePurchases}
+                    title={canManagePurchases ? 'Crear lista de compras' : 'No tienes permiso para gestionar Compras'}
+                    onClick={() => { flushDraftAutosave(); void onCreatePurchase?.(selectedOrder); }}
+                  >
+                    <ShoppingCart size={17} />
+                    Crear compra
+                  </button>
+                )}
                 <button
                   type="button"
                   className="ghost"

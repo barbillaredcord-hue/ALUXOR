@@ -20,11 +20,13 @@ describe('getPurchasesSummary', () => {
     const summary = getPurchasesSummary(purchases, statuses);
 
     expect(summary).toEqual({
+      purchases: 3,
       total: 3,
       pending: 1,
       purchased: 1,
       received: 1,
       progress: (2 / 3) * 100,
+      totalCost: 0,
       updatedAt: '2026-07-12T10:00:00.000Z',
     });
     expect(purchases[0]).toEqual({ id: 'one', updatedAt: '2026-07-10T10:00:00.000Z' });
@@ -38,12 +40,30 @@ describe('getPurchasesSummary', () => {
 
   it('devuelve un resumen vacío para entradas inexistentes', () => {
     expect(getPurchasesSummary(null)).toEqual({
+      purchases: 0,
       total: 0,
       pending: 0,
       purchased: 0,
       received: 0,
       progress: 0,
+      totalCost: 0,
       updatedAt: null,
     });
+  });
+
+  it('resume partidas persistentes y sus costos', () => {
+    const summary = getPurchasesSummary([{
+      id: 'purchase-1',
+      updatedAt: '2026-07-20T10:00:00.000Z',
+      items: [
+        { id: 'item-1', status: 'comprado', quantity: 2, unitCost: 50 },
+        { id: 'item-2', status: 'pendiente', totalCost: 25 },
+      ],
+    }]);
+
+    expect(summary.purchases).toBe(1);
+    expect(summary.total).toBe(2);
+    expect(summary.totalCost).toBe(125);
+    expect(summary.updatedAt).toBe('2026-07-20T10:00:00.000Z');
   });
 });

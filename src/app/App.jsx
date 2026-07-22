@@ -35,11 +35,12 @@ import TextSection from '../sections/TextSection.jsx';
 import WorkspaceAccessRequestsSection, {
   WorkspaceAccessGate,
 } from '../sections/WorkspaceAccessRequestsSection.jsx';
-import { canAccessSection } from '../lib/workspace/permissions.js';
+import { canAccessSection, canManagePurchasing } from '../lib/workspace/permissions.js';
 import useAuth from '../hooks/useAuth.js';
 import useWorkspace from '../hooks/useWorkspace.js';
 import useQuotes from '../hooks/useQuotes.js';
 import useProduction from '../hooks/useProduction.js';
+import usePurchases from '../hooks/usePurchases.js';
 import useQuickCalculator from '../hooks/useQuickCalculator.js';
 import usePlanEditor from '../hooks/usePlanEditor.js';
 import useCatalog from '../hooks/useCatalog.js';
@@ -325,6 +326,28 @@ function App() {
     ),
   });
   productionQuoteSyncRef.current = syncProductionOrderFromQuote;
+  const {
+    purchases,
+    activePurchase,
+    selectedPurchaseId,
+    purchasesLoading,
+    purchasesError,
+    purchasesSyncStatus,
+    setSelectedPurchaseId,
+    openPurchase,
+    createPurchase,
+    updatePurchase,
+    updatePurchaseItem,
+    flushPurchaseSave,
+    purchaseStatusForOrder,
+    purchasesForOrder,
+  } = usePurchases({
+    authSession,
+    activeWorkspace,
+    workspaceAccessStatus,
+    setActiveSection,
+  });
+  const canEditPurchases = canManagePurchasing(currentWorkspaceRole);
 
   const productionSummarySelection = useMemo(() => resolveProductionOrderSummary(
     productionOrders,
@@ -724,6 +747,11 @@ function App() {
             onSelectProductionOrder={handleSelectProductionOrder}
             onOpenQuote={openQuoteFromProduction}
             onUpdateProductionOrder={handleUpdateProductionOrder}
+            onCreatePurchase={createPurchase}
+            onOpenPurchase={openPurchase}
+            purchaseStatusForOrder={purchaseStatusForOrder}
+            purchasesForOrder={purchasesForOrder}
+            canManagePurchases={canEditPurchases}
             productionLoading={productionLoading}
             productionError={productionError}
             productionSyncStatus={productionSyncStatus}
@@ -732,8 +760,17 @@ function App() {
 
         {activeSection === 'compras' && (
           <PurchasesSection
-            form={form}
-            quote={quote}
+            purchases={purchases}
+            activePurchase={activePurchase}
+            selectedPurchaseId={selectedPurchaseId}
+            setSelectedPurchaseId={setSelectedPurchaseId}
+            updatePurchase={updatePurchase}
+            updatePurchaseItem={updatePurchaseItem}
+            flushPurchaseSave={flushPurchaseSave}
+            purchasesLoading={purchasesLoading}
+            purchasesError={purchasesError}
+            purchasesSyncStatus={purchasesSyncStatus}
+            canManage={canEditPurchases}
             money={money}
             decimal={decimal}
           />

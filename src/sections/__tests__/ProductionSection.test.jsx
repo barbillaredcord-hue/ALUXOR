@@ -105,4 +105,36 @@ describe('ProductionSection filters', () => {
     expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>.*Ver cotización/s);
     expect(markup).toContain('Proyecto heredado');
   });
+
+  it('abre una compra existente desde la OT y muestra su estado', () => {
+    const markup = renderToStaticMarkup(
+      <ProductionSection
+        productionOrders={[{
+          id: 'order-1', quoteId: 'quote-1', folio: 'OT-20260721-001', estado: 'Pendiente',
+        }]}
+        selectedProductionOrderId="order-1"
+        canManagePurchases
+        purchaseStatusForOrder={() => 'comprado'}
+        purchasesForOrder={() => [{
+          id: 'purchase-1', folio: 'OC-20260721-001', supplier: 'Proveedor', status: 'comprado',
+        }]}
+      />
+    );
+    expect(markup).toContain('Compra relacionada · comprado');
+    expect(markup).toContain('Ver compra · comprado');
+    expect(markup).not.toContain('Crear compra');
+  });
+
+  it('muestra Crear compra únicamente cuando la OT aún no tiene lista', () => {
+    const markup = renderToStaticMarkup(
+      <ProductionSection
+        productionOrders={[{ id: 'order-1', quoteId: 'quote-1', estado: 'Pendiente' }]}
+        selectedProductionOrderId="order-1"
+        canManagePurchases
+        purchasesForOrder={() => []}
+      />
+    );
+    expect(markup).toContain('Crear compra');
+    expect(markup).not.toContain('Ver compra ·');
+  });
 });

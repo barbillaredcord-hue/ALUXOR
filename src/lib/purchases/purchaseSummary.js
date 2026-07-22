@@ -21,11 +21,13 @@ export function normalizePurchaseStatus(status) {
 
 export function getPurchasesSummary(purchases = [], statusById = {}) {
   const summary = {
+    purchases: 0,
     total: 0,
     pending: 0,
     purchased: 0,
     received: 0,
     progress: 0,
+    totalCost: 0,
     updatedAt: null,
   };
 
@@ -33,7 +35,17 @@ export function getPurchasesSummary(purchases = [], statusById = {}) {
 
   let latestTimestamp = null;
 
-  purchases.forEach((purchase) => {
+  const validPurchases = purchases.filter((purchase) => (
+    purchase && typeof purchase === 'object' && !Array.isArray(purchase)
+  ));
+  const hasEmbeddedItems = validPurchases.some((purchase) => Array.isArray(purchase.items));
+  const records = hasEmbeddedItems
+    ? validPurchases.flatMap((purchase) => purchase.items || [])
+    : validPurchases;
+
+  summary.purchases = validPurchases.length;
+
+  records.forEach((purchase) => {
     if (!purchase || typeof purchase !== 'object' || Array.isArray(purchase)) return;
 
     const assignedStatus = purchase.id ? statusById?.[purchase.id] : undefined;
@@ -43,6 +55,14 @@ export function getPurchasesSummary(purchases = [], statusById = {}) {
     if (status === PURCHASE_STATUSES.PURCHASED) summary.purchased += 1;
     else if (status === PURCHASE_STATUSES.RECEIVED) summary.received += 1;
     else summary.pending += 1;
+    const quantity = Number(purchase.quantity);
+    const unitCost = Number(purchase.unitCost ?? purchase.unit_cost);
+    const totalCost = Number(purchase.totalCost ?? purchase.total_cost);
+    summary.totalCost += Number.isFinite(totalCost)
+      ? Math.max(0, totalCost)
+      : (Number.isFinite(quantity) && Number.isFinite(unitCost)
+        ? Math.max(0, quantity) * Math.max(0, unitCost)
+        : 0);
 
     const purchaseTimestamp = timestamp(purchase);
     if (
@@ -51,6 +71,14 @@ export function getPurchasesSummary(purchases = [], statusById = {}) {
     ) {
       latestTimestamp = purchaseTimestamp;
     }
+  });
+
+  validPurchases.forEach((purchase) => {
+    const purchaseTimestamp = timestamp(purchase);
+    if (
+      purchaseTimestamp !== null
+      && (latestTimestamp === null || purchaseTimestamp > latestTimestamp)
+    ) latestTimestamp = purchaseTimestamp;
   });
 
   summary.progress = summary.total > 0
