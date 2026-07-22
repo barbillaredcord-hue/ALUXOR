@@ -1,15 +1,28 @@
-const CACHE_NAME = 'brtunegocio-v22';
+const CACHE_NAME = 'brtunegocio-v23';
 
 const APP_SHELL = [
   '/',
   '/index.html',
   '/manifest.webmanifest',
-  '/favicon-v22.ico',
-  '/favicon-16x16-v22.png',
-  '/favicon-32x32-v22.png',
-  '/apple-touch-icon-v22.png',
+  '/favicon.ico',
+  '/favicon-16x16.png',
+  '/favicon-32x32.png',
+  '/apple-touch-icon.png',
+  '/branding/br-logo-master.png',
+  '/branding/br-logo-horizontal.png',
+  '/branding/br-logo-app.png',
+  '/icons/icon-48.png',
+  '/icons/icon-72.png',
+  '/icons/icon-96.png',
+  '/icons/icon-128.png',
+  '/icons/icon-144.png',
+  '/icons/icon-152.png',
+  '/icons/icon-167.png',
   '/icons/icon-192.png',
+  '/icons/icon-256.png',
+  '/icons/icon-384.png',
   '/icons/icon-512.png',
+  '/icons/icon-1024.png',
   '/icons/maskable-512.png'
 ];
 

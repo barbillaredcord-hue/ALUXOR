@@ -1,15 +1,15 @@
 {
   "name": "ALUXOR / BosqueReal",
   "short_name": "ALUXOR",
-  "description": "ERP profesional para aluminio, vidrio y carpintería.",
+  "description": "Cotizador profesional ALUXOR / BosqueReal para aluminio, vidrio y carpintería.",
   "lang": "es-MX",
   "dir": "ltr",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#000000",
-  "theme_color": "#18231d",
+  "background_color": "#0b1f18",
+  "theme_color": "#0b1f18",
   "categories": [
     "business",
     "productivity",

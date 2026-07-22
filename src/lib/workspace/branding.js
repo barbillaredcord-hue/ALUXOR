@@ -22,19 +22,26 @@ export function applyWorkspaceBranding(settings) {
   const companyName = settings?.company_name || 'ALUXOR / BosqueReal';
   const logoUrl = versionedLogoUrl(settings);
   const iconUrl = logoUrl || '/icons/icon-192.png';
+  const appleTouchIconUrl = logoUrl || '/apple-touch-icon.png';
 
   document.title = companyName;
   ensureLink('icon').href = iconUrl;
-  ensureLink('apple-touch-icon').href = iconUrl;
+  ensureLink('apple-touch-icon').href = appleTouchIconUrl;
 
   const manifest = {
     name: companyName,
     short_name: companyName.slice(0, 30),
     start_url: '/',
     display: 'standalone',
-    background_color: '#0b1210',
-    theme_color: '#0b1210',
-    icons: [{ src: iconUrl, sizes: 'any', type: 'image/png', purpose: 'any maskable' }],
+    background_color: '#0b1f18',
+    theme_color: '#0b1f18',
+    icons: logoUrl
+      ? [{ src: iconUrl, sizes: 'any', type: 'image/png', purpose: 'any maskable' }]
+      : [
+          { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          { src: '/icons/maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+        ],
   };
   const nextManifestUrl = URL.createObjectURL(
     new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' })
