@@ -42,4 +42,14 @@ describe('reporte estructurado de integridad', () => {
     const input = { quotes: [{ id: Q1, workspaceId: 'ws-a', folio: 'ALX-1' }] };
     expect(createIntegrityReport(input)).toEqual(createIntegrityReport(input));
   });
+
+  it('mantiene compatibilidad y expone hallazgos detallados nuevos', () => {
+    const report = createIntegrityReport({
+      quotes: [{ id: 'no-uuid', workspaceId: '', folio: 'ALX-1' }],
+    });
+    expect(report.issues.map((entry) => entry.code)).toContain('MISSING_ENTITY_ID');
+    expect(report.findings.map((entry) => entry.code)).toEqual(expect.arrayContaining([
+      'invalid_uuid', 'missing_workspace_id',
+    ]));
+  });
 });
