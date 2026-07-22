@@ -150,6 +150,7 @@ export function quoteRowToHistoryItem(row) {
 
   return {
     id: source.id ?? '',
+    workspaceId: source.workspace_id ?? source.workspaceId ?? '',
     legacyId: source.legacy_id ?? source.legacyId ?? '',
     createdAt: timestamp(source.created_at),
     updatedAt: timestamp(source.updated_at),
@@ -168,6 +169,7 @@ export function quoteRowToHistoryItem(row) {
     anticipo: numberValue(source.deposit),
     resto: numberValue(source.balance),
     version: numberValue(source.version, 1),
+    deletedAt: source.deleted_at ?? source.deletedAt ?? null,
     form,
   };
 }
@@ -185,6 +187,8 @@ export function historyItemToQuotePayload(item) {
   formData.estadoCotizacion = status;
 
   return {
+    id: source.id ?? '',
+    workspace_id: source.workspaceId ?? source.workspace_id ?? '',
     folio: clean(source.folio),
     status,
     client_name: clean(source.clienteNombre, 'Cliente'),
@@ -194,12 +198,19 @@ export function historyItemToQuotePayload(item) {
     deposit: numberValue(source.anticipo),
     balance: numberValue(source.resto),
     form_data: formData,
+    ...(source.legacyId || source.legacy_id
+      ? { legacy_id: source.legacyId ?? source.legacy_id }
+      : {}),
+    ...(source.createdAt ? { created_at: source.createdAt } : {}),
+    ...(source.updatedAt ? { updated_at: source.updatedAt } : {}),
+    ...(source.deletedAt ? { deleted_at: source.deletedAt } : {}),
+    ...(source.version ? { version: source.version } : {}),
   };
 }
 
 export function quoteFormToPayload(input = {}) {
   const source = isObject(input) ? input : {};
-  const { form, quote, workspaceId, folio } = source;
+  const { form, quote, workspaceId, folio, id } = source;
 
   if (!clean(workspaceId)) {
     return {
@@ -245,6 +256,8 @@ export function quoteFormToPayload(input = {}) {
   return {
     workspaceId,
     payload: {
+      id: clean(id),
+      workspace_id: clean(workspaceId),
       folio: clean(folio),
       status,
       client_name: clean(form.clienteNombre, 'Cliente'),

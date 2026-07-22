@@ -62,6 +62,14 @@ describe('PurchaseRepository', () => {
     expect(result.error).toBeInstanceOf(Error);
   });
 
+  it('rechaza crear una compra sin UUID estable antes de insertar', async () => {
+    const result = await PurchaseRepository.createPurchaseRemote('ws-1', {
+      id: 'purchase-local', productionOrderId: 'order-1', quoteId: 'quote-1',
+    });
+    expect(result.error?.code).toBe('MISSING_STABLE_ENTITY_ID');
+    expect(from).not.toHaveBeenCalled();
+  });
+
   it('carga el conjunto canónico incluyendo compras eliminadas lógicamente', async () => {
     const result = await PurchaseRepository.loadPurchases('ws-1');
     expect(result).toEqual({ data: [], error: null });

@@ -1,5 +1,6 @@
 import { supabase } from '../supabase/client';
 import { normalizeQuotePayload } from './quoteAdapter.js';
+import { normalizeEntityId } from '../identity/entityIdentity.js';
 
 const quoteColumns = `
   id,
@@ -55,6 +56,15 @@ export async function getQuote(id) {
     .single());
 }
 
+async function getQuoteInWorkspace(workspaceId, id) {
+  return execute(() => supabase
+    .from('quotes')
+    .select(quoteColumns)
+    .eq('workspace_id', workspaceId)
+    .eq('id', id)
+    .maybeSingle());
+}
+
 export async function createQuote(workspaceId, form) {
   if (!workspaceId) {
     return { data: null, error: new Error('Falta el identificador del workspace.') };
@@ -74,7 +84,24 @@ export async function createQuote(workspaceId, form) {
     }
 
     const canonicalForm = normalizeQuotePayload(form);
+    const id = normalizeEntityId(canonicalForm.id);
+    if (!id) {
+      return {
+        data: null,
+        error: Object.assign(new Error('La cotización requiere un UUID estable.'), {
+          code: 'MISSING_STABLE_ENTITY_ID',
+        }),
+      };
+    }
+
+    const existing = await getQuoteInWorkspace(workspaceId, id);
+    if (existing.error) return existing;
+    if (existing.data) {
+      return updateQuote(id, canonicalForm, Number(existing.data.version), workspaceId);
+    }
+
     const quote = {
+      id,
       workspace_id: workspaceId,
       created_by: user.id,
       folio: canonicalForm.folio,
@@ -88,15 +115,20 @@ export async function createQuote(workspaceId, form) {
       form_data: canonicalForm.form_data,
     };
 
-    return supabase
+    const inserted = await supabase
       .from('quotes')
       .insert(quote)
       .select()
       .single();
+
+    if (inserted.error?.code !== '23505') return inserted;
+    const raced = await getQuoteInWorkspace(workspaceId, id);
+    if (raced.error || !raced.data) return inserted;
+    return updateQuote(id, canonicalForm, Number(raced.data.version), workspaceId);
   });
 }
 
-export async function updateQuote(id, form, expectedVersion) {
+export async function updateQuote(id, form, expectedVersion, workspaceId = '') {
   if (!id) {
     return { data: null, error: new Error('Falta el identificador de la cotización.') };
   }
@@ -114,14 +146,13 @@ export async function updateQuote(id, form, expectedVersion) {
       form_data: canonicalForm.form_data,
     };
 
-    if (Object.prototype.hasOwnProperty.call(canonicalForm, 'folio')) {
-      quote.folio = canonicalForm.folio;
-    }
-
     let query = supabase
       .from('quotes')
       .update(quote)
       .eq('id', id);
+
+    const normalizedWorkspaceId = String(workspaceId || canonicalForm.workspace_id || '').trim();
+    if (normalizedWorkspaceId) query = query.eq('workspace_id', normalizedWorkspaceId);
 
     if (Number.isInteger(expectedVersion) && expectedVersion > 0) {
       query = query.eq('version', expectedVersion);

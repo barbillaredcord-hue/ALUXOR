@@ -232,19 +232,26 @@ export function createPurchaseFromProductionOrder({
   purchases = [],
   createdBy,
   now = new Date(),
+  idFactory = () => globalThis.crypto?.randomUUID?.(),
 } = {}) {
   const order = object(productionOrder) ? productionOrder : {};
   const createdAt = date(now, new Date().toISOString());
   const folio = generatePurchaseNumber(purchases, createdAt);
-  const id = `purchase-${folio}-${Date.parse(createdAt)}`;
+  const id = text(idFactory());
+  if (!id) throw new Error('No se pudo generar el UUID de la compra.');
   const items = buildPurchaseItems(quote).map((item) => ({
     ...item,
+    id: text(idFactory()),
     workspaceId: text(order.workspaceId),
     purchaseId: id,
     createdBy: text(createdBy),
     createdAt,
     updatedAt: createdAt,
   }));
+
+  if (items.some((item) => !item.id)) {
+    throw new Error('No se pudo generar el UUID de una partida de compra.');
+  }
 
   return normalizePurchase({
     id,

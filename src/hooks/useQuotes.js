@@ -3,6 +3,7 @@ import { QuoteRepository } from '../lib/quotes/quoteRepository.js';
 import { QuoteAdapter } from '../lib/quotes/quoteAdapter.js';
 import { OfflineQueue } from '../lib/quotes/offlineQueue.js';
 import { ConflictResolver } from '../lib/quotes/conflictResolver.js';
+import { createUuid } from '../lib/identity/createUuid'
 import {
   findQuoteForProductionOrder,
   normalizeQuoteReference,
@@ -1672,12 +1673,6 @@ export default function useQuotes({
     return `${prefix}-${String(maxConsecutive + 1).padStart(3, '0')}`;
   }
 
-  function isWorkspaceFolioConflict(error) {
-    const description = `${error?.message || ''} ${error?.details || ''}`;
-    return error?.code === '23505'
-      && description.includes('quotes_workspace_folio_active_uidx');
-  }
-
   function warnCreateQuoteError(error) {
     console.warn('createQuote falló:', {
       code: error?.code,
@@ -1870,52 +1865,6 @@ export default function useQuotes({
 
         if (operation.type === 'create') {
           result = await QuoteRepository.createQuote(workspaceId, operation.payload);
-
-          if (isWorkspaceFolioConflict(result.error)) {
-            const remoteResult = await QuoteRepository.loadQuotes(workspaceId);
-            if (remoteResult.error && isNetworkError(remoteResult.error)) {
-              result = remoteResult;
-            } else {
-              const remoteRows = Array.isArray(remoteResult.data) ? remoteResult.data : [];
-              const existingRow = remoteRows.find((row) => (
-                queuedCreateMatchesRow(row, operation.payload)
-              ));
-
-              if (existingRow) {
-                result = { data: existingRow, error: null };
-              } else {
-                const retryFolio = generateQuoteFolio([
-                  ...historyRef.current,
-                  ...remoteRows,
-                ]);
-                const retryPayload = { ...operation.payload, folio: retryFolio };
-                OfflineQueue.updateOperation(operation.id, { payload: retryPayload });
-
-                const retryHistory = HistoryEngine.normalizeHistory(
-                  historyRef.current.map((item) => (
-                    item.id === operation.quoteId
-                      ? { ...item, folio: retryFolio, updatedAt: Date.now() }
-                      : item
-                  )),
-                );
-                historyRef.current = retryHistory;
-                setHistory(retryHistory);
-                StorageEngine.saveHistory(retryHistory);
-                if (activeQuoteIdentityRef.current?.id === operation.quoteId) {
-                  const nextIdentity = {
-                    ...activeQuoteIdentityRef.current,
-                    folio: retryFolio,
-                    version: null,
-                    remote: false,
-                  };
-                  activeQuoteIdentityRef.current = nextIdentity;
-                  setActiveQuoteIdentity(nextIdentity);
-                }
-
-                result = await QuoteRepository.createQuote(workspaceId, retryPayload);
-              }
-            }
-          }
         } else if (operation.type === 'update') {
           result = await QuoteRepository.updateQuote(
             operation.quoteId,
@@ -2107,7 +2056,7 @@ export default function useQuotes({
       estadoCotizacion: status,
     };
     const item = {
-      id: currentIdentity?.id || `hist-${now}`,
+      id: currentIdentity?.id || createUuid(),
       createdAt: currentIdentity?.createdAt || now,
       updatedAt: now,
       status,
@@ -2188,6 +2137,7 @@ export default function useQuotes({
       quote,
       workspaceId,
       folio,
+      id: item.id,
     });
 
     if (payloadError || !payload) {
@@ -2226,55 +2176,7 @@ export default function useQuotes({
         if (!isCurrentQuoteEditSession(quoteEditSessionRef, editSession)) {
           return firstAttempt;
         }
-        if (!isWorkspaceFolioConflict(firstAttempt.error)) return firstAttempt;
-
-        warnCreateQuoteError(firstAttempt.error);
-        setSyncStatus('Folio duplicado · generando nuevo consecutivo');
-
-        const {
-          data: remoteQuotes,
-          error: remoteQuotesError,
-        } = await QuoteRepository.loadQuotes(workspaceId);
-        if (!isCurrentQuoteEditSession(quoteEditSessionRef, editSession)) {
-          return { data: null, error: remoteQuotesError };
-        }
-        if (remoteQuotesError) return { data: null, error: remoteQuotesError };
-
-        const existingRow = (Array.isArray(remoteQuotes) ? remoteQuotes : [])
-          .find((row) => queuedCreateMatchesRow(row, payload));
-        if (existingRow) return { data: existingRow, error: null };
-
-        const retryFolio = generateQuoteFolio([
-          ...historyRef.current,
-          ...(Array.isArray(remoteQuotes) ? remoteQuotes : []),
-        ]);
-        const retryHistory = HistoryEngine.normalizeHistory(
-          historyRef.current.map((historyItem) => (
-            historyItem.id === item.id
-              ? { ...historyItem, folio: retryFolio, updatedAt: Date.now() }
-              : historyItem
-          )),
-        );
-
-        historyRef.current = retryHistory;
-        setHistory(retryHistory);
-        StorageEngine.saveHistory(retryHistory);
-        const retryIdentity = {
-          id: item.id,
-          workspaceId,
-          folio: retryFolio,
-          createdAt: item.createdAt,
-          updatedAt: Date.now(),
-          version: null,
-          remote: false,
-        };
-        activeQuoteIdentityRef.current = retryIdentity;
-        setActiveQuoteIdentity(retryIdentity);
-
-        return QuoteRepository.createQuote(workspaceId, {
-          ...payload,
-          folio: retryFolio,
-        });
+        return firstAttempt;
       })();
 
     void remoteSave
@@ -2358,6 +2260,7 @@ export default function useQuotes({
                 quote: latestQuote,
                 workspaceId,
                 folio: remoteItem.folio,
+                id: remoteItem.id,
               });
               const hasNewerLocalChanges = Boolean(
                 latestPayloadResult.payload
@@ -2406,6 +2309,7 @@ export default function useQuotes({
               quote: latestQuote,
               workspaceId,
               folio: currentIdentity?.folio || folio,
+              id: item.id,
             });
             if (latestPayloadResult.payload) {
               queuedOperation = enqueueOfflineQuoteOperation({

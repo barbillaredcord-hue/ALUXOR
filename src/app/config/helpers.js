@@ -66,8 +66,7 @@ export function isNetworkError(error) {
 }
 
 export function queuedCreateMatchesRow(row, payload) {
-  if (!row || !payload || row.folio !== payload.folio) return false;
-
+  if (!row?.id || !payload?.id || row.id !== payload.id) return false;
   try {
     return row.status === payload.status
       && row.client_name === payload.client_name
@@ -426,5 +425,3 @@ export function refreshInstalledApp() {
     window.location.href = `${window.location.origin}${window.location.pathname}?v=${APP_VERSION_QUERY}`;
   });
 }
-
-

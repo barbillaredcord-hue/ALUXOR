@@ -1,3 +1,5 @@
+import { createUuid } from '../identity/createUuid';
+
 const STORAGE_PREFIX = 'aluxor.purchases.offlineQueue';
 const TYPES = new Set(['create', 'update', 'updateItem']);
 
@@ -19,7 +21,7 @@ function sanitize(operation, workspaceId) {
   const itemId = operation.type === 'updateItem' ? String(operation.itemId || '').trim() : '';
   if (!purchaseId || (operation.type === 'updateItem' && !itemId)) return null;
   return {
-    id: String(operation.id || `purchase-offline-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
+    id: String(operation.id || createUuid()),
     type: operation.type,
     workspaceId,
     purchaseId,

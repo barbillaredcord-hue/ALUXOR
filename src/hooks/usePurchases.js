@@ -15,6 +15,13 @@ import { PurchaseOfflineQueue } from '../lib/purchases/purchaseOfflineQueue.js';
 
 const AUTOSAVE_DELAY_MS = 700;
 
+export function isPendingPurchaseCreate(queue, purchaseId) {
+  return String(purchaseId || '').startsWith('purchase-')
+    || (Array.isArray(queue) && queue.some((operation) => (
+      operation.type === 'create' && operation.purchaseId === purchaseId
+    )));
+}
+
 export function mergePurchaseCollections(remote = [], local = []) {
   const merged = new Map();
   (Array.isArray(remote) ? remote : []).forEach((purchase) => {
@@ -529,7 +536,9 @@ export default function usePurchases({
   async function savePendingPurchase(purchase) {
     const workspaceId = purchase.workspaceId;
     const localId = purchase.id;
-    const isCreate = localId.startsWith('purchase-');
+    const isCreate = isPendingPurchaseCreate(
+      PurchaseOfflineQueue.load(workspaceId), localId,
+    );
     let result = isCreate
       ? await PurchaseRepository.createPurchaseRemote(workspaceId, purchase)
       : await PurchaseRepository.updatePurchaseRemote(
@@ -665,7 +674,9 @@ export default function usePurchases({
     const purchase = purchasesRef.current.find((entry) => entry.id === purchaseId);
     const item = purchase?.items.find((entry) => entry.id === itemId);
     if (!item?.pendingSync) return true;
-    if (!navigator.onLine || purchaseId.startsWith('purchase-')) {
+    if (!navigator.onLine || isPendingPurchaseCreate(
+      PurchaseOfflineQueue.load(purchase.workspaceId), purchaseId,
+    )) {
       setPurchasesSyncStatus('Compras guardadas localmente');
       return true;
     }
@@ -755,7 +766,9 @@ export default function usePurchases({
       || PurchaseStorage.loadPurchases(contextRef.current.workspaceId)
         .find((item) => item.id === purchaseId);
     if (!purchase) return false;
-    if (!purchase.pendingSync && !purchaseId.startsWith('purchase-')) return true;
+    if (!purchase.pendingSync && !isPendingPurchaseCreate(
+      PurchaseOfflineQueue.load(purchase.workspaceId), purchaseId,
+    )) return true;
     if (!navigator.onLine) {
       setPurchasesError('Cambios de Compras pendientes de sincronizar.');
       setPurchasesSyncStatus('Compras guardadas localmente');
@@ -822,7 +835,7 @@ export default function usePurchases({
     };
     if (!upsertActivePurchase(optimistic)) return false;
     PurchaseOfflineQueue.enqueue(current.workspaceId, {
-      type: current.id.startsWith('purchase-') ? 'create' : 'update',
+      type: 'update',
       purchaseId: current.id,
       expectedVersion,
     });
@@ -879,7 +892,9 @@ export default function usePurchases({
     };
     control.sequence += 1;
     itemSaveControlsRef.current.set(key, control);
-    if (!purchaseId.startsWith('purchase-')) schedulePurchaseItemSave(purchaseId, itemId);
+    if (!isPendingPurchaseCreate(
+      PurchaseOfflineQueue.load(current.workspaceId), purchaseId,
+    )) schedulePurchaseItemSave(purchaseId, itemId);
     return true;
   }
 

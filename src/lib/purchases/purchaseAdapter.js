@@ -59,6 +59,7 @@ export function purchaseRowToModel(row = {}, itemRows = []) {
 export function purchaseToInsertPayload(purchase, workspaceId, userId) {
   const model = normalizePurchase(purchase);
   return {
+    id: model.id,
     workspace_id: workspaceId,
     production_order_id: model.productionOrderId,
     production_order_folio: model.productionOrderFolio || null,
@@ -81,7 +82,6 @@ export function purchaseToInsertPayload(purchase, workspaceId, userId) {
 export function purchaseToUpdatePayload(purchase) {
   const model = normalizePurchase(purchase);
   return {
-    folio: model.folio,
     supplier: model.supplier || null,
     status: model.status,
     ordered_at: iso(model.orderedAt),
@@ -96,6 +96,7 @@ export function purchaseToUpdatePayload(purchase) {
 export function purchaseItemToInsertPayload(item, workspaceId, purchaseId, userId) {
   const model = normalizePurchaseItem(item);
   return {
+    id: model.id,
     workspace_id: workspaceId,
     purchase_id: purchaseId,
     source_type: model.sourceType,

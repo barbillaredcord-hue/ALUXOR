@@ -54,6 +54,8 @@ export function productionOrderToInsertPayload(order) {
   const model = normalizedModel(order);
 
   return {
+    id: model.id,
+    workspace_id: model.workspaceId,
     quote_id: model.quoteId,
     folio: model.folio,
     status: model.estado,
@@ -69,6 +71,8 @@ export function productionOrderToInsertPayload(order) {
     form_snapshot: model.formSnapshot,
     quote_version: positiveInteger(model.quoteVersion),
     deleted_at: dateOrNull(model.deletedAt),
+    ...(dateOrNull(model.fechaCreacion) ? { created_at: dateOrNull(model.fechaCreacion) } : {}),
+    ...(dateOrNull(model.updatedAt) ? { updated_at: dateOrNull(model.updatedAt) } : {}),
   };
 }
 

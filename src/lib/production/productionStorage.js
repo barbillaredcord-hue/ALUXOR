@@ -50,7 +50,6 @@ function normalizeOrders(orders) {
   if (!Array.isArray(orders)) return [];
 
   const byId = new Map();
-  const byQuoteId = new Map();
 
   orders.forEach((order) => {
     const normalized = normalizeStoredOrder(order);
@@ -63,15 +62,7 @@ function normalizeOrders(orders) {
     }
   });
 
-  Array.from(byId.values()).forEach((order) => {
-    const quoteKey = `${order.workspaceId}:${order.quoteId}`;
-    const previousByQuote = byQuoteId.get(quoteKey);
-    if (!previousByQuote || isNewerOrder(order, previousByQuote)) {
-      byQuoteId.set(quoteKey, order);
-    }
-  });
-
-  return Array.from(byQuoteId.values());
+  return Array.from(byId.values());
 }
 
 export function loadProductionOrders() {
@@ -223,7 +214,10 @@ export function findLocalProductionOrders(workspaceId) {
 
   return loadProductionOrders().filter((order) => (
     order.workspaceId === normalizedWorkspaceId
-    && order.id.startsWith('production-')
+    && (
+      order.id.startsWith('production-')
+      || (order.pendingSync && !Number.isInteger(Number(order.version)))
+    )
   ));
 }
 
@@ -232,7 +226,10 @@ export function findPendingProductionOrders(workspaceId) {
   if (!normalizedWorkspaceId) return [];
 
   return loadProductionOrders().filter((order) => (
-    order.workspaceId === normalizedWorkspaceId && order.pendingSync
+    order.workspaceId === normalizedWorkspaceId
+    && order.pendingSync
+    && Number.isInteger(Number(order.version))
+    && Number(order.version) >= 1
   ));
 }
 

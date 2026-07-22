@@ -63,7 +63,7 @@ export function recoverLegacyHistoryFromLocalStorage(helpers = {}) {
     const resto = toNumber(item.resto, item.rest, item.saldo, total - anticipo);
 
     return {
-      id: String(firstValue(item.id, item.uuid, item.folio, `legacy-${key}-${createdAt}-${index}`)),
+      id: String(firstValue(item.id, item.uuid, '')),
       createdAt,
       updatedAt,
       status: firstValue(item.status, item.estado, 'Pendiente'),

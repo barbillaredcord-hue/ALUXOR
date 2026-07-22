@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  purchaseItemToInsertPayload,
   purchaseItemToUpdatePayload,
   purchaseRowToModel,
+  purchaseToInsertPayload,
   purchaseToUpdatePayload,
 } from './purchaseAdapter.js';
 
@@ -65,5 +67,22 @@ describe('purchaseAdapter', () => {
   it('envía null al limpiar la fecha de recepción', () => {
     expect(purchaseToUpdatePayload({ receivedAt: null }).received_at).toBeNull();
     expect(purchaseToUpdatePayload({ receivedAt: '' }).received_at).toBeNull();
+  });
+
+  it('conserva UUID, workspace y relaciones en payloads de creación', () => {
+    const purchase = {
+      id: '55555555-5555-4555-8555-555555555555', workspaceId: 'ws',
+      productionOrderId: 'ot', quoteId: 'q', folio: 'OC-1', items: [],
+    };
+    const item = {
+      id: '66666666-6666-4666-8666-666666666666', sourceType: 'material',
+      sourceId: 'm1', name: 'MDF', quantity: 1, unitCost: 100,
+    };
+    expect(purchaseToInsertPayload(purchase, 'ws', 'user')).toMatchObject({
+      id: purchase.id, workspace_id: 'ws', production_order_id: 'ot', quote_id: 'q', folio: 'OC-1',
+    });
+    expect(purchaseItemToInsertPayload(item, 'ws', purchase.id, 'user')).toMatchObject({
+      id: item.id, workspace_id: 'ws', purchase_id: purchase.id,
+    });
   });
 });

@@ -1,4 +1,5 @@
 import { supabase } from '../supabase/client';
+import { createUuid } from '../identity/createUuid';
 
 const BRANDING_BUCKET = 'workspace-branding';
 const membershipSelection = `
@@ -182,7 +183,7 @@ export async function loadAuditLog(workspaceId) {
 
 function subscribeToTable({ table, filter, onChange }) {
   const channel = supabase
-    .channel(`${table}:${filter}:${crypto.randomUUID()}`)
+    .channel(`${table}:${filter}:${createUuid()}`)
     .on('postgres_changes', { event: '*', schema: 'public', table, filter }, onChange)
     .subscribe();
   return () => { void supabase.removeChannel(channel); };

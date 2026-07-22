@@ -1,6 +1,10 @@
+import { createUuid } from '../identity/createUuid';
+
 const STORAGE_KEY = 'aluxor.quotes.offlineQueue';
 const operationTypes = new Set(['create', 'update', 'soft_delete']);
 const payloadFields = [
+  'id',
+  'workspace_id',
   'folio',
   'status',
   'client_name',
@@ -123,7 +127,7 @@ export function enqueueOperation(operation) {
   const source = operation && typeof operation === 'object' ? operation : {};
   const candidate = sanitizeOperation({
     ...source,
-    id: text(source.id) || `offline-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    id: text(source.id) || createUuid(),
     createdAt: source.createdAt || Date.now(),
     attempts: source.attempts || 0,
   });
@@ -132,8 +136,7 @@ export function enqueueOperation(operation) {
 
   const queue = loadQueue();
   const existingIndex = queue.findIndex((item) => (
-    item.type === candidate.type
-    && item.workspaceId === candidate.workspaceId
+    item.workspaceId === candidate.workspaceId
     && item.quoteId === candidate.quoteId
   ));
 
@@ -141,6 +144,9 @@ export function enqueueOperation(operation) {
     const existing = queue[existingIndex];
     queue[existingIndex] = {
       ...candidate,
+      type: existing.type === 'create' && candidate.type === 'update'
+        ? 'create'
+        : candidate.type,
       id: existing.id,
       createdAt: existing.createdAt,
       attempts: 0,
@@ -151,8 +157,7 @@ export function enqueueOperation(operation) {
 
   const saved = saveQueue(queue);
   return saved.find((item) => (
-    item.type === candidate.type
-    && item.workspaceId === candidate.workspaceId
+    item.workspaceId === candidate.workspaceId
     && item.quoteId === candidate.quoteId
   )) || null;
 }

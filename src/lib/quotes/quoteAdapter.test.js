@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  historyItemToQuotePayload,
   normalizeQuotePayload,
   normalizeQuoteStatus,
   quoteCommercialStatusOptions,
+  quoteRowToHistoryItem,
 } from './quoteAdapter.js';
 
 describe('estado comercial canónico de Cotización', () => {
@@ -29,5 +31,21 @@ describe('estado comercial canónico de Cotización', () => {
     expect(normalized.status).toBe('Aceptada');
     expect(normalized.form_data.estadoCotizacion).toBe('Aceptada');
     expect(payload).toEqual(snapshot);
+  });
+
+  it('conserva identidad, workspace, folio, timestamps, borrado y versión en round trip', () => {
+    const row = {
+      id: '11111111-1111-4111-8111-111111111111', workspace_id: 'ws', folio: 'ALX-1',
+      status: 'Pendiente', form_data: {}, version: 3,
+      created_at: '2026-07-22T12:00:00Z', updated_at: '2026-07-22T13:00:00Z',
+      deleted_at: '2026-07-23T12:00:00Z',
+    };
+    const local = quoteRowToHistoryItem(row);
+    const payload = historyItemToQuotePayload(local);
+    expect(local).toMatchObject({ id: row.id, workspaceId: 'ws', folio: 'ALX-1', version: 3 });
+    expect(payload).toMatchObject({
+      id: row.id, workspace_id: 'ws', folio: 'ALX-1', version: 3,
+      deleted_at: '2026-07-23T12:00:00Z',
+    });
   });
 });

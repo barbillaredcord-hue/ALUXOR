@@ -7,7 +7,7 @@ import {
   purchaseToInsertPayload,
   purchaseToUpdatePayload,
 } from './purchaseAdapter.js';
-import { generatePurchaseNumber } from './purchaseEngine.js';
+import { normalizeEntityId } from '../identity/entityIdentity.js';
 
 const purchaseColumns = `
   id, workspace_id, production_order_id, production_order_folio, quote_id,
@@ -144,40 +144,63 @@ async function insertItems(workspaceId, purchaseId, items, userId) {
     purchaseItemToInsertPayload(item, workspaceId, purchaseId, userId)
   ));
   if (!payload.length) return { data: [], error: null };
-  return execute(() => supabase.from('purchase_items').insert(payload).select(itemColumns));
+  return execute(() => supabase
+    .from('purchase_items')
+    .upsert(payload, { onConflict: 'id', ignoreDuplicates: true })
+    .select(itemColumns));
 }
 
 export async function createPurchaseRemote(workspaceId, purchase) {
   if (!workspaceId) return { data: null, error: error('Falta el workspace.'), existing: false };
+  const id = normalizeEntityId(purchase?.id);
+  if (!id) {
+    return {
+      data: null,
+      error: error('La compra requiere un UUID estable.', 'MISSING_STABLE_ENTITY_ID'),
+      existing: false,
+    };
+  }
+  if ((purchase.items || []).some((item) => !normalizeEntityId(item?.id))) {
+    return {
+      data: null,
+      error: error('Cada partida requiere un UUID estable.', 'MISSING_STABLE_ENTITY_ID'),
+      existing: false,
+    };
+  }
+  const existingById = await getPurchase(workspaceId, id);
+  if (existingById.error) return { data: null, error: existingById.error, existing: false };
+  if (existingById.data) {
+    const user = await authenticatedUser();
+    if (!user) return { data: null, error: error('No existe una sesión activa.'), existing: false };
+    const itemResult = await insertItems(workspaceId, id, purchase.items || [], user.id);
+    if (itemResult.error) return { data: null, error: itemResult.error, existing: false };
+    const refreshed = await getPurchase(workspaceId, id);
+    return { ...refreshed, existing: true };
+  }
   const existing = await getPurchaseByProductionOrder(workspaceId, purchase?.productionOrderId);
   if (existing.error) return { data: null, error: existing.error, existing: false };
-  if (existing.data) return { data: existing.data, error: null, existing: true };
+  if (existing.data && existing.data.id !== id) {
+    return {
+      data: null,
+      error: error('La OT ya está relacionada con otra compra.', 'PURCHASE_REFERENCE_CONFLICT'),
+      existing: false,
+    };
+  }
   const user = await authenticatedUser();
   if (!user) return { data: null, error: error('No existe una sesión activa.'), existing: false };
   let inserted = await execute(() => supabase
     .from('purchases')
-    .insert(purchaseToInsertPayload(purchase, workspaceId, user.id))
+    .insert({ ...purchaseToInsertPayload(purchase, workspaceId, user.id), id })
     .select(purchaseColumns)
     .single());
   if (inserted.error?.code === '23505') {
-    const duplicate = await getPurchaseByProductionOrder(
-      workspaceId,
-      purchase?.productionOrderId,
-    );
-    if (duplicate.data && !duplicate.error) {
-      return { data: duplicate.data, error: null, existing: true };
+    const raced = await getPurchase(workspaceId, id);
+    if (raced.data && !raced.error) {
+      const itemResult = await insertItems(workspaceId, id, purchase.items || [], user.id);
+      if (itemResult.error) return { data: null, error: itemResult.error, existing: false };
+      const refreshed = await getPurchase(workspaceId, id);
+      return { ...refreshed, existing: true };
     }
-    const current = await loadPurchases(workspaceId);
-    if (current.error) return { data: null, error: inserted.error, existing: false };
-    const retryPurchase = {
-      ...purchase,
-      folio: generatePurchaseNumber(current.data, new Date()),
-    };
-    inserted = await execute(() => supabase
-      .from('purchases')
-      .insert(purchaseToInsertPayload(retryPurchase, workspaceId, user.id))
-      .select(purchaseColumns)
-      .single());
   }
   if (inserted.error) {
     return { data: null, error: inserted.error, existing: false };

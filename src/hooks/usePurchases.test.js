@@ -7,6 +7,7 @@ import {
   mergePendingPurchaseItem,
   mergePurchaseCollections,
   mergePurchaseWithPendingItems,
+  isPendingPurchaseCreate,
   pendingPurchaseChangedSince,
   purchaseDirtyPaths,
   purchaseStatusForProductionOrder,
@@ -18,6 +19,11 @@ import {
 import { selectPurchaseViews } from '../lib/purchases/purchaseSelectors.js';
 
 describe('usePurchases helpers', () => {
+  it('reconoce una creación pendiente por UUID sin depender del prefijo legacy', () => {
+    const id = '55555555-5555-4555-8555-555555555555';
+    expect(isPendingPurchaseCreate([{ type: 'create', purchaseId: id }], id)).toBe(true);
+    expect(isPendingPurchaseCreate([{ type: 'update', purchaseId: id }], id)).toBe(false);
+  });
   it('no sobrescribe cambios locales pendientes con Realtime remoto', () => {
     const remote = [{ id: 'p1', workspaceId: 'ws', productionOrderId: 'ot', quoteId: 'q', supplier: 'Remoto', version: 2 }];
     const local = [{

@@ -183,18 +183,24 @@ export function createProductionOrder(input = {}, existingOrders = []) {
     timeline.unshift(creationEvent);
   }
 
-  return normalizeProductionOrder({
-    ...source,
-    id: clean(source.id) || `production-${folio}-${Date.parse(now)}`,
-    folio,
-    fechaCreacion: now,
-    timeline,
-    formSnapshot: source.formSnapshot ?? source.quote?.form ?? {},
-    quoteId: source.quoteId ?? source.quote?.id,
-    quoteVersion: source.quoteVersion ?? source.quote?.version,
-    createdBy,
-    updatedAt: now,
-  });
+  const id = clean(source.id) || globalThis.crypto?.randomUUID?.();
+  if (!id) throw new Error('No se pudo generar el UUID de la orden de producción.');
+
+  return {
+    ...normalizeProductionOrder({
+      ...source,
+      id,
+      folio,
+      fechaCreacion: now,
+      timeline,
+      formSnapshot: source.formSnapshot ?? source.quote?.form ?? {},
+      quoteId: source.quoteId ?? source.quote?.id,
+      quoteVersion: source.quoteVersion ?? source.quote?.version,
+      createdBy,
+      updatedAt: now,
+    }),
+    pendingSync: true,
+  };
 }
 
 export function updateProductionOrder(order, changes = {}, updatedAt = new Date()) {

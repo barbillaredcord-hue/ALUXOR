@@ -1,5 +1,5 @@
 import { supabase } from '../supabase/client';
-import { generateProductionOrderNumber } from './productionEngine.js';
+import { normalizeEntityId } from '../identity/entityIdentity.js';
 import {
   productionOrderRowToModel,
   productionOrderToInsertPayload,
@@ -34,12 +34,6 @@ function readableError(message, code) {
   const error = new Error(message);
   if (code) error.code = code;
   return error;
-}
-
-function conflictMatches(error, constraint) {
-  if (error?.code !== '23505') return false;
-  return `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`
-    .includes(constraint);
 }
 
 async function execute(query) {
@@ -115,18 +109,43 @@ async function insertProductionOrder(payload) {
     .single());
 }
 
-async function existingOrderResult(workspaceId, quoteId) {
-  const existing = await getProductionOrderByQuoteId(workspaceId, quoteId);
-  if (existing.error || !existing.data) return null;
-  return { data: existing.data, error: null, existing: true };
-}
-
 export async function createProductionOrderRemote(workspaceId, order) {
   if (!workspaceId) {
     return { data: null, error: readableError('Falta el identificador del workspace.'), existing: false };
   }
 
   try {
+    const id = normalizeEntityId(order?.id);
+    if (!id) {
+      return {
+        data: null,
+        error: readableError('La orden requiere un UUID estable.', 'MISSING_STABLE_ENTITY_ID'),
+        existing: false,
+      };
+    }
+
+    const existingById = await getProductionOrder(workspaceId, id);
+    if (existingById.error) return { ...existingById, existing: false };
+    if (existingById.data) {
+      const updated = await updateProductionOrderRemote(
+        workspaceId, id, order, existingById.data.version,
+      );
+      return { ...updated, existing: true };
+    }
+
+    const existingByQuote = await getProductionOrderByQuoteId(workspaceId, order?.quoteId);
+    if (existingByQuote.error) return { ...existingByQuote, existing: false };
+    if (existingByQuote.data && existingByQuote.data.id !== id) {
+      return {
+        data: null,
+        error: readableError(
+          'La cotización ya está relacionada con otra orden de producción.',
+          'PRODUCTION_REFERENCE_CONFLICT',
+        ),
+        existing: false,
+      };
+    }
+
     const {
       data: { user },
       error: userError,
@@ -142,6 +161,7 @@ export async function createProductionOrderRemote(workspaceId, order) {
 
     const payload = {
       ...productionOrderToInsertPayload(order),
+      id,
       workspace_id: workspaceId,
       created_by: user.id,
     };
@@ -164,38 +184,9 @@ export async function createProductionOrderRemote(workspaceId, order) {
       };
     }
 
-    if (conflictMatches(result.error, 'production_orders_workspace_quote_active_uidx')) {
-      return await existingOrderResult(workspaceId, payload.quote_id)
-        || { data: null, error: result.error, existing: false };
-    }
-
-    if (conflictMatches(result.error, 'production_orders_workspace_folio_active_uidx')) {
-      const remoteOrders = await loadProductionOrders(workspaceId);
-      if (remoteOrders.error) {
-        return { data: null, error: result.error, existing: false };
-      }
-
-      const retryPayload = {
-        ...payload,
-        folio: generateProductionOrderNumber(
-          remoteOrders.data,
-          order?.fechaCreacion || new Date()
-        ),
-      };
-      result = await insertProductionOrder(retryPayload);
-
-      if (!result.error) {
-        return {
-          data: productionOrderRowToModel(result.data),
-          error: null,
-          existing: false,
-        };
-      }
-
-      if (conflictMatches(result.error, 'production_orders_workspace_quote_active_uidx')) {
-        return await existingOrderResult(workspaceId, payload.quote_id)
-          || { data: null, error: result.error, existing: false };
-      }
+    if (result.error?.code === '23505') {
+      const raced = await getProductionOrder(workspaceId, id);
+      if (raced.data && !raced.error) return { ...raced, existing: true };
     }
 
     return { data: null, error: result.error, existing: false };

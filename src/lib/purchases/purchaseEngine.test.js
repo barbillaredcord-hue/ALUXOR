@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createUuid } from '../identity/createUuid'
 import {
   buildPurchaseItems,
   createPurchaseFromProductionOrder,
@@ -35,16 +36,22 @@ describe('purchaseEngine', () => {
   });
 
   it('crea una compra enlazada al workspace, cotización y OT', () => {
+    const ids = [
+      '55555555-5555-4555-8555-555555555555',
+      '66666666-6666-4666-8666-666666666666',
+    ];
     const purchase = createPurchaseFromProductionOrder({
       productionOrder: { id: 'ot-1', workspaceId: 'ws-1', quoteId: 'quote-1' },
       quote: { materialRows: [], accessoryRows: [] },
       createdBy: 'user-1',
       now: '2026-07-21T12:00:00.000Z',
+      idFactory: () => ids.shift(),
     });
     expect(purchase).toMatchObject({
       workspaceId: 'ws-1', productionOrderId: 'ot-1', quoteId: 'quote-1', pendingSync: true,
     });
     expect(purchase.folio).toMatch(/^OC-20260721-/);
+    expect(purchase.id).toBe('55555555-5555-4555-8555-555555555555');
   });
 
   it('genera identidades distintas para varias compras de la misma OT', () => {
@@ -54,6 +61,7 @@ describe('purchaseEngine', () => {
         cliente: 'Cliente', producto: 'Cocina',
       },
       quote: {}, createdBy: 'user-1', now: '2026-07-21T12:00:00.000Z',
+      idFactory: () => createUuid(),
     };
     const first = createPurchaseFromProductionOrder(input);
     const second = createPurchaseFromProductionOrder({ ...input, purchases: [first] });
