@@ -6,6 +6,7 @@ import {
   buildProductionOrderSummary,
   productionOrderSummaryForm,
   resolveProductionOrderSummary,
+  resolvePurchaseSummary,
 } from './productionOrderSummary.js';
 
 function order(id, product, client, unitPrice) {
@@ -163,6 +164,17 @@ describe('buildProductionOrderSummary', () => {
     expect(summary.quote.total).toBe(0);
   });
 
+  it('indica la cancelación durable en el resumen de Producción', () => {
+    const cancelled = order('cancelled', 'Cocina', 'Cliente', 2000);
+    cancelled.estado = 'Rechazado';
+    cancelled.observaciones = 'Detalle previo · Cotización cancelada';
+
+    const summary = buildProductionOrderSummary(cancelled);
+
+    expect(summary.estado).toBe('Rechazado');
+    expect(summary.riesgos).toBe('Cotización cancelada');
+  });
+
   it('cambiar entre OT con historial no conserva datos de la anterior', () => {
     const firstOrder = { id: 'one', quoteId: 'quote-one', formSnapshot: {} };
     const secondOrder = { id: 'two', quoteId: 'quote-two', formSnapshot: {} };
@@ -231,5 +243,47 @@ describe('buildProductionOrderSummary', () => {
     expect(second.nombre).toBe('Proyecto actualizado');
     expect(second.descripcion).toContain('Cliente actualizado');
     expect(second.quote.total).not.toBe(first.quote.total);
+  });
+});
+
+describe('resolvePurchaseSummary', () => {
+  const firstOrder = { ...order('001', 'Cocina', 'Cliente Uno', 2000), quoteId: 'quote-a' };
+  const secondOrder = { ...order('002', 'Clóset', 'Cliente Dos', 5000), quoteId: 'quote-b' };
+  const purchases = [{
+    id: 'purchase-a', productionOrderId: '001', productionOrderFolio: 'OT-001',
+    quoteId: 'quote-a', folio: 'OC-A', status: 'pendiente', supplier: 'Proveedor A',
+    expectedAt: '2026-08-01T00:00:00Z', items: [{ status: 'pendiente', totalCost: 300 }],
+  }, {
+    id: 'purchase-b', productionOrderId: '002', productionOrderFolio: 'OT-002',
+    quoteId: 'quote-b', folio: 'OC-B', status: 'comprado', supplier: 'Proveedor B',
+    items: [{ status: 'comprado', totalCost: 800 }],
+  }];
+
+  it('cambia inmediatamente entre las cotizaciones relacionadas de Compra A y B', () => {
+    const first = resolvePurchaseSummary(purchases, 'purchase-a', [firstOrder, secondOrder], []);
+    const second = resolvePurchaseSummary(purchases, 'purchase-b', [firstOrder, secondOrder], []);
+    expect(first.summary.nombre).toBe('Cocina');
+    expect(second.summary.nombre).toBe('Clóset');
+    expect(second.summary.descripcion).toContain('Cliente Dos');
+    expect(second.summary.descripcion).not.toContain('Cliente Uno');
+  });
+
+  it('no reutiliza otra cotización cuando la relación de la compra es inválida', () => {
+    const invalid = [{ ...purchases[0], productionOrderId: 'missing' }];
+    const result = resolvePurchaseSummary(invalid, 'purchase-a', [firstOrder], [
+      historicalQuote('quote-a', 'Cotización ajena', 'Cliente ajeno', 9000),
+    ]);
+    expect(result.order).toBeNull();
+    expect(result.historicalQuote).toBeNull();
+    expect(result.summary.nombre).toBe('OC-A');
+    expect(result.summary.quote.total).toBe(0);
+  });
+
+  it('agrega indicadores operativos solo al resumen construido para Compras', () => {
+    const result = resolvePurchaseSummary(purchases, 'purchase-a', [firstOrder], []);
+    expect(result.summary.indicadores).toContain('Compra OC-A');
+    expect(result.summary.indicadores).toContain('Pendiente: 300');
+    expect(result.summary.indicadores).toContain('Proveedor: Proveedor A');
+    expect(buildProductionOrderSummary(firstOrder).indicadores).not.toContain('Compra OC-A');
   });
 });

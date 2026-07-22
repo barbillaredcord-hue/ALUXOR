@@ -59,8 +59,10 @@ export function getHistorySummary(records = []) {
 
   return {
     records: quoteSummary.total,
+    draft: quoteSummary.draft,
     pending: quoteSummary.pending,
     sent: quoteSummary.sent,
+    inReview: quoteSummary.inReview,
     accepted: quoteSummary.accepted,
     inProduction: quoteSummary.inProduction,
     installation: quoteSummary.installation,

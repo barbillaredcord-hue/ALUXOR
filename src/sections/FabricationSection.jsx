@@ -18,7 +18,7 @@ const fabricationChecklist = [
 
 const progressSteps = ['Pendiente', 'Corte', 'Armado', 'Control de calidad', 'Listo para instalar'];
 
-export default function FabricationSection({ form, quote, decimal }) {
+export default function FabricationSection({ form, quote, decimal, projectStatus }) {
   const [pieceStatus, setPieceStatus] = useState({});
   const [notes, setNotes] = useState('');
   const material = quote.materialRows?.[0];
@@ -39,7 +39,7 @@ export default function FabricationSection({ form, quote, decimal }) {
 
       <div className="fabrication-dashboard">
         <div><span>Proyecto activo</span><strong>{form.producto || 'Proyecto'}</strong></div>
-        <div><span>Estado</span><strong>{form.estadoCotizacion || 'Pendiente'}</strong></div>
+        <div><span>Estado</span><strong>{projectStatus || form.estadoCotizacion || 'Pendiente'}</strong></div>
         <div><span>Responsable</span><strong>Taller ALUXOR</strong></div>
         <div><span>Fecha compromiso</span><strong>{form.entrega || 'Por definir'}</strong></div>
         <div><span>Plan de corte</span><strong>{optimizationSummary ? `${fabricationSummary.requiredSheets} hoja(s)` : 'Optimización pendiente'}</strong></div>

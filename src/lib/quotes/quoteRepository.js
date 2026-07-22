@@ -1,4 +1,5 @@
 import { supabase } from '../supabase/client';
+import { normalizeQuotePayload } from './quoteAdapter.js';
 
 const quoteColumns = `
   id,
@@ -72,18 +73,19 @@ export async function createQuote(workspaceId, form) {
       };
     }
 
+    const canonicalForm = normalizeQuotePayload(form);
     const quote = {
       workspace_id: workspaceId,
       created_by: user.id,
-      folio: form.folio,
-      status: form.status,
-      client_name: form.client_name,
-      client_phone: form.client_phone,
-      product_name: form.product_name,
-      total: form.total,
-      deposit: form.deposit,
-      balance: form.balance,
-      form_data: form.form_data,
+      folio: canonicalForm.folio,
+      status: canonicalForm.status,
+      client_name: canonicalForm.client_name,
+      client_phone: canonicalForm.client_phone,
+      product_name: canonicalForm.product_name,
+      total: canonicalForm.total,
+      deposit: canonicalForm.deposit,
+      balance: canonicalForm.balance,
+      form_data: canonicalForm.form_data,
     };
 
     return supabase
@@ -100,19 +102,20 @@ export async function updateQuote(id, form, expectedVersion) {
   }
 
   return execute(async () => {
+    const canonicalForm = normalizeQuotePayload(form);
     const quote = {
-      status: form.status,
-      client_name: form.client_name,
-      client_phone: form.client_phone,
-      product_name: form.product_name,
-      total: form.total,
-      deposit: form.deposit,
-      balance: form.balance,
-      form_data: form.form_data,
+      status: canonicalForm.status,
+      client_name: canonicalForm.client_name,
+      client_phone: canonicalForm.client_phone,
+      product_name: canonicalForm.product_name,
+      total: canonicalForm.total,
+      deposit: canonicalForm.deposit,
+      balance: canonicalForm.balance,
+      form_data: canonicalForm.form_data,
     };
 
-    if (Object.prototype.hasOwnProperty.call(form, 'folio')) {
-      quote.folio = form.folio;
+    if (Object.prototype.hasOwnProperty.call(canonicalForm, 'folio')) {
+      quote.folio = canonicalForm.folio;
     }
 
     let query = supabase

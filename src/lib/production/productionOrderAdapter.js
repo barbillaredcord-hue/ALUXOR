@@ -41,6 +41,7 @@ export function productionOrderRowToModel(row) {
     quoteVersion: source.quote_version,
     createdBy: source.created_by,
     updatedAt: source.updated_at,
+    deletedAt: source.deleted_at,
   });
 
   return {
@@ -67,6 +68,7 @@ export function productionOrderToInsertPayload(order) {
     timeline: model.timeline,
     form_snapshot: model.formSnapshot,
     quote_version: positiveInteger(model.quoteVersion),
+    deleted_at: dateOrNull(model.deletedAt),
   };
 }
 
@@ -86,6 +88,7 @@ export function productionOrderToUpdatePayload(order) {
     timeline: model.timeline,
     form_snapshot: model.formSnapshot,
     quote_version: positiveInteger(model.quoteVersion),
+    deleted_at: dateOrNull(model.deletedAt),
   };
 }
 

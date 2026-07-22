@@ -10,19 +10,23 @@ describe('getProductionSummary', () => {
       { estado: 'Fabricando' },
       { estado: 'Armado' },
       { estado: 'Listo' },
+      { estado: 'En instalación' },
       { estado: 'Entregado', updatedAt: '2026-07-12T10:00:00.000Z' },
     ]);
 
     expect(summary).toEqual({
-      total: 7,
+      total: 8,
       pending: 1,
       scheduled: 1,
       cutting: 1,
       fabricating: 1,
       assembly: 1,
-      inProcess: 4,
+      inProcess: 5,
       ready: 1,
+      installation: 1,
       delivered: 1,
+      rejected: 0,
+      active: 8,
       updatedAt: '2026-07-12T10:00:00.000Z',
     });
   });
@@ -47,8 +51,19 @@ describe('getProductionSummary', () => {
       assembly: 0,
       inProcess: 0,
       ready: 0,
+      installation: 0,
       delivered: 0,
+      rejected: 0,
+      active: 0,
       updatedAt: null,
     });
+  });
+
+  it('separa órdenes rechazadas de la producción activa', () => {
+    const summary = getProductionSummary([
+      { estado: 'Pendiente' },
+      { estado: 'Rechazado' },
+    ]);
+    expect(summary).toMatchObject({ total: 2, active: 1, pending: 1, rejected: 1 });
   });
 });

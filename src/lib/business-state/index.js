@@ -5,7 +5,9 @@ import { getHistorySummary } from '../history/historySummary.js';
 import { getInventorySummary } from '../inventory/inventorySummary.js';
 import { getProductionSummary } from '../production/productionSummary.js';
 import { getPurchasesSummary } from '../purchases/purchaseSummary.js';
+import { selectPurchaseViews } from '../purchases/purchaseSelectors.js';
 import { getQuotesSummary } from '../quotes/quoteSummary.js';
+import { getProjectStatusSummary } from '../workflow/projectStatus.js';
 
 const indicator = ({
   label,
@@ -57,11 +59,26 @@ export function getBusinessState({
   const customerInput = availableInput(customerRecords, quotes);
   const financeInput = availableInput(financeRecords, quotes);
   const historyInput = availableInput(historyRecords, quotes);
+  const purchaseViews = selectPurchaseViews({
+    purchases: availableInput(purchases),
+    productionOrders: availableInput(productionOrders),
+    quotes: availableInput(quotes),
+  });
+  const projectOperations = getProjectStatusSummary({
+    quotes: availableInput(quotes),
+    productionOrders: availableInput(productionOrders),
+    purchases: availableInput(purchases),
+  });
 
   const summaries = {
     quotes: getQuotesSummary(availableInput(quotes)),
     production: getProductionSummary(availableInput(productionOrders)),
-    purchases: getPurchasesSummary(availableInput(purchases), purchaseStatusById),
+    purchases: getPurchasesSummary(
+      [...purchaseViews.active, ...purchaseViews.received],
+      purchaseStatusById,
+    ),
+    purchaseOperations: purchaseViews.counters,
+    projectOperations,
     inventory: getInventorySummary(availableInput(inventoryItems), inventoryAvailableById),
     customers: getCustomerSummary(customerInput),
     finances: getFinanceSummary(financeInput),
@@ -84,8 +101,8 @@ export function getBusinessState({
     },
     status: {
       phase: null,
-      summary: availability.production
-        ? `${summaries.production.total} ${summaries.production.total === 1 ? 'orden' : 'órdenes'} de producción registradas.`
+      summary: availability.quotes
+        ? `${projectOperations.inProduction} ${projectOperations.inProduction === 1 ? 'proyecto' : 'proyectos'} en producción.`
         : null,
       health: null,
     },
@@ -98,13 +115,13 @@ export function getBusinessState({
       ),
       production: domainIndicator(
         'Producción',
-        summaries.production.total,
+        summaries.production.active ?? summaries.production.total,
         availability.production,
         'production-summary'
       ),
       purchases: domainIndicator(
         'Compras',
-        summaries.purchases.total,
+        purchaseViews.counters.activePurchasesCount,
         availability.purchases,
         'purchases-summary'
       ),

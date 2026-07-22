@@ -137,7 +137,7 @@ export const fieldGuides = {
   estadoCotizacion: {
     help: 'Qué dato va: etapa actual de la cotización.',
     why: 'Para qué sirve: facilita seguimiento en historial.',
-    how: 'Cómo llenarlo: Pendiente, Enviada, Aceptada, En fabricación, Instalación, Terminada o Cancelada.',
+    how: 'Cómo llenarlo: Borrador, Pendiente, Enviada, En revisión, Aceptada o Cancelada. Después, Producción controla el avance visible.',
   },
   formaPago: {
     help: 'Qué dato va: forma o condiciones de pago.',
@@ -159,5 +159,4 @@ export const fieldGuides = {
 export function guideFor(field) {
   return fieldGuides[field] || {};
 }
-
 

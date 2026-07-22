@@ -1,23 +1,26 @@
 export const QUOTE_STATUSES = Object.freeze({
+  DRAFT: 'Borrador',
   PENDING: 'Pendiente',
   SENT: 'Enviada',
+  IN_REVIEW: 'En revisión',
   ACCEPTED: 'Aceptada',
-  IN_PRODUCTION: 'En fabricación',
-  INSTALLATION: 'Instalación',
-  COMPLETED: 'Terminada',
   CANCELLED: 'Cancelada',
 });
 
+const quoteCommercialStatuses = Object.freeze(Object.values(QUOTE_STATUSES));
+
 const canonicalStatuses = new Map([
+  ['borrador', QUOTE_STATUSES.DRAFT],
   ['pendiente', QUOTE_STATUSES.PENDING],
   ['enviada', QUOTE_STATUSES.SENT],
+  ['en revisión', QUOTE_STATUSES.IN_REVIEW],
   ['aceptada', QUOTE_STATUSES.ACCEPTED],
-  ['en fabricación', QUOTE_STATUSES.IN_PRODUCTION],
-  ['instalación', QUOTE_STATUSES.INSTALLATION],
-  ['terminada', QUOTE_STATUSES.COMPLETED],
+  ['en fabricación', QUOTE_STATUSES.ACCEPTED],
+  ['instalación', QUOTE_STATUSES.ACCEPTED],
+  ['terminada', QUOTE_STATUSES.ACCEPTED],
   ['cancelada', QUOTE_STATUSES.CANCELLED],
   ['aprobada', QUOTE_STATUSES.ACCEPTED],
-  ['instalada', QUOTE_STATUSES.COMPLETED],
+  ['instalada', QUOTE_STATUSES.ACCEPTED],
 ]);
 
 function isObject(value) {
@@ -104,6 +107,22 @@ function hasNumericValue(value) {
 export function normalizeQuoteStatus(status) {
   const normalized = clean(status).toLocaleLowerCase('es-MX');
   return canonicalStatuses.get(normalized) || QUOTE_STATUSES.PENDING;
+}
+
+export function quoteCommercialStatusOptions() {
+  return [...quoteCommercialStatuses];
+}
+
+export function normalizeQuotePayload(payload) {
+  const source = isObject(payload) ? payload : {};
+  const formData = cloneFormData(source.form_data);
+  const status = normalizeQuoteStatus(firstStatus(
+    source.status,
+    formData.estadoCotizacion,
+    QUOTE_STATUSES.PENDING,
+  ));
+  formData.estadoCotizacion = status;
+  return { ...source, status, form_data: formData };
 }
 
 export function quoteRecordStatus(record) {
@@ -246,4 +265,6 @@ export const QuoteAdapter = {
   quoteFormToPayload,
   normalizeQuoteStatus,
   quoteRecordStatus,
+  quoteCommercialStatusOptions,
+  normalizeQuotePayload,
 };

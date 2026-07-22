@@ -8,6 +8,7 @@ import {
   purchaseStatusFromItems,
   updatePurchase as updatePurchaseModel,
 } from '../lib/purchases/purchaseEngine.js';
+import { canAdvanceProductionOrder } from '../lib/production/productionEngine.js';
 import { PurchaseRepository } from '../lib/purchases/purchaseRepository.js';
 import { PurchaseStorage } from '../lib/purchases/purchaseStorage.js';
 import { PurchaseOfflineQueue } from '../lib/purchases/purchaseOfflineQueue.js';
@@ -316,6 +317,15 @@ export function resolvePurchaseCreation(purchases, productionOrderId, inFlight =
     existing,
     canCreate: Boolean(productionOrderId) && !existing && !inFlight,
   };
+}
+
+export function canCreatePurchaseForProductionOrder(
+  purchases,
+  productionOrder,
+  inFlight = false,
+) {
+  if (!canAdvanceProductionOrder(productionOrder)) return false;
+  return resolvePurchaseCreation(purchases, productionOrder?.id, inFlight).canCreate;
 }
 
 export function resolvePurchaseSelection(purchases, currentId, persistedId) {
@@ -741,7 +751,9 @@ export default function usePurchases({
       control.pending = true;
       return true;
     }
-    const purchase = purchasesRef.current.find((item) => item.id === purchaseId);
+    const purchase = purchasesRef.current.find((item) => item.id === purchaseId)
+      || PurchaseStorage.loadPurchases(contextRef.current.workspaceId)
+        .find((item) => item.id === purchaseId);
     if (!purchase) return false;
     if (!purchase.pendingSync && !purchaseId.startsWith('purchase-')) return true;
     if (!navigator.onLine) {
@@ -793,7 +805,7 @@ export default function usePurchases({
 
   function updatePurchase(purchaseId, changes) {
     const current = purchasesRef.current.find((purchase) => purchase.id === purchaseId);
-    if (!current) return false;
+    if (!current || current.active === false || current.deletedAt) return false;
     const expectedVersion = current.pendingExpectedVersion || current.version;
     const normalizedChanges = Object.prototype.hasOwnProperty.call(changes || {}, 'items')
       && !Object.prototype.hasOwnProperty.call(changes || {}, 'status')
@@ -828,7 +840,7 @@ export default function usePurchases({
   function updatePurchaseItem(purchaseId, itemId, changes) {
     const current = purchasesRef.current.find((purchase) => purchase.id === purchaseId);
     const currentItem = current?.items.find((item) => item.id === itemId);
-    if (!current || !currentItem) return false;
+    if (!current || !currentItem || current.active === false || current.deletedAt) return false;
     const dirtyFields = Object.keys(changes || {}).filter((field) => (
       !fieldValuesEqual(currentItem[field], changes[field])
     ));
@@ -882,7 +894,9 @@ export default function usePurchases({
 
   async function createPurchase(productionOrder) {
     const { userId, workspaceId } = contextRef.current;
-    if (!userId || !workspaceId || !productionOrder?.id) return null;
+    if (!userId || !workspaceId || !productionOrder?.id) {
+      return null;
+    }
     const creation = resolvePurchaseCreation(
       purchasesRef.current,
       productionOrder.id,
@@ -892,7 +906,11 @@ export default function usePurchases({
       openPurchase(creation.existing.id);
       return creation.existing;
     }
-    if (!creation.canCreate) return null;
+    if (!creation.canCreate || !canCreatePurchaseForProductionOrder(
+      purchasesRef.current,
+      productionOrder,
+      createRef.current,
+    )) return null;
     createRef.current = true;
     setPurchasesError('');
     try {

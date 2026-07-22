@@ -1,12 +1,11 @@
 import { QUOTE_STATUSES, quoteRecordStatus } from './quoteAdapter.js';
 
 const summaryFieldByStatus = new Map([
+  [QUOTE_STATUSES.DRAFT, 'draft'],
   [QUOTE_STATUSES.PENDING, 'pending'],
   [QUOTE_STATUSES.SENT, 'sent'],
+  [QUOTE_STATUSES.IN_REVIEW, 'inReview'],
   [QUOTE_STATUSES.ACCEPTED, 'accepted'],
-  [QUOTE_STATUSES.IN_PRODUCTION, 'inProduction'],
-  [QUOTE_STATUSES.INSTALLATION, 'installation'],
-  [QUOTE_STATUSES.COMPLETED, 'completed'],
   [QUOTE_STATUSES.CANCELLED, 'cancelled'],
 ]);
 
@@ -21,9 +20,12 @@ function timestamp(record) {
 export function getQuotesSummary(quotes = []) {
   const summary = {
     total: 0,
+    draft: 0,
     pending: 0,
     sent: 0,
+    inReview: 0,
     accepted: 0,
+    // Compatibilidad de contrato: el avance operativo ya no proviene de quotes.status.
     inProduction: 0,
     installation: 0,
     completed: 0,

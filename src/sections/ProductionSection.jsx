@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ClipboardList, ExternalLink, ShoppingCart } from 'lucide-react';
 import {
   PRODUCTION_STATUSES,
+  canAdvanceProductionOrder,
   normalizeProductionStatus,
   productionPriorityOptions,
   productionStatusOptions,
@@ -11,6 +12,11 @@ import {
   isProductionInProgressStatus,
 } from '../lib/production/productionSummary.js';
 import { quoteReferencesFromProductionOrder } from '../lib/quotes/quoteReference.js';
+import {
+  PRODUCTION_OPERATIONAL_STATES,
+  getProductionOperationalState,
+  getPurchaseMaterialState,
+} from '../lib/workflow/projectStatus.js';
 
 const STATUS_OPTIONS = productionStatusOptions();
 const PRIORITY_OPTIONS = productionPriorityOptions();
@@ -21,6 +27,7 @@ const PRODUCTION_FILTERS = Object.freeze({
   IN_PROCESS: 'inProcess',
   READY: 'ready',
   DELIVERED: 'delivered',
+  REJECTED: 'rejected',
 });
 
 function dateTimestamp(value) {
@@ -75,9 +82,17 @@ function abbreviatedId(value) {
 }
 
 function statusClass(status) {
-  if (status === PRODUCTION_STATUSES.DELIVERED) return 'delivered';
-  if (status === PRODUCTION_STATUSES.READY) return 'ready';
-  if (isProductionInProgressStatus(status)) return 'in-process';
+  if (status === PRODUCTION_OPERATIONAL_STATES.REJECTED) return 'rejected';
+  if (status === PRODUCTION_OPERATIONAL_STATES.DELIVERED) return 'delivered';
+  if ([
+    PRODUCTION_OPERATIONAL_STATES.READY_FOR_INSTALLATION,
+    PRODUCTION_OPERATIONAL_STATES.INSTALLING,
+  ].includes(status)) return 'ready';
+  if ([
+    PRODUCTION_OPERATIONAL_STATES.CUTTING,
+    PRODUCTION_OPERATIONAL_STATES.FABRICATING,
+    PRODUCTION_OPERATIONAL_STATES.ASSEMBLY,
+  ].includes(status)) return 'in-process';
   return 'pending';
 }
 
@@ -97,6 +112,7 @@ export function filterProductionOrders(orders = [], filter = PRODUCTION_FILTERS.
     if (filter === PRODUCTION_FILTERS.IN_PROCESS) return isProductionInProgressStatus(status);
     if (filter === PRODUCTION_FILTERS.READY) return status === PRODUCTION_STATUSES.READY;
     if (filter === PRODUCTION_FILTERS.DELIVERED) return status === PRODUCTION_STATUSES.DELIVERED;
+    if (filter === PRODUCTION_FILTERS.REJECTED) return status === PRODUCTION_STATUSES.REJECTED;
     return true;
   });
 }
@@ -122,10 +138,21 @@ export default function ProductionSection({
   ));
   const metrics = getProductionSummary(sortedOrders);
   const [activeFilter, setActiveFilter] = useState(PRODUCTION_FILTERS.ALL);
+  const [draft, setDraft] = useState(() => productionDraftFromOrder(null));
   const filteredOrders = filterProductionOrders(sortedOrders, activeFilter);
   const selectedOrder = sortedOrders.find((order) => order.id === selectedProductionOrderId) || null;
+  const selectedOrderCanAdvance = canAdvanceProductionOrder(selectedOrder);
   const relatedPurchases = selectedOrder ? purchasesForOrder(selectedOrder.id) : [];
   const relatedPurchase = relatedPurchases[0] || null;
+  const selectedPurchaseState = getPurchaseMaterialState(relatedPurchases, selectedOrder);
+  const selectedOperationalState = getProductionOperationalState(
+    selectedOrder ? { ...selectedOrder, estado: draft?.estado || selectedOrder.estado } : null,
+    selectedPurchaseState,
+  );
+  const operationalStateForOrder = (order) => getProductionOperationalState(
+    order,
+    getPurchaseMaterialState(purchasesForOrder(order.id), order),
+  );
   const selectedOrderQuoteAvailable = quoteReferencesFromProductionOrder(selectedOrder).length > 0;
   const metricFilters = [
     { id: PRODUCTION_FILTERS.ALL, label: 'Total OT', value: metrics.total },
@@ -133,8 +160,8 @@ export default function ProductionSection({
     { id: PRODUCTION_FILTERS.IN_PROCESS, label: 'En proceso', value: metrics.inProcess },
     { id: PRODUCTION_FILTERS.READY, label: 'Listas', value: metrics.ready },
     { id: PRODUCTION_FILTERS.DELIVERED, label: 'Entregadas', value: metrics.delivered },
+    { id: PRODUCTION_FILTERS.REJECTED, label: 'Rechazadas', value: metrics.rejected },
   ];
-  const [draft, setDraft] = useState(() => productionDraftFromOrder(null));
   const draftOrderIdRef = useRef(null);
   const lastOrderDraftRef = useRef(null);
   const latestDraftRef = useRef(draft);
@@ -317,7 +344,7 @@ export default function ProductionSection({
                   <strong>{order.folio}</strong>
                 </span>
                 <span className="production-order-badges">
-                  <em className={`production-order-badge status-${statusClass(order.estado)}`}>{order.estado}</em>
+                  <em className={`production-order-badge status-${statusClass(operationalStateForOrder(order))}`}>{operationalStateForOrder(order)}</em>
                   <em className={`production-order-badge priority-${priorityClass(order.prioridad)}`}>{order.prioridad}</em>
                 </span>
               </span>
@@ -349,7 +376,7 @@ export default function ProductionSection({
                   <h3>{selectedOrder.folio}</h3>
                 </div>
                 <div className="production-order-badges">
-                  <em className={`production-order-badge status-${statusClass(draft.estado)}`}>{draft.estado}</em>
+                  <em className={`production-order-badge status-${statusClass(selectedOperationalState)}`}>{selectedOperationalState}</em>
                   <em className={`production-order-badge priority-${priorityClass(draft.prioridad)}`}>{draft.prioridad}</em>
                 </div>
               </div>
@@ -357,7 +384,7 @@ export default function ProductionSection({
                 <div><dt>Cliente</dt><dd>{selectedOrder.cliente || 'Cliente pendiente'}</dd></div>
                 <div><dt>Proyecto</dt><dd>{selectedOrder.producto || 'Proyecto sin nombre'}</dd></div>
                 <div><dt>Folio OT</dt><dd>{selectedOrder.folio}</dd></div>
-                <div><dt>Estado</dt><dd>{draft.estado}</dd></div>
+                <div><dt>Estado</dt><dd>{selectedOperationalState}</dd></div>
                 <div><dt>Prioridad</dt><dd>{draft.prioridad}</dd></div>
                 <div><dt>Responsable</dt><dd>{draft.responsable || 'Sin asignar'}</dd></div>
                 <div><dt>Fecha creación</dt><dd>{formatDate(selectedOrder.fechaCreacion)}</dd></div>
@@ -373,36 +400,36 @@ export default function ProductionSection({
               <div className="form-grid">
                 <label>
                   Estado
-                  <select value={draft.estado} onChange={(event) => updateDraft('estado', event.target.value)}>
+                  <select disabled={!selectedOrderCanAdvance} value={draft.estado} onChange={(event) => updateDraft('estado', event.target.value)}>
                     {STATUS_OPTIONS.map((status) => <option key={status} value={status}>{status}</option>)}
                   </select>
                 </label>
                 <label>
                   Prioridad
-                  <select value={draft.prioridad} onChange={(event) => updateDraft('prioridad', event.target.value)}>
+                  <select disabled={!selectedOrderCanAdvance} value={draft.prioridad} onChange={(event) => updateDraft('prioridad', event.target.value)}>
                     {PRIORITY_OPTIONS.map((priority) => <option key={priority} value={priority}>{priority}</option>)}
                   </select>
                 </label>
                 <label>
                   Responsable
-                  <input value={draft.responsable} onChange={(event) => updateDraft('responsable', event.target.value)} placeholder="Sin asignar" />
+                  <input disabled={!selectedOrderCanAdvance} value={draft.responsable} onChange={(event) => updateDraft('responsable', event.target.value)} placeholder="Sin asignar" />
                 </label>
                 <label>
                   Fecha compromiso
-                  <input type="datetime-local" value={draft.fechaCompromiso} onChange={(event) => updateDraft('fechaCompromiso', event.target.value)} />
+                  <input disabled={!selectedOrderCanAdvance} type="datetime-local" value={draft.fechaCompromiso} onChange={(event) => updateDraft('fechaCompromiso', event.target.value)} />
                 </label>
                 <label>
                   Fecha inicio
-                  <input type="datetime-local" value={draft.fechaInicio} onChange={(event) => updateDraft('fechaInicio', event.target.value)} />
+                  <input disabled={!selectedOrderCanAdvance} type="datetime-local" value={draft.fechaInicio} onChange={(event) => updateDraft('fechaInicio', event.target.value)} />
                 </label>
                 <label>
                   Fecha final
-                  <input type="datetime-local" value={draft.fechaFinal} onChange={(event) => updateDraft('fechaFinal', event.target.value)} />
+                  <input disabled={!selectedOrderCanAdvance} type="datetime-local" value={draft.fechaFinal} onChange={(event) => updateDraft('fechaFinal', event.target.value)} />
                 </label>
               </div>
               <label>
                 Observaciones
-                <textarea value={draft.observaciones} onChange={(event) => updateDraft('observaciones', event.target.value)} />
+                <textarea disabled={!selectedOrderCanAdvance} value={draft.observaciones} onChange={(event) => updateDraft('observaciones', event.target.value)} />
               </label>
 
               <article className="production-order-detail-notes">
@@ -417,8 +444,8 @@ export default function ProductionSection({
               <article className="production-order-detail-notes">
                 <strong>
                   Compra relacionada
-                  {purchaseStatusForOrder(selectedOrder.id)
-                    ? ` · ${purchaseStatusForOrder(selectedOrder.id)}`
+                  {selectedPurchaseState
+                    ? ` · ${selectedPurchaseState}`
                     : ''}
                 </strong>
                 {relatedPurchase ? (
@@ -436,8 +463,8 @@ export default function ProductionSection({
                 {!relatedPurchase && (
                   <button
                     type="button"
-                    disabled={!canManagePurchases}
-                    title={canManagePurchases ? 'Crear lista de compras' : 'No tienes permiso para gestionar Compras'}
+                    disabled={!canManagePurchases || !selectedOrderCanAdvance}
+                    title={!selectedOrderCanAdvance ? 'La orden rechazada no admite nuevas compras' : canManagePurchases ? 'Crear lista de compras' : 'No tienes permiso para gestionar Compras'}
                     onClick={() => { flushDraftAutosave(); void onCreatePurchase?.(selectedOrder); }}
                   >
                     <ShoppingCart size={17} />

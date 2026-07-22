@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
-  unsubscribe, subscribe, on, channel, from, update, select, eq, is, maybeSingle,
+  unsubscribe, subscribe, on, channel, from, update, select, eq, is, order, maybeSingle,
 } = vi.hoisted(() => ({
   unsubscribe: vi.fn(),
   subscribe: vi.fn(),
@@ -12,6 +12,7 @@ const {
   select: vi.fn(),
   eq: vi.fn(),
   is: vi.fn(),
+  order: vi.fn(),
   maybeSingle: vi.fn(),
 }));
 
@@ -32,9 +33,10 @@ describe('PurchaseRepository', () => {
     select.mockReset();
     eq.mockReset();
     is.mockReset();
+    order.mockReset();
     maybeSingle.mockReset();
     const builder = { on, subscribe, unsubscribe };
-    const query = { update, select, eq, is, maybeSingle };
+    const query = { update, select, eq, is, order, maybeSingle };
     on.mockReturnValue(builder);
     subscribe.mockReturnValue(builder);
     channel.mockReturnValue(builder);
@@ -43,6 +45,7 @@ describe('PurchaseRepository', () => {
     select.mockReturnValue(query);
     eq.mockReturnValue(query);
     is.mockReturnValue(query);
+    order.mockResolvedValue({ data: [], error: null });
     maybeSingle.mockResolvedValue({
       data: {
         id: 'item-1', workspace_id: 'ws-1', purchase_id: 'purchase-1',
@@ -57,6 +60,13 @@ describe('PurchaseRepository', () => {
     const result = await PurchaseRepository.getPurchase('', '');
     expect(result.data).toBeNull();
     expect(result.error).toBeInstanceOf(Error);
+  });
+
+  it('carga el conjunto canónico incluyendo compras eliminadas lógicamente', async () => {
+    const result = await PurchaseRepository.loadPurchases('ws-1');
+    expect(result).toEqual({ data: [], error: null });
+    expect(from).toHaveBeenCalledWith('purchases');
+    expect(is).not.toHaveBeenCalledWith('deleted_at', null);
   });
 
   it('crea un solo canal con compras y partidas y limpia la suscripción', () => {

@@ -95,4 +95,15 @@ describe('PurchaseStorage y offline queue', () => {
       expect.objectContaining({ type: 'updateItem', itemId: 'item-1' }),
     ]);
   });
+
+  it('conserva compras canceladas, recibidas y eliminadas lógicamente', () => {
+    PurchaseStorage.savePurchases('ws-1', [
+      { ...purchase, id: 'cancelled', active: false, notes: 'Cotización original eliminada' },
+      { ...purchase, id: 'received', active: false, items: [{ id: 'i1', status: 'recibido' }] },
+      { ...purchase, id: 'deleted', active: false, deletedAt: '2026-07-22T10:00:00Z' },
+    ]);
+    expect(PurchaseStorage.loadPurchases('ws-1').map((item) => item.id)).toEqual([
+      'cancelled', 'received', 'deleted',
+    ]);
+  });
 });

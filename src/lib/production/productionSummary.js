@@ -8,6 +8,7 @@ const inProgressStatuses = new Set([
   PRODUCTION_STATUSES.CUTTING,
   PRODUCTION_STATUSES.FABRICATING,
   PRODUCTION_STATUSES.ASSEMBLY,
+  PRODUCTION_STATUSES.INSTALLING,
 ]);
 
 const summaryFieldByStatus = new Map([
@@ -17,7 +18,9 @@ const summaryFieldByStatus = new Map([
   [PRODUCTION_STATUSES.FABRICATING, 'fabricating'],
   [PRODUCTION_STATUSES.ASSEMBLY, 'assembly'],
   [PRODUCTION_STATUSES.READY, 'ready'],
+  [PRODUCTION_STATUSES.INSTALLING, 'installation'],
   [PRODUCTION_STATUSES.DELIVERED, 'delivered'],
+  [PRODUCTION_STATUSES.REJECTED, 'rejected'],
 ]);
 
 function timestamp(order) {
@@ -42,7 +45,10 @@ export function getProductionSummary(orders = []) {
     assembly: 0,
     inProcess: 0,
     ready: 0,
+    installation: 0,
     delivered: 0,
+    rejected: 0,
+    active: 0,
     updatedAt: null,
   };
 
@@ -57,6 +63,8 @@ export function getProductionSummary(orders = []) {
 const field = summaryFieldByStatus.get(status);
 
 summary.total += 1;
+
+if (status !== PRODUCTION_STATUSES.REJECTED) summary.active += 1;
 
 if (field) {
   summary[field] += 1;

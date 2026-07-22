@@ -13,3 +13,6 @@ export/
 !assets/*.zip
 supabase/.temp/
 supabase/.temp/
+
+# Local database backups
+backup_pre_limpieza.sql

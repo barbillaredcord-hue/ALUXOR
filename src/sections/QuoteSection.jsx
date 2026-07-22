@@ -17,6 +17,44 @@ import CalculationChain from '../components/CalculationChain.jsx';
 import DashboardSummary from '../components/DashboardSummary.jsx';
 import Field from '../components/Field.jsx';
 import { Quote } from '../lib/br-engine/index.js';
+import { quoteCommercialStatusOptions } from '../lib/quotes/quoteAdapter.js';
+
+const QUOTE_STATUS_OPTIONS = quoteCommercialStatusOptions();
+
+export function QuoteStatusControl({
+  value,
+  displayStatus,
+  locked = false,
+  hasConflict = false,
+  onChange,
+  onOpenProduction,
+  onCancelProject,
+}) {
+  if (locked) {
+    return (
+      <div>
+        <strong>{displayStatus}</strong>
+        <p className="advanced-note">Estado controlado por Producción</p>
+        <div className="actions compact">
+          <button type="button" className="ghost" onClick={onOpenProduction}>Abrir Producción</button>
+          <button type="button" className="ghost" onClick={onCancelProject}>Cancelar proyecto</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <select
+      data-quote-field="estadoCotizacion"
+      data-quote-conflict={hasConflict ? 'true' : undefined}
+      id="estadoCotizacion"
+      value={value}
+      onChange={(event) => onChange?.(event.target.value)}
+    >
+      {QUOTE_STATUS_OPTIONS.map((status) => <option key={status}>{status}</option>)}
+    </select>
+  );
+}
 
 export default function QuoteSection({
   mode = 'full',
@@ -73,6 +111,10 @@ export default function QuoteSection({
   quoteFieldConflicts,
   onQuoteFieldFocus,
   onQuoteFieldBlur,
+  quoteDisplayStatus = form?.estadoCotizacion || 'Pendiente',
+  quoteStatusLocked = false,
+  onOpenProduction,
+  onCancelProject,
 }) {
   const isFilled = mode === 'filled';
   const fieldProps = (fieldPath) => ({
@@ -81,6 +123,17 @@ export default function QuoteSection({
   });
   const fieldPathFromEvent = (event) => (
     event.target?.dataset?.quoteField || event.target?.id || ''
+  );
+  const quoteStatusControl = (
+    <QuoteStatusControl
+      value={form.estadoCotizacion}
+      displayStatus={quoteDisplayStatus}
+      locked={quoteStatusLocked}
+      hasConflict={quoteFieldConflicts.includes('estadoCotizacion')}
+      onChange={(status) => update('estadoCotizacion', status)}
+      onOpenProduction={onOpenProduction}
+      onCancelProject={onCancelProject}
+    />
   );
 
   return (
@@ -114,15 +167,7 @@ export default function QuoteSection({
                       </Field>
                       <Field id="ciudad" label="Ciudad">{input('ciudad')}</Field>
                       <Field id="estadoCotizacion" label="Estado de cotización">
-                        <select {...fieldProps('estadoCotizacion')} id="estadoCotizacion" value={form.estadoCotizacion} onChange={(event) => update('estadoCotizacion', event.target.value)}>
-                          <option>Pendiente</option>
-                          <option>Enviada</option>
-                          <option>Aceptada</option>
-                          <option>En fabricación</option>
-                          <option>Instalación</option>
-                          <option>Terminada</option>
-                          <option>Cancelada</option>
-                        </select>
+                        {quoteStatusControl}
                       </Field>
                     </div>
                   </section>
@@ -536,15 +581,7 @@ export default function QuoteSection({
                     <Field id="vigencia" label="Vigencia días" {...guideFor('vigencia')}>{input('vigencia', 'number')}</Field>
                     <Field id="formaPago" label="Forma de pago" {...guideFor('formaPago')}>{input('formaPago')}</Field>
                     <Field id="estadoCotizacion" label="Estado de cotización" {...guideFor('estadoCotizacion')}>
-                      <select {...fieldProps('estadoCotizacion')} id="estadoCotizacion" value={form.estadoCotizacion} onChange={(event) => update('estadoCotizacion', event.target.value)}>
-                        <option>Pendiente</option>
-                        <option>Enviada</option>
-                        <option>Aceptada</option>
-                        <option>En fabricación</option>
-                        <option>Instalación</option>
-                        <option>Terminada</option>
-                        <option>Cancelada</option>
-                      </select>
+                      {quoteStatusControl}
                     </Field>
                     <Field id="condiciones" label="Condiciones" {...guideFor('condiciones')}>{textareaInput('condiciones')}</Field>
                     <Field id="notasCliente" label="Notas para cliente" {...guideFor('notasCliente')}>{textareaInput('notasCliente')}</Field>
@@ -602,7 +639,7 @@ export default function QuoteSection({
                     <div className="live-summary-item"><span>Saldo</span><strong>{money(quote.rest)}</strong></div>
                     <div className="live-summary-item"><span>Utilidad</span><strong>{money(quote.profit)}</strong></div>
                     {isFilled && <div className="live-summary-item"><span>Porcentaje de utilidad</span><strong>{decimal(quote.profitPercent, 1)}%</strong></div>}
-                    <div className="live-summary-item"><span>Estado</span><strong>{form.estadoCotizacion}</strong></div>
+                    <div className="live-summary-item"><span>Estado</span><strong>{quoteDisplayStatus}</strong></div>
                     {!isFilled && <div className="live-summary-item"><span>Datos</span><strong>{dataHealth.score}%</strong></div>}
                   </div>
                   {dataHealth.warnings.length > 0 && (

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  PRODUCTION_STATUSES,
+  canAdvanceProductionOrder,
   createProductionOrder as createProductionOrderEngine,
   updateProductionOrder as updateProductionOrderEngine,
 } from '../lib/production/productionEngine.js';
@@ -36,6 +38,34 @@ export function productionChangesWithSharedNote(currentOrder, changes, updatedAt
 
 export function productionOrderNoteFromQuote(form) {
   return normalizeSharedProjectNote(form?.notasInternas);
+}
+
+export function quoteDeletionProductionChanges(order, hasRelatedActivity, now, userId) {
+  const reason = 'Cotización original eliminada';
+  const timestamp = new Date(now).toISOString();
+  const timeline = [...(Array.isArray(order?.timeline) ? order.timeline : []), {
+    evento: hasRelatedActivity ? 'Orden rechazada' : 'Orden desactivada',
+    fecha: timestamp,
+    usuario: userId || '',
+    comentario: reason,
+  }];
+  return {
+    ...(hasRelatedActivity ? { estado: PRODUCTION_STATUSES.REJECTED } : { deletedAt: timestamp }),
+    observaciones: order?.observaciones?.includes(reason)
+      ? order.observaciones
+      : [order?.observaciones, reason].filter(Boolean).join(' · '),
+    timeline,
+  };
+}
+
+export function productionQuoteDeletionApplied(order) {
+  return Boolean(
+    order?.deletedAt
+    || (
+      order?.estado === PRODUCTION_STATUSES.REJECTED
+      && order?.observaciones?.includes('Cotización original eliminada')
+    )
+  );
 }
 
 export default function useProduction({
@@ -79,7 +109,7 @@ export default function useProduction({
     && activeQuoteIdentity?.remote
     && isRemoteQuoteId(activeQuoteIdentity.id)
     && Number(activeQuoteIdentity.version) >= 1
-    && activeQuoteStatus === 'Aceptada'
+    && quoteCanGenerateProduction(activeQuoteStatus)
   );
 
   useEffect(() => {
@@ -87,7 +117,9 @@ export default function useProduction({
   }, [productionOrders]);
   function setActiveProductionOrders(workspaceId, orders) {
     const cache = ProductionStorage.replaceWorkspaceProductionOrders(workspaceId, orders);
-    const activeOrders = cache.filter((order) => order.workspaceId === workspaceId);
+    const activeOrders = cache.filter((order) => (
+      order.workspaceId === workspaceId && !order.deletedAt
+    ));
 
     productionOrdersRef.current = activeOrders;
     setProductionOrders(activeOrders);
@@ -101,7 +133,7 @@ export default function useProduction({
     if (!saved) return null;
 
     const activeOrders = ProductionStorage.loadProductionOrders()
-      .filter((item) => item.workspaceId === saved.workspaceId);
+      .filter((item) => item.workspaceId === saved.workspaceId && !item.deletedAt);
     productionOrdersRef.current = activeOrders;
     setProductionOrders(activeOrders);
     return saved;
@@ -216,6 +248,14 @@ export default function useProduction({
 
             setProductionSyncStatus(
               'Conflicto de producción · versión remota cargada'
+            );
+          } else if (pendingOrder.deletedAt && !remote.data) {
+            ProductionStorage.removeProductionOrder(pendingOrder.id);
+            setActiveProductionOrders(
+              workspaceId,
+              ProductionStorage.loadProductionOrders().filter((order) => (
+                order.workspaceId === workspaceId
+              )),
             );
           } else {
             syncFailed = true;
@@ -381,7 +421,7 @@ export default function useProduction({
     }
 
     const cachedOrders = ProductionStorage.loadProductionOrders()
-      .filter((order) => order.workspaceId === workspaceId);
+      .filter((order) => order.workspaceId === workspaceId && !order.deletedAt);
     productionOrdersRef.current = cachedOrders;
     setProductionOrders(cachedOrders);
     setSelectedProductionOrderId((current) => (
@@ -480,6 +520,7 @@ function syncProductionOrderFromQuote(
   ));
 
   if (!currentOrder) return;
+  if (!canAdvanceProductionOrder(currentOrder)) return;
 
   const noteResolution = resolveSharedProjectNote({
     quoteNote: nextForm.notasInternas,
@@ -529,7 +570,7 @@ function syncProductionOrderFromQuote(
   );
 }
 
-  async function handleUpdateProductionOrder(orderId, changes) {
+  async function handleUpdateProductionOrder(orderId, changes, options = {}) {
     const workspaceId = activeWorkspace?.id;
     const userId = authSession?.user?.id;
     const currentOrder = productionOrdersRef.current.find((order) => order.id === orderId);
@@ -538,6 +579,12 @@ function syncProductionOrderFromQuote(
       setProductionError('No fue posible preparar la actualización de la orden.');
       return false;
     }
+    if (currentOrder.deletedAt) return false;
+    if (
+      currentOrder.estado === PRODUCTION_STATUSES.REJECTED
+      && changes?.estado
+      && changes.estado !== PRODUCTION_STATUSES.REJECTED
+    ) return false;
 
     const now = new Date().toISOString();
     const normalizedChanges = productionChangesWithSharedNote(currentOrder, changes, now);
@@ -574,7 +621,7 @@ function syncProductionOrderFromQuote(
       return false;
     }
 
-    if (observationChanged) {
+    if (observationChanged && !options.suppressQuoteSync) {
       void syncQuoteNoteFromProduction?.(optimisticOrder);
     }
 
@@ -595,9 +642,18 @@ function syncProductionOrderFromQuote(
       const remote = await ProductionOrderRepository.getProductionOrder(workspaceId, orderId);
       if (remote.data && !remote.error) {
         upsertActiveProductionOrder(remote.data);
-        void syncQuoteNoteFromProduction?.(remote.data);
+        if (!options.suppressQuoteSync) void syncQuoteNoteFromProduction?.(remote.data);
         setProductionError('La orden fue modificada en otro dispositivo. Se cargó la versión remota.');
         setSyncStatus('Conflicto de producción · versión remota cargada');
+      } else if (optimisticOrder.deletedAt && !remote.data) {
+        ProductionStorage.removeProductionOrder(orderId);
+        setActiveProductionOrders(
+          workspaceId,
+          ProductionStorage.loadProductionOrders().filter((order) => (
+            order.workspaceId === workspaceId
+          )),
+        );
+        return true;
       } else {
         setProductionError('No se pudo cargar la versión remota de la orden.');
       }
@@ -645,7 +701,7 @@ function syncProductionOrderFromQuote(
       setSyncStatus('La cotización remota no tiene una versión válida');
       return;
     }
-    if (QuoteAdapter.normalizeQuoteStatus(form.estadoCotizacion) !== 'Aceptada') {
+    if (!quoteCanGenerateProduction(form.estadoCotizacion)) {
       setSyncStatus('La cotización debe estar Aceptada');
       return;
     }
@@ -788,4 +844,7 @@ function syncProductionOrderFromQuote(
     refreshProduction: loadRemoteProductionOrders,
     syncProductionOrderFromQuote,
   };
+}
+export function quoteCanGenerateProduction(status) {
+  return QuoteAdapter.normalizeQuoteStatus(status) === 'Aceptada';
 }

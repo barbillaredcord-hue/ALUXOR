@@ -13,12 +13,14 @@ const orders = [
   { id: 'fabricating', estado: 'Fabricando' },
   { id: 'assembly', estado: 'Armado' },
   { id: 'ready', estado: 'Listo' },
+  { id: 'installing', estado: 'En instalación' },
   { id: 'delivered', estado: 'Entregado' },
+  { id: 'rejected', estado: 'Rechazado' },
 ];
 
 describe('ProductionSection filters', () => {
   it('filtra con los estados oficiales de producción', () => {
-    expect(filterProductionOrders(orders, 'all')).toHaveLength(7);
+    expect(filterProductionOrders(orders, 'all')).toHaveLength(9);
     expect(filterProductionOrders(orders, 'pending').map((order) => order.id)).toEqual([
       'pending',
     ]);
@@ -27,6 +29,7 @@ describe('ProductionSection filters', () => {
       'cutting',
       'fabricating',
       'assembly',
+      'installing',
     ]);
     expect(filterProductionOrders(orders, 'ready').map((order) => order.id)).toEqual([
       'ready',
@@ -34,6 +37,22 @@ describe('ProductionSection filters', () => {
     expect(filterProductionOrders(orders, 'delivered').map((order) => order.id)).toEqual([
       'delivered',
     ]);
+    expect(filterProductionOrders(orders, 'rejected').map((order) => order.id)).toEqual([
+      'rejected',
+    ]);
+  });
+
+  it('una orden rechazada no permite crear compra ni cambiar su estado', () => {
+    const markup = renderToStaticMarkup(<ProductionSection
+      productionOrders={[{
+        id: 'rejected', quoteId: 'quote-1', folio: 'OT-R', estado: 'Rechazado',
+      }]}
+      selectedProductionOrderId="rejected"
+      canManagePurchases
+      purchasesForOrder={() => []}
+    />);
+    expect(markup).toContain('La orden rechazada no admite nuevas compras');
+    expect(markup).toMatch(/<select disabled=""[^>]*><option value="Pendiente"/);
   });
 
   it('refleja cambios de estado sin conservar resultados anteriores', () => {
@@ -120,7 +139,7 @@ describe('ProductionSection filters', () => {
         }]}
       />
     );
-    expect(markup).toContain('Compra relacionada · comprado');
+    expect(markup).toContain('Compra relacionada · Comprado');
     expect(markup).toContain('Ver compra · comprado');
     expect(markup).not.toContain('Crear compra');
   });

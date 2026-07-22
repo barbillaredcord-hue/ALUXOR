@@ -105,6 +105,10 @@ export function createCleanQuoteForm(baseDefaults) {
   };
 }
 
+export function canSyncProductionFromQuoteStatus(status) {
+  return QuoteAdapter.normalizeQuoteStatus(status) !== 'Cancelada';
+}
+
 export function quoteNoteUpdateFromProduction(quotes, order) {
   const quote = findQuoteForProductionOrder(quotes, order);
   if (!quote) return { quote: null, nextQuote: null, resolution: null };
@@ -137,6 +141,23 @@ export function canScheduleQuoteAutoSave(autoSaveSuppressed, activeSection) {
 
 export function hasRealQuoteFormChanges(confirmedForm, currentForm) {
   return quoteFormChanges(confirmedForm, currentForm).size > 0;
+}
+
+export function hydrateExistingQuoteForm(form) {
+  return form && typeof form === 'object' && !Array.isArray(form)
+    ? structuredClone(form)
+    : null;
+}
+
+export function quoteHydrationKey(item) {
+  if (!item?.id) return '';
+  return `${item.id}:${Number(item.version) || 0}`;
+}
+
+export function notifyQuoteDeletionCommitted({ source, quoteId, onCommitted }) {
+  if (source !== 'repository' || !quoteId) return false;
+  onCommitted?.({ quoteId });
+  return true;
 }
 
 function quoteRevisionTimestamp(value) {
@@ -324,6 +345,7 @@ export default function useQuotes({
   appLogo,
   workspaceSettings,
   syncProductionOrderFromQuote,
+  onQuoteDeleteCommitted,
 }) {
   const [form, setForm] = useState(defaults);
   const [history, setHistory] = useState([]);
@@ -339,6 +361,7 @@ export default function useQuotes({
   const quoteSaveInFlightRef = useRef(false);
   const quoteSaveOperationRef = useRef(null);
   const quoteEditSessionRef = useRef(0);
+  const hydratedQuoteRevisionRef = useRef('');
   const quoteAutoSaveTimerRef = useRef(null);
   const quoteAutoSavePendingRef = useRef(false);
   const quoteAutoSaveInitializedRef = useRef(false);
@@ -927,6 +950,14 @@ export default function useQuotes({
 
         const activeQuoteId =
           activeQuoteIdentityRef.current?.id;
+
+        if (remoteRow?.deleted_at) {
+          notifyQuoteDeletionCommitted({
+            source: 'realtime',
+            quoteId: remoteRow.id,
+            onCommitted: onQuoteDeleteCommitted,
+          });
+        }
 
         if (
           remoteRow?.id === activeQuoteId
@@ -1947,6 +1978,11 @@ export default function useQuotes({
             activeQuoteIdentityRef.current = null;
             setActiveQuoteIdentity(null);
           }
+          notifyQuoteDeletionCommitted({
+            source: 'repository',
+            quoteId: operation.quoteId,
+            onCommitted: onQuoteDeleteCommitted,
+          });
           lastSuccessMessage = 'Eliminación sincronizada';
           continue;
         }
@@ -2120,7 +2156,7 @@ export default function useQuotes({
     activeQuoteIdentityRef.current = localIdentity;
     setActiveQuoteIdentity(localIdentity);
 
-    if (hasRemoteIdentity) {
+    if (hasRemoteIdentity && canSyncProductionFromQuoteStatus(status)) {
       syncProductionOrderFromQuote(
         currentIdentity.id,
         historyForm,
@@ -2455,13 +2491,15 @@ export default function useQuotes({
           remoteItem.version,
         );
 
-        syncProductionOrderFromQuote(
-          remoteItem.id,
-          remoteItem.form || historyForm,
-          remoteItem.version,
-          remoteItem.updatedAt,
-          remoteItem,
-        );
+        if (canSyncProductionFromQuoteStatus(remoteItem.estadoCotizacion)) {
+          syncProductionOrderFromQuote(
+            remoteItem.id,
+            remoteItem.form || historyForm,
+            remoteItem.version,
+            remoteItem.updatedAt,
+            remoteItem,
+          );
+        }
 
         removeQueuedQuoteOperations(
           hasRemoteIdentity ? 'update' : 'create',
@@ -2674,9 +2712,15 @@ export default function useQuotes({
 
   function loadHistoryItem(item) {
     if (!item?.form) return;
+    const hydrationKey = quoteHydrationKey(item);
+    if (hydrationKey && hydratedQuoteRevisionRef.current === hydrationKey) {
+      setSelectedHistoryPreview(null);
+      setActiveSection('cotizador');
+      return;
+    }
     const version = numberValue(item.version);
     setSelectedHistoryPreview(null);
-    const loadedForm = { ...defaults, ...item.form };
+    const loadedForm = hydrateExistingQuoteForm(item.form);
     const nextIdentity = {
       id: item.id,
       workspaceId: activeWorkspace?.id || null,
@@ -2693,6 +2737,7 @@ export default function useQuotes({
     remoteQuoteBufferRef.current = { fields: new Map(), pendingRow: null };
     focusedQuoteFieldRef.current = null;
     activeQuoteIdentityRef.current = nextIdentity;
+    hydratedQuoteRevisionRef.current = hydrationKey;
     setForm(loadedForm);
     setActiveQuoteIdentity(nextIdentity);
     publishQuoteFieldConflicts();
@@ -2739,6 +2784,7 @@ export default function useQuotes({
   }
 
   function startNewQuote() {
+    hydratedQuoteRevisionRef.current = '';
     const confirmed = window.confirm(
       '¿Comenzar una nueva cotización?\n\nSe limpiarán los datos de la cotización actual. Esta acción no elimina historial, catálogo, precios ni configuración.'
     );
@@ -2802,7 +2848,6 @@ export default function useQuotes({
       current?.id === id ? null : current
     ));
     void saveHistoryRemote(nextHistory);
-
     if (isRemoteQuoteId(id)) {
       if (workspaceId && (!authSession?.user?.id || !navigator.onLine)) {
         enqueueOfflineQuoteOperation({
@@ -2844,6 +2889,11 @@ export default function useQuotes({
           if (workspaceId) {
             removeQueuedQuoteOperations('soft_delete', workspaceId, id);
           }
+          notifyQuoteDeletionCommitted({
+            source: 'repository',
+            quoteId: id,
+            onCommitted: onQuoteDeleteCommitted,
+          });
           setSyncStatus('Cotización eliminada en nube');
           void loadRemoteQuotes({ preserveStatus: true });
         })

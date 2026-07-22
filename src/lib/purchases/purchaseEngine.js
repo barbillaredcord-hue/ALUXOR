@@ -203,6 +203,7 @@ export function normalizePurchase(purchase = {}) {
     receivedAt: date(source.receivedAt, null),
     notes: text(source.notes),
     active: source.active !== false,
+    deletedAt: date(source.deletedAt, null),
     items: (Array.isArray(source.items) ? source.items : []).map(normalizePurchaseItem),
     createdBy: text(source.createdBy),
     version: positiveInteger(source.version),
@@ -216,6 +217,13 @@ export function normalizePurchase(purchase = {}) {
       ? { pendingExpectedVersion: positiveInteger(source.pendingExpectedVersion) }
       : {}),
   };
+}
+
+export function purchaseHasOperationalActivity(purchase) {
+  return (Array.isArray(purchase?.items) ? purchase.items : []).some((item) => {
+    const status = normalizePurchaseStatus(item?.status);
+    return status === PURCHASE_STATUSES.PURCHASED || status === PURCHASE_STATUSES.RECEIVED;
+  });
 }
 
 export function createPurchaseFromProductionOrder({

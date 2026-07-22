@@ -64,7 +64,6 @@ export async function loadPurchases(workspaceId) {
     .from('purchases')
     .select(purchaseColumns)
     .eq('workspace_id', workspaceId)
-    .is('deleted_at', null)
     .order('updated_at', { ascending: false }));
   if (result.error) return { data: [], error: result.error };
   const rows = Array.isArray(result.data) ? result.data : [];

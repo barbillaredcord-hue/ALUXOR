@@ -47,6 +47,7 @@ export function purchaseRowToModel(row = {}, itemRows = []) {
     receivedAt: row.received_at,
     notes: row.notes,
     active: row.is_active,
+    deletedAt: row.deleted_at,
     items: itemRows.map(purchaseItemRowToModel),
     createdBy: row.created_by,
     version: row.version,
@@ -72,6 +73,7 @@ export function purchaseToInsertPayload(purchase, workspaceId, userId) {
     received_at: iso(model.receivedAt),
     notes: model.notes || null,
     is_active: model.active,
+    deleted_at: iso(model.deletedAt),
     created_by: userId,
   };
 }
@@ -87,6 +89,7 @@ export function purchaseToUpdatePayload(purchase) {
     received_at: iso(model.receivedAt),
     notes: model.notes || null,
     is_active: model.active,
+    deleted_at: iso(model.deletedAt),
   };
 }
 

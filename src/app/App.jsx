@@ -36,6 +36,10 @@ import WorkspaceAccessRequestsSection, {
   WorkspaceAccessGate,
 } from '../sections/WorkspaceAccessRequestsSection.jsx';
 import { canAccessSection, canManagePurchasing } from '../lib/workspace/permissions.js';
+import {
+  getPurchaseMaterialState,
+  getQuoteDisplayStatus,
+} from '../lib/workflow/projectStatus.js';
 import useAuth from '../hooks/useAuth.js';
 import useWorkspace from '../hooks/useWorkspace.js';
 import useQuotes from '../hooks/useQuotes.js';
@@ -45,7 +49,11 @@ import useQuickCalculator from '../hooks/useQuickCalculator.js';
 import usePlanEditor from '../hooks/usePlanEditor.js';
 import useCatalog from '../hooks/useCatalog.js';
 import useNavigation from '../hooks/useNavigation.js';
-import { resolveProductionOrderSummary } from './productionOrderSummary.js';
+import {
+  buildEmptyPurchaseSummary,
+  resolveProductionOrderSummary,
+  resolvePurchaseSummary,
+} from './productionOrderSummary.js';
 import {
   Materials,
   Pricing,
@@ -102,6 +110,7 @@ function App() {
   });
   const productionQuoteSyncRef = useRef(null);
   const productionQuoteNoteSyncRef = useRef(null);
+  const quoteDeletionRefreshRef = useRef(null);
   const {
     authSession,
     authLoading,
@@ -210,6 +219,7 @@ function App() {
     syncProductionOrderFromQuote: (...args) => (
       productionQuoteSyncRef.current?.(...args)
     ),
+    onQuoteDeleteCommitted: (...args) => quoteDeletionRefreshRef.current?.(...args),
   });
   productionQuoteNoteSyncRef.current = syncQuoteNoteFromProduction;
   const {
@@ -341,6 +351,7 @@ function App() {
     flushPurchaseSave,
     purchaseStatusForOrder,
     purchasesForOrder,
+    refreshPurchases,
   } = usePurchases({
     authSession,
     activeWorkspace,
@@ -348,6 +359,28 @@ function App() {
     setActiveSection,
   });
   const canEditPurchases = canManagePurchasing(currentWorkspaceRole);
+  const activeProductionPurchases = useMemo(() => (
+    activeProductionOrder
+      ? purchases.filter((purchase) => (
+        purchase.productionOrderId === activeProductionOrder.id
+        || purchase.production_order_id === activeProductionOrder.id
+      ))
+      : []
+  ), [activeProductionOrder, purchases]);
+  const activePurchaseMaterialState = useMemo(() => getPurchaseMaterialState(
+    activeProductionPurchases,
+    activeProductionOrder,
+  ), [activeProductionOrder, activeProductionPurchases]);
+  const quoteDisplayStatus = useMemo(() => getQuoteDisplayStatus(
+    form,
+    activeProductionOrder,
+    activePurchaseMaterialState,
+  ), [activeProductionOrder, activePurchaseMaterialState, form]);
+  const quoteStatusLocked = Boolean(activeProductionOrder);
+  const contextualProjectSummary = useMemo(() => ({
+    ...contextualQuoteSummary,
+    estado: quoteDisplayStatus,
+  }), [contextualQuoteSummary, quoteDisplayStatus]);
 
   const productionSummarySelection = useMemo(() => resolveProductionOrderSummary(
     productionOrders,
@@ -355,15 +388,31 @@ function App() {
     history,
   ), [history, productionOrders, selectedProductionOrderId]);
   const selectedProductionOrder = productionSummarySelection.order;
+  const purchaseSummarySelection = useMemo(() => resolvePurchaseSummary(
+    purchases,
+    selectedPurchaseId,
+    productionOrders,
+    history,
+  ), [history, productionOrders, purchases, selectedPurchaseId]);
+  const emptyPurchaseSummary = useMemo(() => buildEmptyPurchaseSummary(), []);
   const summaryPanelSource = useMemo(() => (
     activeSection === 'produccion' && productionSummarySelection.summary
       ? productionSummarySelection.summary
-      : contextualQuoteSummary
+      : activeSection === 'compras'
+        ? purchaseSummarySelection.summary || emptyPurchaseSummary
+        : contextualProjectSummary
   ), [
     activeSection,
-    contextualQuoteSummary,
+    contextualProjectSummary,
+    emptyPurchaseSummary,
+    purchaseSummarySelection,
     productionSummarySelection,
   ]);
+
+  quoteDeletionRefreshRef.current = () => {
+    void refreshProduction();
+    void refreshPurchases();
+  };
 
   function handleSelectProductionOrder(orderId) {
     setSelectedProductionOrderId(orderId);
@@ -464,7 +513,9 @@ function App() {
         )}
 
         <SummaryPanel
-          key={activeSection === 'produccion' ? selectedProductionOrderId : 'quote-summary'}
+          key={activeSection === 'produccion'
+            ? selectedProductionOrderId
+            : activeSection === 'compras' ? selectedPurchaseId : 'quote-summary'}
           proyecto={summaryPanelSource.nombre}
           descripcion={summaryPanelSource.descripcion}
           totalCliente={money(summaryPanelSource.quote.total)}
@@ -529,7 +580,7 @@ function App() {
           <div className="hero-main">
             <div className="hero-status-row">
               <p className="eyebrow">Proyecto activo · Versión {APP_VERSION}</p>
-              <span>{form.estadoCotizacion || 'Pendiente'}</span>
+              <span>{quoteDisplayStatus}</span>
             </div>
 
             <div className="hero-brand-line hero-title-row">
@@ -574,7 +625,7 @@ function App() {
           <ProjectFlow
             activeSection={activeSection}
             projectName={form.producto || 'Proyecto sin nombre'}
-            projectStatus={form.estadoCotizacion || 'Pendiente'}
+            projectStatus={quoteDisplayStatus}
             customer={form.clienteNombre || 'Cliente pendiente'}
             progress={dataHealth.score}
             total={quote.total}
@@ -590,6 +641,12 @@ function App() {
             dataHealth={dataHealth}
             money={money}
             decimal={decimal}
+            onOpenProduction={(purchase) => {
+              setSelectedProductionOrderId(purchase.productionOrderId || null);
+              setActiveSection('produccion');
+            }}
+            onOpenReceiving={() => setActiveSection('recepcion')}
+            onOpenInventory={() => setActiveSection('inventario')}
           />
         )}
 
@@ -665,6 +722,13 @@ function App() {
             quotePresenceStatus={quotePresenceStatus}
             onQuoteFieldFocus={handleQuoteFieldFocus}
             onQuoteFieldBlur={handleQuoteFieldBlur}
+            quoteDisplayStatus={quoteDisplayStatus}
+            quoteStatusLocked={quoteStatusLocked}
+            onOpenProduction={() => {
+              if (activeProductionOrder) setSelectedProductionOrderId(activeProductionOrder.id);
+              setActiveSection('produccion');
+            }}
+            onCancelProject={() => update('estadoCotizacion', 'Cancelada')}
           />
         )}
         {pdfEditor && (
@@ -761,6 +825,9 @@ function App() {
         {activeSection === 'compras' && (
           <PurchasesSection
             purchases={purchases}
+            productionOrders={productionOrders}
+            quotes={history}
+            workspaceId={activeWorkspace?.id}
             activePurchase={activePurchase}
             selectedPurchaseId={selectedPurchaseId}
             setSelectedPurchaseId={setSelectedPurchaseId}
@@ -798,6 +865,7 @@ function App() {
             form={form}
             quote={quote}
             decimal={decimal}
+            projectStatus={quoteDisplayStatus}
           />
         )}
 
@@ -845,6 +913,12 @@ function App() {
             selectedHistoryPreview={selectedHistoryPreview}
             selectHistoryPreview={setSelectedHistoryPreview}
             readOnly={!canEditWorkspaceQuotes}
+            productionOrders={productionOrders}
+            purchases={purchases}
+            onOpenProduction={(order) => {
+              setSelectedProductionOrderId(order.id);
+              setActiveSection('produccion');
+            }}
           />
         )}
 

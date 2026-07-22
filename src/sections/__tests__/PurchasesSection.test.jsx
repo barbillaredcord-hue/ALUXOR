@@ -53,7 +53,7 @@ describe('PurchasesSection durable', () => {
       decimal={formatNumber}
     />);
     expect(markup).toContain('Consulta todas las órdenes del workspace.');
-    expect(markup).toContain('No hay órdenes de compra.');
+    expect(markup).toContain('No hay compras activas.');
   });
 
   it('lista una compra con múltiples proveedores en sus partidas', () => {
@@ -195,5 +195,74 @@ describe('PurchasesSection durable', () => {
     expect(filterPurchases(purchases, { query: 'vidrio' })).toHaveLength(1);
     expect(filterPurchases(purchases, { status: 'pendiente' })).toHaveLength(1);
     expect(isPurchaseOverdue(purchases[0], Date.parse('2026-07-21T00:00:00Z'))).toBe(true);
+  });
+
+  it('muestra tabs y contadores derivados del mismo conjunto', () => {
+    const markup = renderToStaticMarkup(<PurchasesSection
+      purchases={[
+        { id: 'a', items: [{ id: 'ia', status: 'pendiente' }] },
+        { id: 'r', active: false, items: [{ id: 'ir', status: 'recibido' }] },
+        { id: 'c', active: false, notes: 'Cotización original eliminada', items: [{ id: 'ic', status: 'pendiente' }] },
+      ]}
+      money={formatNumber}
+      decimal={formatNumber}
+    />);
+    expect(markup).toContain('Activas 1');
+    expect(markup).toContain('Recibidas 1');
+    expect(markup).toContain('Canceladas 1');
+    expect(markup).toContain('Historial 3');
+  });
+
+  it('renderiza canceladas en modo de solo lectura', () => {
+    const cancelled = {
+      id: 'c', active: false, folio: 'OC-CANCELADA', notes: 'Cotización original eliminada',
+      items: [{ id: 'ic', status: 'comprado', name: 'MDF' }],
+    };
+    const markup = renderToStaticMarkup(<PurchasesSection
+      purchases={[cancelled]}
+      activePurchase={cancelled}
+      selectedPurchaseId="c"
+      initialView="cancelled"
+      setSelectedPurchaseId={vi.fn()}
+      canManage
+      money={formatNumber}
+      decimal={formatNumber}
+    />);
+    expect(markup).toContain('Cotización original eliminada');
+    expect(markup).toContain('disabled=""');
+  });
+
+  it('reclasifica la compra desde quotes.status Cancelada sin esperar otro PATCH', () => {
+    const cancelled = {
+      id: 'c', quoteId: 'q1', active: true, folio: 'OC-CANCELADA',
+      notes: '', items: [{ id: 'ic', status: 'pendiente', name: 'MDF' }],
+    };
+    const markup = renderToStaticMarkup(<PurchasesSection
+      purchases={[cancelled]}
+      quotes={[{ id: 'q1', status: 'Cancelada' }]}
+      activePurchase={cancelled}
+      selectedPurchaseId="c"
+      initialView="cancelled"
+      setSelectedPurchaseId={vi.fn()}
+      canManage
+      money={formatNumber}
+      decimal={formatNumber}
+    />);
+
+    expect(markup).toContain('Activas 0');
+    expect(markup).toContain('Canceladas 1');
+    expect(markup).toContain('Cotización cancelada');
+    expect(markup).toContain('OC-CANCELADA');
+    expect(markup).toContain('disabled=""');
+  });
+
+  it('muestra filtros y estado vacío propios del Historial', () => {
+    const markup = renderToStaticMarkup(<PurchasesSection
+      initialView="historical"
+      money={formatNumber}
+      decimal={formatNumber}
+    />);
+    expect(markup).toContain('Filtrar historial por proveedor');
+    expect(markup).toContain('No hay compras que coincidan con los filtros.');
   });
 });

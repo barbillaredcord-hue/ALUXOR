@@ -1,5 +1,13 @@
 import { Download, Eraser, RefreshCw, Upload } from 'lucide-react';
 import { getHistorySummary } from '../lib/history/historySummary.js';
+import { quoteCommercialStatusOptions, quoteRecordStatus } from '../lib/quotes/quoteAdapter.js';
+import { productionOrderMatchesQuote } from '../lib/quotes/quoteReference.js';
+import {
+  getPurchaseMaterialState,
+  getQuoteDisplayStatus,
+} from '../lib/workflow/projectStatus.js';
+
+const QUOTE_STATUS_OPTIONS = quoteCommercialStatusOptions();
 
 export default function HistorySection({
   syncStatus,
@@ -16,6 +24,9 @@ export default function HistorySection({
   selectedHistoryPreview,
   selectHistoryPreview,
   readOnly = false,
+  productionOrders = [],
+  purchases = [],
+  onOpenProduction,
 }) {
   const historySummary = getHistorySummary(history);
 
@@ -41,7 +52,20 @@ export default function HistorySection({
       </div>
       <div className="table-list">
         {historySummary.records === 0 && <p>No hay cotizaciones guardadas todavía.</p>}
-        {history.map((item) => (
+        {history.map((item) => {
+          const productionOrder = productionOrders.find((order) => (
+            productionOrderMatchesQuote(order, item)
+          )) || null;
+          const relatedPurchases = productionOrder
+            ? purchases.filter((purchase) => (
+              purchase.productionOrderId === productionOrder.id
+              || purchase.production_order_id === productionOrder.id
+            ))
+            : [];
+          const purchaseState = getPurchaseMaterialState(relatedPurchases, productionOrder);
+          const displayStatus = getQuoteDisplayStatus(item, productionOrder, purchaseState);
+
+          return (
           <article
             key={item.id}
             className={selectedHistoryPreview?.id === item.id ? 'history-row selected' : 'history-row'}
@@ -52,15 +76,24 @@ export default function HistorySection({
               {item.folio && <span>Folio: {item.folio}</span>}
               <span>{item.clienteNombre} · {money(item.total)} · {new Date(item.createdAt).toLocaleDateString('es-MX')}</span>
             </div>
-            <select disabled={readOnly} value={item.status || 'Pendiente'} onClick={(event) => event.stopPropagation()} onChange={(event) => updateHistoryStatus(item.id, event.target.value)}>
-              <option>Pendiente</option>
-              <option>Enviada</option>
-              <option>Aceptada</option>
-              <option>En fabricación</option>
-              <option>Instalación</option>
-              <option>Terminada</option>
-              <option>Cancelada</option>
-            </select>
+            {productionOrder ? (
+              <div onClick={(event) => event.stopPropagation()}>
+                <strong>{displayStatus}</strong>
+                <span>Estado controlado por Producción</span>
+                {!readOnly && (
+                  <div className="actions compact">
+                    <button type="button" onClick={() => onOpenProduction?.(productionOrder)}>Abrir Producción</button>
+                    {quoteRecordStatus(item) !== 'Cancelada' && (
+                      <button type="button" className="ghost" onClick={() => updateHistoryStatus(item.id, 'Cancelada')}>Cancelar proyecto</button>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <select disabled={readOnly} value={quoteRecordStatus(item)} onClick={(event) => event.stopPropagation()} onChange={(event) => updateHistoryStatus(item.id, event.target.value)}>
+                {QUOTE_STATUS_OPTIONS.map((status) => <option key={status}>{status}</option>)}
+              </select>
+            )}
             {!readOnly && (
               <button type="button" onClick={(event) => { event.stopPropagation(); loadHistoryItem(item); }}>Abrir</button>
             )}
@@ -68,7 +101,8 @@ export default function HistorySection({
               <button type="button" className="ghost" aria-label={`Eliminar ${item.producto}`} onClick={(event) => { event.stopPropagation(); removeHistoryItem(item.id); }}><Eraser size={16} /></button>
             )}
           </article>
-        ))}
+          );
+        })}
       </div>
     </section>
   );

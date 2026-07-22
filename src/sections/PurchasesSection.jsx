@@ -6,12 +6,47 @@ import {
   normalizePurchaseStatus,
 } from '../lib/purchases/purchaseSummary.js';
 import { sortPurchaseItems } from '../lib/purchases/purchaseEngine.js';
+import {
+  PURCHASE_OPERATIONAL_STATES,
+  filterPurchaseHistory,
+  purchaseCancellationReason,
+  purchaseNextAction,
+  resolvePurchaseViewSelection,
+  selectPurchaseViews,
+} from '../lib/purchases/purchaseSelectors.js';
 
 const statusConfig = {
   [PURCHASE_STATUSES.PENDING]: { label: 'Pendiente', icon: Circle },
   [PURCHASE_STATUSES.PURCHASED]: { label: 'Comprado', icon: Clock3 },
   [PURCHASE_STATUSES.RECEIVED]: { label: 'Recibido', icon: CheckCircle2 },
 };
+
+const purchaseViewConfig = [
+  { id: PURCHASE_OPERATIONAL_STATES.ACTIVE, label: 'Activas', counter: 'activePurchasesCount' },
+  { id: PURCHASE_OPERATIONAL_STATES.RECEIVED, label: 'Recibidas', counter: 'receivedPurchasesCount' },
+  { id: PURCHASE_OPERATIONAL_STATES.CANCELLED, label: 'Canceladas', counter: 'cancelledPurchasesCount' },
+  { id: PURCHASE_OPERATIONAL_STATES.HISTORICAL, label: 'Historial', counter: 'historicalPurchasesCount' },
+];
+
+const purchaseEmptyMessages = {
+  active: 'No hay compras activas. Las nuevas necesidades de materiales aparecerán aquí.',
+  received: 'No hay compras recibidas todavía.',
+  cancelled: 'No hay compras canceladas o rechazadas.',
+  historical: 'No hay compras que coincidan con los filtros.',
+};
+
+const purchaseViewSession = new Map();
+
+function sessionForWorkspace(workspaceId) {
+  const key = workspaceId || 'workspace-current';
+  if (!purchaseViewSession.has(key)) {
+    purchaseViewSession.set(key, {
+      activeView: PURCHASE_OPERATIONAL_STATES.ACTIVE,
+      selectedByView: { active: null, received: null, cancelled: null, history: null },
+    });
+  }
+  return purchaseViewSession.get(key);
+}
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -69,6 +104,8 @@ export function filterPurchases(purchases = [], filters = {}) {
       purchase.quoteId,
       purchase.productionOrderFolio,
       purchase.productionOrderId,
+      purchase.notes,
+      ...(purchase.items || []).flatMap((item) => [item.name, item.notes, item.supplier]),
     ].some((value) => String(value || '').toLocaleLowerCase('es-MX').includes(query));
   });
 }
@@ -156,6 +193,9 @@ export function reconcilePurchaseEditorDirtyFields(remote, draft, dirtyFields = 
 
 export default function PurchasesSection({
   purchases = [],
+  productionOrders = [],
+  quotes = [],
+  workspaceId = null,
   activePurchase,
   selectedPurchaseId,
   setSelectedPurchaseId,
@@ -168,17 +208,71 @@ export default function PurchasesSection({
   canManage = false,
   money,
   decimal,
+  initialView = PURCHASE_OPERATIONAL_STATES.ACTIVE,
+  onOpenProduction,
+  onOpenReceiving,
+  onOpenInventory,
 }) {
+  const viewSession = sessionForWorkspace(workspaceId);
+  const [activeView, setActiveView] = useState(
+    initialView === PURCHASE_OPERATIONAL_STATES.ACTIVE
+      ? viewSession.activeView
+      : initialView,
+  );
   const [indexQuery, setIndexQuery] = useState('');
   const [indexStatus, setIndexStatus] = useState('');
+  const [historyProvider, setHistoryProvider] = useState('');
+  const [historyClient, setHistoryClient] = useState('');
+  const [historyFrom, setHistoryFrom] = useState('');
+  const [historyTo, setHistoryTo] = useState('');
+  const selectedByViewRef = useRef(viewSession.selectedByView);
+  const purchaseViews = useMemo(() => selectPurchaseViews({
+    purchases,
+    productionOrders,
+    quotes,
+    workspaceId,
+  }), [productionOrders, purchases, quotes, workspaceId]);
+  const viewPurchases = purchaseViews[activeView] || [];
+  const filteredPurchases = useMemo(() => (
+    activeView === PURCHASE_OPERATIONAL_STATES.HISTORICAL
+      ? filterPurchaseHistory(viewPurchases, {
+        query: indexQuery,
+        state: indexStatus,
+        provider: historyProvider,
+        client: historyClient,
+        from: historyFrom,
+        to: historyTo,
+        stateById: purchaseViews.stateById,
+      })
+      : filterPurchases(viewPurchases, { query: indexQuery })
+  ), [
+    activeView,
+    historyClient,
+    historyFrom,
+    historyProvider,
+    historyTo,
+    indexQuery,
+    indexStatus,
+    purchaseViews.stateById,
+    viewPurchases,
+  ]);
+  const selectionIsVisible = viewPurchases.some((purchase) => purchase.id === selectedPurchaseId);
+  const selectedCanonicalPurchase = selectionIsVisible ? activePurchase : null;
   const [draft, setDraft] = useState(() => (
-    activePurchase ? structuredClone(activePurchase) : null
+    selectedCanonicalPurchase ? structuredClone(selectedCanonicalPurchase) : null
   ));
   const draftRef = useRef(draft);
   const flushSaveRef = useRef(flushPurchaseSave);
   const dirtyFieldsRef = useRef(new Set());
   const focusedFieldRef = useRef(null);
-  const displayPurchase = draft?.id === activePurchase?.id ? draft : activePurchase;
+  const displayPurchase = draft?.id === selectedCanonicalPurchase?.id
+    ? draft
+    : selectedCanonicalPurchase;
+  const displayPurchaseState = displayPurchase
+    ? purchaseViews.stateById.get(displayPurchase.id)
+    : null;
+  const canEditPurchase = canManage
+    && displayPurchaseState === PURCHASE_OPERATIONAL_STATES.ACTIVE;
   flushSaveRef.current = flushPurchaseSave;
   const purchaseItems = useMemo(
     () => sortPurchaseItems(displayPurchase?.items || []),
@@ -193,13 +287,8 @@ export default function PurchasesSection({
     result[group] = [...(result[group] || []), item];
     return result;
   }, {}), [purchaseItems]);
-  const filteredPurchases = useMemo(() => filterPurchases(purchases, {
-    query: indexQuery,
-    status: indexStatus,
-  }), [indexQuery, indexStatus, purchases]);
-
   useEffect(() => {
-    if (!activePurchase) {
+    if (!selectedCanonicalPurchase) {
       dirtyFieldsRef.current.clear();
       focusedFieldRef.current = null;
       draftRef.current = null;
@@ -207,32 +296,57 @@ export default function PurchasesSection({
       return;
     }
     setDraft((current) => {
-      if (current?.id !== activePurchase.id) {
+      if (current?.id !== selectedCanonicalPurchase.id) {
         dirtyFieldsRef.current.clear();
         focusedFieldRef.current = null;
       } else {
         dirtyFieldsRef.current = reconcilePurchaseEditorDirtyFields(
-          activePurchase,
+          selectedCanonicalPurchase,
           current,
           dirtyFieldsRef.current,
         );
       }
       const next = mergePurchaseEditorDraft(
-        activePurchase,
+        selectedCanonicalPurchase,
         current,
         dirtyFieldsRef.current,
       );
       draftRef.current = next;
       return next;
     });
-  }, [activePurchase]);
+  }, [selectedCanonicalPurchase]);
 
   useEffect(() => () => {
     if (draftRef.current?.id) void flushSaveRef.current?.(draftRef.current.id);
-  }, [activePurchase?.id]);
+  }, [selectedCanonicalPurchase?.id]);
+
+  useEffect(() => {
+    if (!selectedPurchaseId || selectionIsVisible) return;
+    selectedByViewRef.current[activeView] = null;
+    setSelectedPurchaseId?.(null);
+  }, [activeView, selectedPurchaseId, selectionIsVisible, setSelectedPurchaseId]);
+
+  const selectPurchaseForView = (purchaseId) => {
+    const validId = viewPurchases.some((purchase) => purchase.id === purchaseId)
+      ? purchaseId
+      : null;
+    selectedByViewRef.current[activeView] = validId;
+    setSelectedPurchaseId?.(validId);
+  };
+
+  const changeView = (nextView) => {
+    if (selectedPurchaseId && selectionIsVisible) {
+      selectedByViewRef.current[activeView] = selectedPurchaseId;
+    }
+    viewSession.activeView = nextView;
+    setActiveView(nextView);
+    const remembered = selectedByViewRef.current[nextView];
+    const nextRecords = purchaseViews[nextView] || [];
+    setSelectedPurchaseId?.(resolvePurchaseViewSelection(nextRecords, remembered));
+  };
 
   const updateHeader = (changes) => {
-    if (!displayPurchase || !canManage) return;
+    if (!displayPurchase || !canEditPurchase) return;
     Object.keys(changes).forEach((field) => {
       if (!purchaseEditorValuesEqual(displayPurchase[field], changes[field], field)) {
         dirtyFieldsRef.current.add(purchaseDraftFieldKey(displayPurchase.id, field));
@@ -244,7 +358,7 @@ export default function PurchasesSection({
     updatePurchase(displayPurchase.id, changes);
   };
   const updateItem = (itemId, changes) => {
-    if (!displayPurchase || !canManage) return;
+    if (!displayPurchase || !canEditPurchase) return;
     const currentItem = displayPurchase.items.find((item) => item.id === itemId);
     Object.keys(changes).forEach((field) => {
       if (!purchaseEditorValuesEqual(currentItem?.[field], changes[field], field)) {
@@ -272,7 +386,7 @@ export default function PurchasesSection({
     }
   };
   const markAllBought = () => {
-    if (!displayPurchase || !canManage) return;
+    if (!displayPurchase || !canEditPurchase) return;
     purchaseItems.forEach((item) => {
       if (normalizePurchaseStatus(item.status) !== PURCHASE_STATUSES.PURCHASED) {
         dirtyFieldsRef.current.add(purchaseItemDraftFieldKey(
@@ -316,7 +430,7 @@ export default function PurchasesSection({
         <div>
           <span>Centro de compras</span>
           <h2>{displayPurchase?.folio || 'Órdenes de compra'}</h2>
-          <p>{activePurchase ? 'Compra generada desde Orden de Producción' : 'Consulta todas las órdenes del workspace.'}</p>
+          <p>{displayPurchase ? 'Compra generada desde Orden de Producción' : 'Consulta todas las órdenes del workspace.'}</p>
         </div>
         <ShoppingCart size={34} />
       </header>
@@ -329,7 +443,21 @@ export default function PurchasesSection({
         </div>
       )}
 
-      {!activePurchase && (
+      <nav className="purchase-actions" aria-label="Vistas de Compras">
+        {purchaseViewConfig.map((view) => (
+          <button
+            key={view.id}
+            type="button"
+            className={activeView === view.id ? '' : 'ghost'}
+            aria-pressed={activeView === view.id}
+            onClick={() => changeView(view.id)}
+          >
+            {view.label} {purchaseViews.counters[view.counter]}
+          </button>
+        ))}
+      </nav>
+
+      {!displayPurchase && (
         <>
           <div className="purchase-actions">
             <input
@@ -339,29 +467,37 @@ export default function PurchasesSection({
               value={indexQuery}
               onChange={(event) => setIndexQuery(event.target.value)}
             />
-            <select
-              aria-label="Filtrar compras por estado"
-              value={indexStatus}
-              onChange={(event) => setIndexStatus(event.target.value)}
-            >
-              <option value="">Todos los estados</option>
-              {Object.entries(statusConfig).map(([value, config]) => (
-                <option key={value} value={value}>{config.label}</option>
-              ))}
-            </select>
+            {activeView === PURCHASE_OPERATIONAL_STATES.HISTORICAL && (
+              <>
+                <select aria-label="Filtrar historial por categoría" value={indexStatus} onChange={(event) => setIndexStatus(event.target.value)}>
+                  <option value="">Todas</option>
+                  <option value="active">Activas</option>
+                  <option value="received">Recibidas</option>
+                  <option value="cancelled">Canceladas</option>
+                  <option value="deleted">Eliminadas</option>
+                </select>
+                <input aria-label="Filtrar historial por proveedor" placeholder="Proveedor" value={historyProvider} onChange={(event) => setHistoryProvider(event.target.value)} />
+                <input aria-label="Filtrar historial por cliente" placeholder="Cliente" value={historyClient} onChange={(event) => setHistoryClient(event.target.value)} />
+                <input aria-label="Historial desde" type="date" value={historyFrom} onChange={(event) => setHistoryFrom(event.target.value)} />
+                <input aria-label="Historial hasta" type="date" value={historyTo} onChange={(event) => setHistoryTo(event.target.value)} />
+              </>
+            )}
           </div>
           <div className="purchase-groups">
             <article className="purchase-group">
-              <h3>Órdenes del workspace · {filteredPurchases.length}</h3>
+              <h3>{purchaseViewConfig.find((view) => view.id === activeView)?.label} · {filteredPurchases.length}</h3>
               {filteredPurchases.length ? filteredPurchases.map((purchase) => {
                 const purchaseSummary = getPurchasesSummary([purchase]);
                 const overdue = isPurchaseOverdue(purchase);
+                const purchaseState = purchaseViews.stateById.get(purchase.id);
+                const relatedOrder = purchaseViews.productionOrdersById.get(purchase.productionOrderId);
+                const relatedQuote = purchaseViews.quotesById.get(purchase.quoteId);
                 return (
                   <button
                     key={purchase.id}
                     type="button"
                     className={`purchase-item purchase-item-${normalizePurchaseStatus(purchase.status)}`}
-                    onClick={() => setSelectedPurchaseId?.(purchase.id)}
+                    onClick={() => selectPurchaseForView(purchase.id)}
                   >
                     <ShoppingCart size={18} />
                     <span>
@@ -371,12 +507,15 @@ export default function PurchasesSection({
                       <span>
                         {purchaseSummary.total} partida(s) · {new Set((purchase.items || []).map((item) => item.supplier).filter(Boolean)).size} proveedor(es) · {money(purchaseSummary.totalCost)} · {purchase.status}
                       </span>
-                      <span>Fecha {displayDate(purchase.createdAt)} · Esperada {displayDate(purchase.expectedAt)}</span>
+                      <span>Fecha {displayDate(purchase.createdAt)} · {purchaseState === 'received' ? 'Recibida' : 'Esperada'} {displayDate(purchaseState === 'received' ? purchase.receivedAt : purchase.expectedAt)}</span>
+                      <span>{purchaseState === 'cancelled'
+                        ? purchaseCancellationReason(purchase, relatedOrder, relatedQuote)
+                        : purchaseState === 'received' ? 'Recepción completa' : purchaseState === 'historical' ? 'Eliminada' : purchaseNextAction(purchase)}</span>
                       <span>{purchase.pendingSync || purchase.items?.some((item) => item.pendingSync) ? 'Pendiente de sincronizar' : 'Sincronizada'}{overdue ? ' · Retrasada' : ''}</span>
                     </span>
                   </button>
                 );
-              }) : <p>No hay órdenes de compra.</p>}
+              }) : <p>{purchaseEmptyMessages[activeView]}</p>}
             </article>
           </div>
         </>
@@ -384,6 +523,19 @@ export default function PurchasesSection({
 
       {displayPurchase ? (
         <>
+          {displayPurchaseState !== PURCHASE_OPERATIONAL_STATES.ACTIVE && (
+            <div className="purchase-actions" aria-live="polite">
+              <strong>{displayPurchaseState === PURCHASE_OPERATIONAL_STATES.CANCELLED
+                ? purchaseCancellationReason(
+                  displayPurchase,
+                  purchaseViews.productionOrdersById.get(displayPurchase.productionOrderId),
+                  purchaseViews.quotesById.get(displayPurchase.quoteId),
+                )
+                : displayPurchaseState === PURCHASE_OPERATIONAL_STATES.RECEIVED
+                  ? 'Recepción completa · consulta de solo lectura'
+                  : 'Compra eliminada · consulta histórica'}</strong>
+            </div>
+          )}
           <div className="purchase-stats">
             <div><span>Pendientes</span><strong>{summary.pending}</strong></div>
             <div><span>Comprados</span><strong>{summary.purchased}</strong></div>
@@ -395,43 +547,49 @@ export default function PurchasesSection({
             <label>Compra
               <select value={selectedPurchaseId || ''} onChange={(event) => {
                 void flushPurchaseSave?.(displayPurchase.id);
-                setSelectedPurchaseId(event.target.value);
+                selectPurchaseForView(event.target.value);
               }}>
-                {purchases.map((purchase) => <option key={purchase.id} value={purchase.id}>{purchase.folio}</option>)}
+                {(activeView === PURCHASE_OPERATIONAL_STATES.HISTORICAL
+                  ? filteredPurchases
+                  : viewPurchases
+                ).map((purchase) => <option key={purchase.id} value={purchase.id}>{purchase.folio}</option>)}
               </select>
             </label>
             <label>Folio
-              <input disabled={!canManage} value={displayPurchase.folio} onFocus={() => focusField(purchaseDraftFieldKey(displayPurchase.id, 'folio'))} onBlur={blurField} onKeyDown={enterField} onChange={(event) => updateHeader({ folio: event.target.value })} />
+              <input disabled={!canEditPurchase} value={displayPurchase.folio} onFocus={() => focusField(purchaseDraftFieldKey(displayPurchase.id, 'folio'))} onBlur={blurField} onKeyDown={enterField} onChange={(event) => updateHeader({ folio: event.target.value })} />
             </label>
             <label>Proveedor
-              <input disabled={!canManage} value={displayPurchase.supplier} onFocus={() => focusField(purchaseDraftFieldKey(displayPurchase.id, 'supplier'))} onBlur={blurField} onKeyDown={enterField} onChange={(event) => updateHeader({ supplier: event.target.value })} />
+              <input disabled={!canEditPurchase} value={displayPurchase.supplier} onFocus={() => focusField(purchaseDraftFieldKey(displayPurchase.id, 'supplier'))} onBlur={blurField} onKeyDown={enterField} onChange={(event) => updateHeader({ supplier: event.target.value })} />
             </label>
             <label>Estado
-              <select disabled={!canManage} value={displayPurchase.status} onFocus={() => focusField(purchaseDraftFieldKey(displayPurchase.id, 'status'))} onBlur={blurField} onChange={(event) => updateHeader({ status: event.target.value })}>
+              <select disabled={!canEditPurchase} value={displayPurchase.status} onFocus={() => focusField(purchaseDraftFieldKey(displayPurchase.id, 'status'))} onBlur={blurField} onChange={(event) => updateHeader({ status: event.target.value })}>
                 {Object.entries(statusConfig).map(([value, config]) => <option key={value} value={value}>{config.label}</option>)}
               </select>
             </label>
             <label>Fecha de compra
-              <input disabled={!canManage} type="datetime-local" value={dateTimeInput(displayPurchase.orderedAt)} onFocus={() => focusField(purchaseDraftFieldKey(displayPurchase.id, 'orderedAt'))} onBlur={blurField} onKeyDown={enterField} onChange={(event) => updateHeader({ orderedAt: purchaseDateFromInput(event.target.value) })} />
+              <input disabled={!canEditPurchase} type="datetime-local" value={dateTimeInput(displayPurchase.orderedAt)} onFocus={() => focusField(purchaseDraftFieldKey(displayPurchase.id, 'orderedAt'))} onBlur={blurField} onKeyDown={enterField} onChange={(event) => updateHeader({ orderedAt: purchaseDateFromInput(event.target.value) })} />
             </label>
             <label>Fecha esperada
-              <input disabled={!canManage} type="datetime-local" value={dateTimeInput(displayPurchase.expectedAt)} onFocus={() => focusField(purchaseDraftFieldKey(displayPurchase.id, 'expectedAt'))} onBlur={blurField} onKeyDown={enterField} onChange={(event) => updateHeader({ expectedAt: purchaseDateFromInput(event.target.value) })} />
+              <input disabled={!canEditPurchase} type="datetime-local" value={dateTimeInput(displayPurchase.expectedAt)} onFocus={() => focusField(purchaseDraftFieldKey(displayPurchase.id, 'expectedAt'))} onBlur={blurField} onKeyDown={enterField} onChange={(event) => updateHeader({ expectedAt: purchaseDateFromInput(event.target.value) })} />
             </label>
             <label>Fecha de recepción
-              <input disabled={!canManage} type="datetime-local" value={dateTimeInput(displayPurchase.receivedAt)} onFocus={() => focusField(purchaseDraftFieldKey(displayPurchase.id, 'receivedAt'))} onBlur={blurField} onKeyDown={enterField} onChange={(event) => updateHeader({ receivedAt: purchaseDateFromInput(event.target.value) })} />
+              <input disabled={!canEditPurchase} type="datetime-local" value={dateTimeInput(displayPurchase.receivedAt)} onFocus={() => focusField(purchaseDraftFieldKey(displayPurchase.id, 'receivedAt'))} onBlur={blurField} onKeyDown={enterField} onChange={(event) => updateHeader({ receivedAt: purchaseDateFromInput(event.target.value) })} />
             </label>
             <label>Notas
-              <textarea disabled={!canManage} value={displayPurchase.notes} onFocus={() => focusField(purchaseDraftFieldKey(displayPurchase.id, 'notes'))} onBlur={blurField} onChange={(event) => updateHeader({ notes: event.target.value })} />
+              <textarea disabled={!canEditPurchase} value={displayPurchase.notes} onFocus={() => focusField(purchaseDraftFieldKey(displayPurchase.id, 'notes'))} onBlur={blurField} onChange={(event) => updateHeader({ notes: event.target.value })} />
             </label>
           </div>
 
           <div className="purchase-actions">
             <button type="button" className="ghost" onClick={() => {
               void flushPurchaseSave?.(displayPurchase.id);
-              setSelectedPurchaseId?.(null);
+              selectPurchaseForView(null);
             }}>Volver al índice</button>
-            <button type="button" disabled={!canManage} onClick={markAllBought}>Marcar todo como comprado</button>
+            <button type="button" disabled={!canEditPurchase} onClick={markAllBought}>Marcar todo como comprado</button>
             <button type="button" className="ghost" onClick={printList}><Printer size={18} /> Generar lista imprimible</button>
+            <button type="button" className="ghost" onClick={() => onOpenProduction?.(displayPurchase)}>Ver Producción</button>
+            <button type="button" className="ghost" onClick={() => onOpenReceiving?.(displayPurchase)}>Ver Recepción</button>
+            <button type="button" className="ghost" onClick={() => onOpenInventory?.(displayPurchase)}>Ver Inventario</button>
           </div>
 
           <div className="purchases-layout">
@@ -446,17 +604,17 @@ export default function PurchasesSection({
                       <div key={item.id} className={`purchase-item purchase-item-${status}`}>
                         <Icon size={18} />
                         <div>
-                          <input disabled={!canManage} aria-label="Material" value={item.name} onFocus={() => focusField(purchaseItemDraftFieldKey(displayPurchase.id, item.id, 'name'))} onBlur={blurField} onKeyDown={enterField} onChange={(event) => updateItem(item.id, { name: event.target.value })} />
+                          <input disabled={!canEditPurchase} aria-label="Material" value={item.name} onFocus={() => focusField(purchaseItemDraftFieldKey(displayPurchase.id, item.id, 'name'))} onBlur={blurField} onKeyDown={enterField} onChange={(event) => updateItem(item.id, { name: event.target.value })} />
                           <span>{decimal(item.quantity)} {item.unit} · {money(item.quantity * item.unitCost)}</span>
                           <span>
-                            <input disabled={!canManage} aria-label="Cantidad" type="number" min="0" step="any" value={item.quantity} onFocus={() => focusField(purchaseItemDraftFieldKey(displayPurchase.id, item.id, 'quantity'))} onBlur={blurField} onKeyDown={enterField} onChange={(event) => updateItem(item.id, { quantity: event.target.value })} />
-                            <input disabled={!canManage} aria-label="Costo unitario" type="number" min="0" step="any" value={item.unitCost} onFocus={() => focusField(purchaseItemDraftFieldKey(displayPurchase.id, item.id, 'unitCost'))} onBlur={blurField} onKeyDown={enterField} onChange={(event) => updateItem(item.id, { unitCost: event.target.value })} />
+                            <input disabled={!canEditPurchase} aria-label="Cantidad" type="number" min="0" step="any" value={item.quantity} onFocus={() => focusField(purchaseItemDraftFieldKey(displayPurchase.id, item.id, 'quantity'))} onBlur={blurField} onKeyDown={enterField} onChange={(event) => updateItem(item.id, { quantity: event.target.value })} />
+                            <input disabled={!canEditPurchase} aria-label="Costo unitario" type="number" min="0" step="any" value={item.unitCost} onFocus={() => focusField(purchaseItemDraftFieldKey(displayPurchase.id, item.id, 'unitCost'))} onBlur={blurField} onKeyDown={enterField} onChange={(event) => updateItem(item.id, { unitCost: event.target.value })} />
                           </span>
-                          <input disabled={!canManage} aria-label="Proveedor de partida" value={item.supplier || ''} placeholder="Proveedor" onFocus={() => focusField(purchaseItemDraftFieldKey(displayPurchase.id, item.id, 'supplier'))} onBlur={blurField} onKeyDown={enterField} onChange={(event) => updateItem(item.id, { supplier: event.target.value })} />
-                          <input disabled={!canManage} aria-label="Fecha de partida" type="datetime-local" value={dateTimeInput(item.itemDate)} onFocus={() => focusField(purchaseItemDraftFieldKey(displayPurchase.id, item.id, 'itemDate'))} onBlur={blurField} onKeyDown={enterField} onChange={(event) => updateItem(item.id, { itemDate: event.target.value })} />
-                          <textarea disabled={!canManage} aria-label="Notas de partida" value={item.notes || ''} placeholder="Notas" onFocus={() => focusField(purchaseItemDraftFieldKey(displayPurchase.id, item.id, 'notes'))} onBlur={blurField} onChange={(event) => updateItem(item.id, { notes: event.target.value })} />
+                          <input disabled={!canEditPurchase} aria-label="Proveedor de partida" value={item.supplier || ''} placeholder="Proveedor" onFocus={() => focusField(purchaseItemDraftFieldKey(displayPurchase.id, item.id, 'supplier'))} onBlur={blurField} onKeyDown={enterField} onChange={(event) => updateItem(item.id, { supplier: event.target.value })} />
+                          <input disabled={!canEditPurchase} aria-label="Fecha de partida" type="datetime-local" value={dateTimeInput(item.itemDate)} onFocus={() => focusField(purchaseItemDraftFieldKey(displayPurchase.id, item.id, 'itemDate'))} onBlur={blurField} onKeyDown={enterField} onChange={(event) => updateItem(item.id, { itemDate: event.target.value })} />
+                          <textarea disabled={!canEditPurchase} aria-label="Notas de partida" value={item.notes || ''} placeholder="Notas" onFocus={() => focusField(purchaseItemDraftFieldKey(displayPurchase.id, item.id, 'notes'))} onBlur={blurField} onChange={(event) => updateItem(item.id, { notes: event.target.value })} />
                         </div>
-                        <select disabled={!canManage} value={status} onFocus={() => focusField(purchaseItemDraftFieldKey(displayPurchase.id, item.id, 'status'))} onBlur={blurField} onChange={(event) => updateItem(item.id, { status: event.target.value })}>
+                        <select disabled={!canEditPurchase} value={status} onFocus={() => focusField(purchaseItemDraftFieldKey(displayPurchase.id, item.id, 'status'))} onBlur={blurField} onChange={(event) => updateItem(item.id, { status: event.target.value })}>
                           {Object.entries(statusConfig).map(([value, config]) => (
                             <option key={value} value={value}>{config.label}</option>
                           ))}

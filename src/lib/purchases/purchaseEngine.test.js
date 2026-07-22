@@ -3,6 +3,7 @@ import {
   buildPurchaseItems,
   createPurchaseFromProductionOrder,
   normalizePurchase,
+  purchaseHasOperationalActivity,
   normalizePurchaseGroup,
   purchaseQuantityFromMaterial,
   purchaseStatusFromItems,
@@ -109,5 +110,15 @@ describe('purchaseEngine', () => {
       expectedAt: '2026-07-23T15:32:00.000Z',
       receivedAt: null,
     });
+  });
+
+  it('detecta actividad real y conserva la eliminación lógica', () => {
+    expect(purchaseHasOperationalActivity({
+      items: [{ status: 'pendiente' }, { status: 'comprado' }],
+    })).toBe(true);
+    expect(purchaseHasOperationalActivity({ items: [{ status: 'pendiente' }] })).toBe(false);
+    expect(normalizePurchase({
+      deletedAt: '2026-07-22T12:00:00Z',
+    }).deletedAt).toBe('2026-07-22T12:00:00.000Z');
   });
 });

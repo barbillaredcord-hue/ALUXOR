@@ -5,7 +5,9 @@ export const PRODUCTION_STATUSES = Object.freeze({
   FABRICATING: 'Fabricando',
   ASSEMBLY: 'Armado',
   READY: 'Listo',
+  INSTALLING: 'En instalación',
   DELIVERED: 'Entregado',
+  REJECTED: 'Rechazado',
 });
 
 const productionStatuses = Object.freeze(Object.values(PRODUCTION_STATUSES));
@@ -14,6 +16,15 @@ const PRODUCTION_PRIORITIES = Object.freeze([
   'Normal',
   'Alta',
   'Urgente',
+]);
+
+const operationalStatuses = new Set([
+  PRODUCTION_STATUSES.CUTTING,
+  PRODUCTION_STATUSES.FABRICATING,
+  PRODUCTION_STATUSES.ASSEMBLY,
+  PRODUCTION_STATUSES.READY,
+  PRODUCTION_STATUSES.INSTALLING,
+  PRODUCTION_STATUSES.DELIVERED,
 ]);
 
 function isObject(value) {
@@ -88,6 +99,16 @@ export function normalizeProductionStatus(status) {
   return productionStatuses.includes(status) ? status : PRODUCTION_STATUSES.PENDING;
 }
 
+export function productionHasOperationalActivity(order) {
+  return operationalStatuses.has(normalizeProductionStatus(order?.estado ?? order?.status));
+}
+
+export function canAdvanceProductionOrder(order) {
+  return Boolean(order)
+    && !order.deletedAt
+    && normalizeProductionStatus(order.estado ?? order.status) !== PRODUCTION_STATUSES.REJECTED;
+}
+
 export function generateProductionOrderNumber(orders = [], date = new Date()) {
   const referenceDate = date instanceof Date ? date : new Date(date);
   const validDate = Number.isNaN(referenceDate.getTime()) ? new Date() : referenceDate;
@@ -134,6 +155,7 @@ export function normalizeProductionOrder(order = {}) {
     quoteVersion: normalizeQuoteVersion(source.quoteVersion),
     createdBy: clean(source.createdBy),
     updatedAt: toIsoDate(source.updatedAt),
+    deletedAt: toIsoDate(source.deletedAt),
   };
 }
 
@@ -221,6 +243,7 @@ export function isProductionOrder(value) {
     'responsable', 'cliente', 'producto', 'fechaCreacion', 'fechaCompromiso',
     'fechaInicio', 'fechaFinal', 'observaciones', 'timeline', 'formSnapshot',
     'quoteVersion', 'createdBy', 'updatedAt',
+    'deletedAt',
   ];
 
   return requiredFields.every((field) => Object.prototype.hasOwnProperty.call(value, field))

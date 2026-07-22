@@ -12,6 +12,7 @@ describe('purchaseAdapter', () => {
       folio: 'OC-1', status: 'pendiente', version: 3, created_by: 'user',
       ordered_at: '2026-07-22T21:32:00Z', expected_at: '2026-07-23T21:32:00Z',
       received_at: null, notes: 'Persistida',
+      deleted_at: '2026-07-25T10:00:00Z',
     }, [{
       id: 'i1', workspace_id: 'ws', purchase_id: 'p1', source_type: 'material',
       source_id: 'm1', item_group: 'Maderas', name: 'MDF', unit: 'hoja',
@@ -24,6 +25,7 @@ describe('purchaseAdapter', () => {
       expectedAt: '2026-07-23T21:32:00.000Z',
       receivedAt: null,
       notes: 'Persistida',
+      deletedAt: '2026-07-25T10:00:00.000Z',
     });
     expect(purchase.items[0]).toMatchObject({
       quantity: 2, unitCost: 300, supplier: 'Maderas MX', version: 2,
@@ -37,6 +39,7 @@ describe('purchaseAdapter', () => {
       expectedAt: '2026-07-23T15:32:00.000Z',
       receivedAt: '2026-07-24T15:32:00.000Z',
       notes: 'Inicio, texto intermedio editado y final.',
+      deletedAt: '2026-07-26T10:00:00Z',
     });
     const itemPayload = purchaseItemToUpdatePayload({
       name: 'Perfil', quantity: 3, unitCost: 100, status: 'pendiente',
@@ -49,6 +52,7 @@ describe('purchaseAdapter', () => {
       expected_at: '2026-07-23T15:32:00.000Z',
       received_at: '2026-07-24T15:32:00.000Z',
       notes: 'Inicio, texto intermedio editado y final.',
+      deleted_at: '2026-07-26T10:00:00.000Z',
     });
     expect(itemPayload.total_cost).toBe(300);
     expect(itemPayload).toMatchObject({

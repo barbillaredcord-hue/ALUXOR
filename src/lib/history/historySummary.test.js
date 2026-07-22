@@ -9,8 +9,10 @@ describe('getHistorySummary', () => {
   it('devuelve un resumen vacío', () => {
     expect(getHistorySummary()).toEqual({
       records: 0,
+      draft: 0,
       pending: 0,
       sent: 0,
+      inReview: 0,
       accepted: 0,
       inProduction: 0,
       installation: 0,
@@ -35,10 +37,10 @@ describe('getHistorySummary', () => {
       records: 7,
       pending: 1,
       sent: 1,
-      accepted: 1,
-      inProduction: 1,
-      installation: 1,
-      completed: 1,
+      accepted: 4,
+      inProduction: 0,
+      installation: 0,
+      completed: 0,
       cancelled: 1,
     });
   });

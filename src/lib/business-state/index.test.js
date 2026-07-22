@@ -33,8 +33,11 @@ describe('getBusinessState', () => {
         updated_at: '2026-07-12T11:00:00.000Z',
       },
       quotes: [quote],
-      productionOrders: [{ estado: 'En corte' }],
-      purchases: [{ id: 'purchase-1', status: 'comprado' }],
+      productionOrders: [{ id: 'order-1', quoteId: 'quote-1', estado: 'En corte' }],
+      purchases: [{
+        id: 'purchase-1', productionOrderId: 'order-1', status: 'comprado', active: true,
+        items: [{ id: 'purchase-item-1', status: 'comprado' }],
+      }],
       inventoryItems: [{ id: 'inventory-1', required: 1, available: 1 }],
       fabricationProjects: [fabricationProject],
     });
@@ -42,6 +45,12 @@ describe('getBusinessState', () => {
     expect(state.summaries.quotes.accepted).toBe(1);
     expect(state.summaries.production.cutting).toBe(1);
     expect(state.summaries.purchases.purchased).toBe(1);
+    expect(state.summaries.purchaseOperations.activePurchasesCount).toBe(1);
+    expect(state.summaries.projectOperations).toMatchObject({
+      accepted: 1,
+      inProduction: 1,
+      fabricating: 1,
+    });
     expect(state.summaries.inventory.available).toBe(1);
     expect(state.summaries.customers.total).toBe(1);
     expect(state.summaries.finances.quotedTotal).toBe(1500);
@@ -89,5 +98,41 @@ describe('getBusinessState', () => {
     getBusinessState(input);
 
     expect(input).toEqual(snapshot);
+  });
+
+  it('excluye canceladas y eliminadas de la carga operativa de Compras', () => {
+    const state = getBusinessState({
+      purchases: [
+        { id: 'active', active: true, items: [{ id: 'i1', status: 'pendiente' }] },
+        { id: 'cancelled', active: false, notes: 'Cotización original eliminada', items: [{ id: 'i2', status: 'comprado' }] },
+        { id: 'deleted', active: false, deletedAt: '2026-07-22T10:00:00Z', items: [{ id: 'i3', status: 'pendiente' }] },
+      ],
+    });
+    expect(state.indicators.purchases.value).toBe(1);
+    expect(state.summaries.purchaseOperations).toMatchObject({
+      activePurchasesCount: 1,
+      cancelledPurchasesCount: 1,
+      historicalPurchasesCount: 3,
+    });
+  });
+
+  it('usa estados derivados sin convertir el avance operativo en quote.status', () => {
+    const quote = { id: 'q1', status: 'Aceptada' };
+    const state = getBusinessState({
+      quotes: [quote],
+      productionOrders: [{ id: 'ot1', quoteId: 'q1', estado: 'Pendiente' }],
+      purchases: [{
+        id: 'p1', productionOrderId: 'ot1', active: true,
+        items: [{ id: 'i1', status: 'pendiente' }],
+      }],
+    });
+
+    expect(state.summaries.projectOperations).toMatchObject({
+      accepted: 1,
+      inProduction: 1,
+      waitingMaterials: 1,
+    });
+    expect(state.status.summary).toBe('1 proyecto en producción.');
+    expect(quote.status).toBe('Aceptada');
   });
 });

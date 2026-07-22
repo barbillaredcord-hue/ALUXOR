@@ -4,15 +4,19 @@ import { defaults } from '../app/config/data.js';
 import { quoteHelpers } from '../app/config/helpers.js';
 import { startNewQuoteAndClearProductionSelection } from '../app/App.jsx';
 import {
+  canSyncProductionFromQuoteStatus,
   canScheduleQuoteAutoSave,
   compareQuoteRevisions,
   createCleanQuoteForm,
   hasRealQuoteFormChanges,
+  hydrateExistingQuoteForm,
   invalidateQuoteAsyncWork,
   isCurrentQuoteEditSession,
   isNewerRemoteQuoteVersion,
   mergeRemoteQuoteForms,
+  notifyQuoteDeletionCommitted,
   quoteNoteUpdateFromProduction,
+  quoteHydrationKey,
   resetQuoteEditingState,
   shouldDeferRemoteQuoteField,
 } from './useQuotes.js';
@@ -24,6 +28,42 @@ import {
 function ref(current) {
   return { current };
 }
+
+describe('eliminación coordinada por PostgreSQL', () => {
+  it('refresca una sola vez después del delete confirmado e ignora el eco Realtime', () => {
+    const refreshProduction = vi.fn();
+    const refreshPurchases = vi.fn();
+    const updateProduction = vi.fn();
+    const updatePurchase = vi.fn();
+    const onCommitted = vi.fn(() => {
+      refreshProduction();
+      refreshPurchases();
+    });
+
+    expect(notifyQuoteDeletionCommitted({
+      source: 'realtime', quoteId: 'quote-1', onCommitted,
+    })).toBe(false);
+    expect(notifyQuoteDeletionCommitted({
+      source: 'repository', quoteId: 'quote-1', onCommitted,
+    })).toBe(true);
+    expect(notifyQuoteDeletionCommitted({
+      source: 'realtime', quoteId: 'quote-1', onCommitted,
+    })).toBe(false);
+
+    expect(onCommitted).toHaveBeenCalledTimes(1);
+    expect(refreshProduction).toHaveBeenCalledTimes(1);
+    expect(refreshPurchases).toHaveBeenCalledTimes(1);
+    expect(updateProduction).not.toHaveBeenCalled();
+    expect(updatePurchase).not.toHaveBeenCalled();
+  });
+});
+
+describe('cancelación coordinada por PostgreSQL', () => {
+  it('no encadena un PATCH de Producción desde una cotización cancelada', () => {
+    expect(canSyncProductionFromQuoteStatus('Cancelada')).toBe(false);
+    expect(canSyncProductionFromQuoteStatus('Aceptada')).toBe(true);
+  });
+});
 
 function createResetHarness() {
   const refs = {
@@ -370,5 +410,46 @@ describe('merge Realtime de cotizaciones', () => {
 
     expect(merge.suppressAutoSave).toBe(true);
     expect(merge.dirtyFields.size).toBe(0);
+  });
+});
+
+describe('hidratación estable del Cotizador', () => {
+  it('hidrata por id y versión sin agregar defaults ni perder campos desconocidos', () => {
+    const source = {
+      producto: 'Cocina',
+      campoFuturo: { habilitado: true },
+      materialItems: [{ id: 'm-2' }, { id: 'm-1' }],
+      measureItems: [{ id: 'med-2' }, { id: 'med-1' }],
+    };
+    const hydrated = hydrateExistingQuoteForm(source);
+    expect(quoteHydrationKey({ id: 'q1', version: 3 })).toBe('q1:3');
+    expect(hydrated).toEqual(source);
+    expect(hydrated).not.toBe(source);
+    expect(hydrated.materialItems.map((item) => item.id)).toEqual(['m-2', 'm-1']);
+    expect(hydrated.measureItems.map((item) => item.id)).toEqual(['med-2', 'med-1']);
+    expect(hydrated).not.toHaveProperty('clienteNombre');
+  });
+
+  it('editar una entidad por id conserva el orden e ids de las demás', () => {
+    const source = hydrateExistingQuoteForm({
+      materialItems: [{ id: 'm1', nombre: 'A' }, { id: 'm2', nombre: 'B' }],
+      measureItems: [{ id: 'd1', ancho: 10 }, { id: 'd2', ancho: 20 }],
+    });
+    const nextMaterials = source.materialItems.map((item) => (
+      item.id === 'm2' ? { ...item, nombre: 'B editado' } : item
+    ));
+    const nextMeasures = source.measureItems.map((item) => (
+      item.id === 'd1' ? { ...item, ancho: 30 } : item
+    ));
+    expect(nextMaterials.map((item) => item.id)).toEqual(['m1', 'm2']);
+    expect(nextMeasures.map((item) => item.id)).toEqual(['d1', 'd2']);
+    expect(source.materialItems[1].nombre).toBe('B');
+    expect(source.measureItems[0].ancho).toBe(10);
+  });
+
+  it('abrir una cotización no habilita autosave por sí solo', () => {
+    const hydrated = hydrateExistingQuoteForm({ producto: 'Existente' });
+    expect(hasRealQuoteFormChanges(hydrated, hydrated)).toBe(false);
+    expect(canScheduleQuoteAutoSave(true, 'cotizador')).toBe(false);
   });
 });

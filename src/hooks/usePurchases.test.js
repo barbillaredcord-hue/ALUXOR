@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   applyPurchaseRealtimeEvent,
+  canCreatePurchaseForProductionOrder,
   mergeCreatedPurchase,
   mergePendingPurchase,
   mergePendingPurchaseItem,
@@ -14,6 +15,7 @@ import {
   schedulePurchaseAutosave,
   schedulePurchaseAutosaveForId,
 } from './usePurchases.js';
+import { selectPurchaseViews } from '../lib/purchases/purchaseSelectors.js';
 
 describe('usePurchases helpers', () => {
   it('no sobrescribe cambios locales pendientes con Realtime remoto', () => {
@@ -72,6 +74,21 @@ describe('usePurchases helpers', () => {
     expect(mergePurchaseCollections(remote, local)[0].supplier).toBe('Remoto');
   });
 
+  it('una copia local pendiente no reactiva una compra cancelada remotamente', () => {
+    const remote = [{
+      id: 'p1', workspaceId: 'ws', productionOrderId: 'ot', quoteId: 'q',
+      active: false, notes: 'Cotización original eliminada', version: 3,
+      updatedAt: '2026-07-21T13:00:00Z', items: [],
+    }];
+    const local = [{
+      ...remote[0], active: true, supplier: 'Draft local', version: 2,
+      updatedAt: '2026-07-21T14:00:00Z', pendingSync: true, pendingFields: ['supplier'],
+    }];
+    const merged = mergePurchaseCollections(remote, local)[0];
+    expect(merged.active).toBe(false);
+    expect(merged.supplier).toBe('Draft local');
+  });
+
   it('elimina del cache hidratado registros sincronizados que ya no existen remotamente', () => {
     const staleLocal = [{
       id: 'p1', workspaceId: 'ws', productionOrderId: 'ot', quoteId: 'q', pendingSync: false,
@@ -93,6 +110,15 @@ describe('usePurchases helpers', () => {
     expect(resolvePurchaseCreation([], 'ot-1', true)).toEqual({
       existing: null, canCreate: false,
     });
+  });
+
+  it('una producción rechazada no puede generar una compra', () => {
+    expect(canCreatePurchaseForProductionOrder([], {
+      id: 'ot-1', estado: 'Rechazado', deletedAt: '',
+    })).toBe(false);
+    expect(canCreatePurchaseForProductionOrder([], {
+      id: 'ot-1', estado: 'Pendiente', deletedAt: '',
+    })).toBe(true);
   });
 
   it('no marca cambios iguales y conserva borrados reales como campos pendientes', () => {
@@ -258,6 +284,39 @@ describe('usePurchases helpers', () => {
     });
     expect(result.purchases[0].notes).toBe('Remota');
     expect(result.purchases[1]).toBe(untouched);
+  });
+
+  it('reclasifica inmediatamente una compra inactiva recibida por Realtime', () => {
+    const local = [{
+      id: 'p1', workspaceId: 'ws', productionOrderId: 'ot', quoteId: 'q',
+      active: true, version: 1, items: [{ id: 'i1', status: 'pendiente' }],
+    }];
+    const result = applyPurchaseRealtimeEvent(local, {
+      table: 'purchases', eventType: 'UPDATE', record: {
+        ...local[0], active: false, notes: 'Cotización original eliminada', version: 2,
+      },
+    });
+    const views = selectPurchaseViews({ purchases: result.purchases });
+    expect(views.active).toHaveLength(0);
+    expect(views.cancelled.map((purchase) => purchase.id)).toEqual(['p1']);
+  });
+
+  it('reclasifica a Recibidas al llegar la última partida sin duplicar ni guardar', () => {
+    const local = [{
+      id: 'p1', workspaceId: 'ws', productionOrderId: 'ot', quoteId: 'q',
+      active: true, version: 1, items: [{
+        id: 'i1', purchaseId: 'p1', status: 'pendiente', version: 1,
+      }],
+    }];
+    const result = applyPurchaseRealtimeEvent(local, {
+      table: 'purchase_items', eventType: 'UPDATE', record: {
+        ...local[0].items[0], status: 'recibido', version: 2,
+      },
+    });
+    const views = selectPurchaseViews({ purchases: result.purchases });
+    expect(views.active).toHaveLength(0);
+    expect(views.received.map((purchase) => purchase.id)).toEqual(['p1']);
+    expect(views.history).toHaveLength(1);
   });
 
   it('protege cabecera local reciente frente a eco antiguo y confirma eco propio', () => {
