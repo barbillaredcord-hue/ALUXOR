@@ -493,11 +493,17 @@ function App() {
         sidebar={(
           <div className="workspace-sidebar-stack">
         <div className="brand-card">
-          {appLogo ? <img src={appLogo} alt="Logo ALUXOR" className="brand-logo" /> : <div className="brand-mark">A</div>}
-          <div>
-            <strong>{workspaceSettings?.company_name || BRAND_NAME}</strong>
-            <span>Cotizador profesional</span>
-          </div>
+          <img
+            src={appLogo || '/branding/br-logo-horizontal.png'}
+            alt="ALUXOR / BosqueReal · Cotizador profesional"
+            className={appLogo ? 'brand-logo' : 'brand-logo brand-logo-official'}
+          />
+          {appLogo && (
+            <div>
+              <strong>{workspaceSettings?.company_name || BRAND_NAME}</strong>
+              <span>Cotizador profesional</span>
+            </div>
+          )}
         </div>
 
         <UserSessionCard
@@ -584,7 +590,11 @@ function App() {
             </div>
 
             <div className="hero-brand-line hero-title-row">
-              {appLogo ? <img src={appLogo} alt="Logo ALUXOR/BosqueReal" className="hero-logo" /> : null}
+              <img
+                src={appLogo || '/branding/br-logo-horizontal.png'}
+                alt="ALUXOR / BosqueReal · Cotizador profesional"
+                className={appLogo ? 'hero-logo' : 'hero-logo hero-logo-official'}
+              />
               <div>
                 <h1>{form.producto || 'Proyecto sin nombre'}</h1>
                 <p>{form.clienteNombre || 'Cliente pendiente'} · Responsable: Taller ALUXOR</p>

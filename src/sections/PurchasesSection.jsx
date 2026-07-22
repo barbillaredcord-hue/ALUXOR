@@ -412,7 +412,7 @@ export default function PurchasesSection({
     const rows = purchaseItems.map((item) => (
       `<li><strong>${escapeHtml(item.name)}</strong> - ${escapeHtml(`${decimal(item.quantity)} ${item.unit}`)} <span>${escapeHtml(item.group)}</span></li>`
     )).join('');
-    const html = `<!doctype html><html><head><title>Lista de compras</title><style>body{font-family:Arial,sans-serif;padding:32px;color:#17201b}h1{margin:0 0 6px}p{color:#526159}li{margin:10px 0;padding:10px;border-bottom:1px solid #ddd}span{color:#617068}</style></head><body><h1>Lista de compras ALUXOR</h1><p>${escapeHtml(displayPurchase.folio)} · ${escapeHtml(displayPurchase.supplier || 'Proveedor pendiente')}</p><ul>${rows}</ul></body></html>`;
+    const html = `<!doctype html><html><head><title>Lista de compras</title><style>body{font-family:Arial,sans-serif;padding:32px;color:#17201b}.report-logo{display:block;width:180px;height:102px;object-fit:contain;margin-bottom:14px}h1{margin:0 0 6px}p{color:#526159}li{margin:10px 0;padding:10px;border-bottom:1px solid #ddd}span{color:#617068}</style></head><body><img class="report-logo" src="/branding/br-logo-horizontal.png" alt="ALUXOR / BosqueReal"><h1>Lista de compras ALUXOR</h1><p>${escapeHtml(displayPurchase.folio)} · ${escapeHtml(displayPurchase.supplier || 'Proveedor pendiente')}</p><ul>${rows}</ul></body></html>`;
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
     printWindow.document.open();

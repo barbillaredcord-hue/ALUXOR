@@ -53,7 +53,7 @@ export default function ReceivingSection({ form, quote, decimal }) {
       const row = rowFor(item.id);
       return `<li><strong>${escapeHtml(item.name)}</strong> - ${escapeHtml(item.quantity)}<br>Proveedor: ${escapeHtml(row.proveedor)} · Factura: ${escapeHtml(row.factura)} · Estado: ${escapeHtml(row.status)}<br>${escapeHtml(row.observaciones)}</li>`;
     }).join('');
-    const html = `<!doctype html><html><head><title>Recepción de materiales</title><style>body{font-family:Arial,sans-serif;padding:32px;color:#17201b}h1{margin:0 0 6px}p{color:#526159}li{margin:12px 0;padding:12px;border-bottom:1px solid #ddd;line-height:1.5}</style></head><body><h1>Comprobante de recepción</h1><p>${escapeHtml(form.producto || 'Proyecto')} · ${new Date().toLocaleDateString('es-MX')}</p><ul>${rowsHtml}</ul></body></html>`;
+    const html = `<!doctype html><html><head><title>Recepción de materiales</title><style>body{font-family:Arial,sans-serif;padding:32px;color:#17201b}.report-logo{display:block;width:180px;height:102px;object-fit:contain;margin-bottom:14px}h1{margin:0 0 6px}p{color:#526159}li{margin:12px 0;padding:12px;border-bottom:1px solid #ddd;line-height:1.5}</style></head><body><img class="report-logo" src="/branding/br-logo-horizontal.png" alt="ALUXOR / BosqueReal"><h1>Comprobante de recepción</h1><p>${escapeHtml(form.producto || 'Proyecto')} · ${new Date().toLocaleDateString('es-MX')}</p><ul>${rowsHtml}</ul></body></html>`;
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
     printWindow.document.open();

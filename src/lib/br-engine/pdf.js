@@ -53,7 +53,7 @@ export function quotePrintHtml(data, quote, materials, mode = 'client', doc = nu
   <style>
     body{font-family:Arial,sans-serif;margin:0;padding:32px;color:#17201b}
     header{display:flex;justify-content:space-between;gap:24px;border-bottom:3px solid #22745f;padding-bottom:18px;margin-bottom:24px}
-    .brandline{display:flex;align-items:center;gap:12px}.logo{width:58px;height:58px;object-fit:contain;border-radius:8px}
+    .brandline{display:flex;align-items:center;gap:12px}.logo{width:150px;height:84px;object-fit:contain;border-radius:8px}
     h1{margin:0;font-size:30px} h2{margin:24px 0 10px;font-size:18px} p{line-height:1.45}
     .brand{color:#22745f;font-weight:800}.total{font-size:34px;font-weight:900;color:#22745f}
     table{width:100%;border-collapse:collapse;margin-top:10px}td,th{border:1px solid #d8d2c7;padding:10px;text-align:left}th{background:#eef1ed}
@@ -62,7 +62,7 @@ export function quotePrintHtml(data, quote, materials, mode = 'client', doc = nu
     button{margin-top:20px;padding:12px 18px;border:0;border-radius:7px;background:#22745f;color:white;font-weight:800}
     @media print{button{display:none}body{padding:20px}}
   </style></head><body>
-    <header><div class="brandline">${logo ? `<img src="${logo}" class="logo" alt="Logo" />` : ''}<div><div class="brand">${brandName}</div><h1>${escapeHtml(documentData.titulo || (isBusiness ? 'Hoja interna del negocio' : 'Cotización'))}</h1><p>${today}</p></div></div><div><div>Total</div><div class="total">${escapeHtml(documentData.total || money(quote.total))}</div></div></header>
+    <header><div class="brandline"><img src="${logo || '/branding/br-logo-horizontal.png'}" class="logo" alt="ALUXOR / BosqueReal" /><div><div class="brand">${brandName}</div><h1>${escapeHtml(documentData.titulo || (isBusiness ? 'Hoja interna del negocio' : 'Cotización'))}</h1><p>${today}</p></div></div><div><div>Total</div><div class="total">${escapeHtml(documentData.total || money(quote.total))}</div></div></header>
     ${isBusiness ? '<div class="internal"><strong>Uso interno ALUXOR.</strong> Esta hoja incluye costos, utilidad y datos de operación. No entregar al cliente.</div>' : ''}
     <section class="grid"><div class="box"><strong>Cliente</strong><p>${escapeHtml(documentData.cliente || clean(data.clienteNombre, 'Cliente'))}${data.clienteTelefono ? `<br>${data.clienteTelefono}` : ''}</p></div><div class="box"><strong>Proyecto</strong><p>${data.producto}<br>${data.tipoTrabajo}<br>${data.medidas}</p></div></section>
     <section class="grid"><div class="box"><strong>Folio</strong><p>${folio}</p></div><div class="box"><strong>Forma de pago</strong><p>${formaPago}</p></div></section>

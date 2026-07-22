@@ -4739,6 +4739,14 @@ body,
   box-shadow: 0 10px 24px rgba(240, 200, 78, 0.16);
 }
 
+.brand-logo-official {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
+  background: #030604;
+}
+
 .summary-panel {
   color: #f6fbf7;
   background: linear-gradient(180deg, rgba(255, 253, 248, 0.08), rgba(255, 253, 248, 0.04));
@@ -7155,6 +7163,13 @@ body,
   height: 42px;
 }
 
+.hero-title-row .hero-logo-official {
+  width: 132px;
+  height: 74px;
+  object-fit: contain;
+  background: #030604;
+}
+
 .hero.hero-compact h1 {
   margin: 0;
   font-size: clamp(24px, 2.2vw, 32px);
@@ -7280,6 +7295,11 @@ body,
   border-radius: 12px;
 }
 
+.hero.hero-compact .hero-logo-official {
+  width: 132px;
+  height: 74px;
+}
+
 .hero.hero-compact .eyebrow {
   font-size: 11px;
   line-height: 1.1;
@@ -7355,6 +7375,11 @@ body,
     height: 40px;
   }
 
+  .hero.hero-compact .hero-logo-official {
+    width: 112px;
+    height: 63px;
+  }
+
   .hero.hero-compact h1 {
     font-size: 24px;
   }
@@ -7417,6 +7442,21 @@ body,
 }
 
 .auth-card-header {
+  margin-bottom: 20px;
+}
+
+.auth-brand-logo {
+  display: block;
+  width: min(100%, 280px);
+  height: auto;
+  margin: 0 auto 18px;
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
+  background: #030604;
+  border-radius: 12px;
+}
+
+.auth-brand-logo-loading {
   margin-bottom: 20px;
 }
 

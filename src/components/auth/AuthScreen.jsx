@@ -111,7 +111,11 @@ export default function AuthScreen() {
     <section className="auth-screen" aria-labelledby="auth-title">
       <div className="auth-card">
         <header className="auth-card-header">
-          <span className="auth-eyebrow">ALUXOR / BosqueReal</span>
+          <img
+            className="auth-brand-logo"
+            src="/branding/br-logo-horizontal.png"
+            alt="ALUXOR / BosqueReal · Cotizador profesional"
+          />
           <h1 id="auth-title">Acceso al workspace</h1>
           <p>Continúa con tu cuenta para trabajar de forma segura entre dispositivos.</p>
         </header>

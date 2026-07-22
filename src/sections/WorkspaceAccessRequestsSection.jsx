@@ -45,7 +45,11 @@ export function WorkspaceAccessGate({ status, error, loading, onSignOut }) {
     <section className="auth-screen" aria-labelledby="workspace-access-title">
       <div className="auth-card">
         <header className="auth-card-header">
-          <span className="auth-eyebrow">ALUXOR / BosqueReal</span>
+          <img
+            className="auth-brand-logo"
+            src="/branding/br-logo-horizontal.png"
+            alt="ALUXOR / BosqueReal · Cotizador profesional"
+          />
           <h1 id="workspace-access-title">{title}</h1>
           <p>{error || message}</p>
         </header>

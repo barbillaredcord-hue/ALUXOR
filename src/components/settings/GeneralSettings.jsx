@@ -19,7 +19,10 @@ export default function GeneralSettings({
     <>
       <div className="settings-grid">
         <div className="logo-preview-box">
-          {appLogo ? <img src={appLogo} alt="Vista previa del logo" /> : <div className="brand-mark">A</div>}
+          <img
+            src={appLogo || '/branding/br-logo-horizontal.png'}
+            alt="Vista previa del logo"
+          />
           <strong>{settings?.company_name || 'ALUXOR / BosqueReal'}</strong>
         </div>
         <div>
