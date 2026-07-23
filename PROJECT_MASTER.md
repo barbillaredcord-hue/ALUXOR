@@ -4,8 +4,8 @@
 
 - **Workspace operativo actual:** ALUXOR / BosqueReal
 - **Etapa activa:** Etapa III — ERP operativo
-- **Fase oficial:** 25.2C — Auditoría real de integridad
-- **Última actualización:** 22/07/2026 4:12pm
+- **Fase oficial:** 25.2D — Hardening Operativo
+- **Última actualización:** 23/07/2026
 
 ## 1. Identidad del proyecto
 
@@ -199,32 +199,67 @@ Esta fase preparó herramientas; no auditó todavía los datos reales ni activó
 
 ### 25.2C — Auditoría real de integridad
 
-**Estado:** fase oficial activa; implementación técnica disponible y ejecución operacional pendiente.
+**Estado:** COMPLETADA.
 
-El código ya contiene `runIntegrityAudit()` como única entrada pública. La función resuelve un workspace explícito o el primer workspace activo mediante `SELECT`, lee colecciones proporcionadas o almacenamiento local, ejecuta la auditoría remota autenticada, consolida hallazgos y devuelve recomendaciones y readiness para 25.2D.
+**Nombre oficial:** 25.2C — Integrity Audit.
 
-La fase no está cerrada porque no existe en el repositorio evidencia de una ejecución real sobre los datos locales operativos y el Supabase autenticado del workspace. Las pruebas con mocks demuestran el contrato del auditor, pero no demuestran que la base real esté limpia.
+**Fecha de cierre:** 2026-07-23.
 
-Alcance verificable del auditor:
+**Objetivo cumplido:** demostrar operacionalmente la infraestructura oficial de auditoría antes de iniciar el hardening.
 
-- `workspaces`, `quotes`, `production_orders`, `purchases` y `purchase_items`.
-- Validación estricta de UUID, workspace, `updatedAt`, `version`, campos obligatorios y relaciones padre-hijo.
-- Severidades `INFO`, `WARNING`, `ERROR` y `CRITICAL`.
-- Lectura remota por `SELECT`, sesión autenticada, filtro por workspace y respeto de RLS.
-- Estados remotos `completed`, `partial` y `unavailable`, con clasificación de tabla no disponible, permiso denegado y consulta fallida.
-- Readiness `READY`, `READY WITH WARNINGS` o `BLOCKED`.
-- Recepción, Inventario y Fabricación se declaran explícitamente no durables y no se presentan como colecciones auditables.
-- Business State queda excluido como consumidor, no como fuente.
+`runIntegrityAudit()` se ejecutó en una sesión autenticada sobre el workspace real `0fa9e274-4612-41e8-b751-63a2c21fb84b`, con almacenamiento local real, consultas Supabase autenticadas exclusivamente por `SELECT`, comparación local/remota y sin elevación de privilegios ni modificación de datos.
 
-### 25.2D — Endurecimiento SQL
+Resultado operacional:
 
-**Estado:** bloqueado hasta obtener evidencia operacional de 25.2C.
+- Estado: `READY WITH WARNINGS`.
+- Critical: 0.
+- Errors: 0.
+- Warnings: 1.
+- Info: 3.
+- Registros locales: 12.
+- Registros remotos: 15.
 
-Podrá proponer o activar gradualmente `NOT NULL`, unicidad por workspace + UUID, Foreign Keys, índices y validaciones únicamente después de demostrar que los datos cumplen el contrato y de contar con respaldo y rollback.
+Readiness:
+
+- `canAddNotNull: true`.
+- `canAddUniqueIdentity: true`.
+- `canAddForeignKeys: true`.
+- `requiresLegacyRepair: false`.
+
+El resultado habilita conceptualmente el hardening. No autoriza activar restricciones SQL sin respaldo, rollback documentado y validación adicional.
+
+Hallazgo `duplicate_commercial_reference`:
+
+- Folio: `ALX-20260722-001`.
+- UUID `367d1fbc-d88b-4ee9-be66-2fa29a27188d`.
+- UUID `463ffceb-f9ac-4fc5-8b71-93a9aee8a5ee`.
+- Son registros distintos, con UUID canónicos y momentos de creación diferentes.
+- No existe identidad duplicada, no deben fusionarse y el folio conserva su función de referencia comercial.
+- El hallazgo corresponde al generador de folios, no bloquea el cierre de 25.2C y queda como pendiente oficial de 25.2D.
+
+Diferencias informativas:
+
+- Dos cotizaciones remotas no están presentes localmente.
+- Un workspace remoto no está representado como colección local.
+- Estas diferencias se clasifican como `INFO`; no demuestran corrupción ni bloquean el hardening.
+
+Alcance durable auditado: `workspaces`, `quotes`, `productionOrders`, `purchases` y `purchaseItems`. Recepción, Inventario y Fabricación siguen siendo dominios no durables. Business State quedó fuera de la auditoría por ser consumidor derivado y no fuente de verdad.
+
+La evidencia estructurada se conserva fuera del repositorio como reporte JSON generado en `2026-07-23T05:29:16.280Z`.
+
+### 25.2D — Hardening Operativo
+
+**Estado:** PENDIENTE / SIGUIENTE FASE.
+
+**Objetivo:** endurecer reglas operativas, invariantes y protecciones antes de ampliar dominios.
+
+El primer frente obligatorio será un generador resiliente de folios comerciales: unicidad por workspace, cálculo sobre el máximo local y remoto, prevención de colisiones entre dispositivos y sesiones nuevas o con información local incompleta, y reintento con incremento ante colisión. El folio nunca será identidad ni sustituirá el UUID.
+
+También deberá incorporar validación previa a escritura, invariantes operativas, protección de estados terminales, evaluación de `NOT NULL`, unicidad de identidad y Foreign Keys, respaldo, rollback documentado, ejecución incremental y una auditoría posterior a cada endurecimiento.
 
 ### 25.2E — Brand System e infraestructura visual
 
-**Estado:** pendiente y condicionado al cierre de 25.2C y 25.2D.
+**Estado:** pendiente y condicionado al cierre seguro de 25.2D.
 
 **Propósito:**
 
@@ -339,7 +374,7 @@ Convertir el Brand Book v1.0 en una infraestructura visual reutilizable, progres
 | Centro del Proyecto | Estructura visual existente | La FLDSMDFR empresarial consume Business State solo con settings y orden activa, y muestra el modo editable/solo lectura. El resto continúa mayormente informativo o vacío y no sincroniza `PROJECT_MASTER.md`. |
 | Business State | Adapter derivado implementado parcialmente | Agrega summaries reales de varios dominios y expone `project.readOnly`/`project.mode`. Objetivos, roadmap, decisiones, alertas, salud y consumidores completos todavía no tienen una fuente durable. |
 | Identity Infrastructure | Implementada con convergencia pendiente | Normaliza, compara y preserva UUID, detecta duplicados y separa folio de identidad. Producción y Compras aún no consumen exclusivamente `createUuid.js`. |
-| Integrity Audit | Implementación completa; validación real pendiente | Auditor local estricto, auditor remoto autenticado, comparación, reporte, recomendaciones y entrada `runIntegrityAudit()` probados con mocks. No existe evidencia de auditoría real del workspace. |
+| Integrity Audit | Implementada y validada operacionalmente | `runIntegrityAudit()` auditó el workspace real con almacenamiento local y Supabase autenticado: `READY WITH WARNINGS`, sin errores ni deuda legacy bloqueante. Persiste una advertencia de folio comercial duplicado y tres diferencias informativas. |
 | Workspace | Operativo y durable | Bootstrap RPC idempotente, membresías, roles, permisos, settings, branding, auditoría y Realtime bajo RLS. Las mutaciones de settings se bloquean durante un proyecto entregado; `is_system_workspace` sigue pendiente. |
 | Brand System | Branding operativo; Design System parcial | Logos, favicons, PWA y branding dinámico existen. Tokens JS y CSS están disponibles pero no gobiernan la app; solo `BRCard` tiene implementación y no hay adopción general de componentes `BR*`. |
 
@@ -390,12 +425,12 @@ La sincronización bidireccional entre **Notas internas** y **Observaciones** pu
 
 ## 11. Pendientes de arquitectura
 
-- Ejecutar 25.2C sin modificar datos.
-- Conservar evidencia del reporte real de `runIntegrityAudit()`; las pruebas con mocks no sustituyen la auditoría operacional.
-- Reparar datos legacy únicamente si la auditoría demuestra la necesidad.
-- Activar constraints únicamente después de validar datos, respaldo y rollback.
+- Implementar en 25.2D un generador resiliente de folios comerciales por workspace, sin convertir el folio en identidad.
+- Mantener la evidencia operacional de 25.2C fuera del código y repetir la auditoría después de cada endurecimiento.
+- No iniciar reparación legacy mientras la evidencia no demuestre su necesidad; 25.2C concluyó con `requiresLegacyRepair: false`.
+- Activar constraints únicamente después de validación adicional, respaldo y rollback documentado.
 - Converger la generación UUID de Producción y Compras hacia `createUuid.js` sin regenerar identidades existentes.
-- Decidir, después de 25.2C, si el estado terminal `Entregado` requiere enforcement adicional en base de datos; actualmente la protección es de motor, hooks y UI.
+- Evaluar en 25.2D si el estado terminal `Entregado` requiere enforcement adicional en base de datos; actualmente la protección es de motor, hooks y UI.
 - Revisar y dividir `useQuotes.js`.
 - Reducir `QuoteSection.jsx`.
 - Revisar `useProduction.js`.
@@ -541,8 +576,10 @@ Este cambio no forma parte de la actualización documental actual.
 | 22/07/2026 | No activar constraints sin auditoría real. | Prevenir fallos o pérdida de continuidad por deuda legacy. | Vigente |
 | 22/07/2026 | `Entregado` es terminal y activa el modo de solo lectura desde Production Engine. | Preservar el proyecto finalizado como evidencia histórica y evitar mutaciones posteriores. | Implementada en motor, hooks y UI |
 | 22/07/2026 | El modo de solo lectura deriva únicamente del estado canónico de Producción. | Evitar flags paralelos y reglas repetidas por módulo. | Implementada |
-| 22/07/2026 | `runIntegrityAudit()` es la entrada pública única de la auditoría 25.2C. | Garantizar una secuencia determinista de auditoría local, remota, comparación y reporte. | Implementada; ejecución real pendiente |
-| 22/07/2026 | Las pruebas con mocks no cierran 25.2C. | La readiness para 25.2D requiere evidencia de los datos reales bajo sesión y RLS reales. | Vigente |
+| 22/07/2026 | `runIntegrityAudit()` es la entrada pública única de la auditoría 25.2C. | Garantizar una secuencia determinista de auditoría local, remota, comparación y reporte. | Implementada y validada operacionalmente |
+| 22/07/2026 | Las pruebas con mocks no cierran 25.2C. | La readiness para 25.2D requiere evidencia de los datos reales bajo sesión y RLS reales. | Cumplida mediante auditoría real el 23/07/2026 |
+| 23/07/2026 | Dos entidades con UUID distintos nunca se fusionan por compartir folio. | El folio es referencia comercial; la identidad canónica pertenece al UUID dentro del workspace. | Vigente |
+| 23/07/2026 | Toda restricción SQL futura debe estar precedida por auditoría real, respaldo y rollback documentado. | Conservar continuidad operacional y evitar endurecer datos sin evidencia suficiente. | Vigente |
 | Pendiente de validación | No rediseñar módulos que puedan completarse incrementalmente. | Reducir riesgo y conservar valor operativo. | Vigente |
 | Pendiente de validación | Inicio evolucionará hacia Centro de Operaciones. | Mostrar el estado real del flujo. | Pendiente |
 | Pendiente de validación | Una función importante requiere operación, documentación, roadmap y pendientes derivados para cerrarse. | Evitar cierres únicamente visuales. | Vigente |
@@ -555,55 +592,56 @@ Las fechas no verificables se mantienen como **Pendiente de validación**; no se
 
 ## 16. Próximo sprint oficial
 
-### Fase 25.2C — Auditoría real de integridad
+### Fase 25.2D — Hardening Operativo
 
-**Propósito:** ejecutar las herramientas preparadas en 25.2B contra datos reales para decidir, con evidencia, si existe deuda legacy y si puede comenzar el endurecimiento SQL.
+**Estado:** PENDIENTE / SIGUIENTE FASE.
 
-**Infraestructura ya disponible:**
+**Propósito:** endurecer reglas operativas, invariantes y protecciones antes de ampliar dominios, apoyándose en la evidencia real de 25.2C.
 
-- `runIntegrityAudit()` como entrada explícita y no automática.
-- Auditor local sobre colecciones proporcionadas o claves locales conocidas.
-- Auditor remoto autenticado con cinco consultas de tabla filtradas por workspace.
-- Reporte consolidado por dominio, comparación local/remota, recomendaciones y readiness.
-- Pruebas sin conexión real que verifican salida limpia, bloqueo, autenticación y almacenamiento malformado.
-- Baseline actual: 48 archivos de prueba y 351 pruebas pasando el 22/07/2026.
+**Evidencia habilitante:**
 
-**Alcance:**
+- Auditoría real cerrada como `READY WITH WARNINGS`.
+- Cero hallazgos `CRITICAL` y cero `ERROR`.
+- Readiness positiva para `NOT NULL`, identidad única y Foreign Keys.
+- Reparación legacy no requerida.
+- Un folio comercial duplicado pendiente de prevención.
 
-- Auditar colecciones locales reales del workspace seleccionado.
-- Auditar Supabase con una sesión autenticada y respetando RLS.
-- Consolidar resultados locales, remotos y comparativos.
-- Clasificar identidad, workspace, duplicados, relaciones y folios comerciales.
-- Documentar la decisión sobre reparación legacy y Fase 25.2D.
+**Primer frente obligatorio: generador resiliente de folios comerciales**
 
-**Restricciones:**
+- Garantizar unicidad por workspace.
+- Calcular el siguiente folio considerando el máximo local y remoto.
+- Prevenir colisiones entre dispositivos, sesiones nuevas y estados locales incompletos.
+- Reintentar e incrementar ante una colisión confirmada.
+- Mantener el folio como referencia comercial.
+- Nunca usar el folio como identidad ni reemplazar el UUID.
 
-- Solo lectura.
-- No modificar, borrar, fusionar ni regenerar registros.
-- No ejecutar migraciones ni activar constraints.
-- No modificar RLS, UI, Business State o Workflow.
-- No usar service role.
+**Frentes posteriores:**
 
-**Validaciones:**
+- Validación previa a escritura.
+- Invariantes operativas.
+- Protección durable de estados terminales.
+- Evaluación gradual de `NOT NULL`, unicidad de identidad y Foreign Keys.
+- Respaldo y rollback documentado antes de cualquier restricción.
+- Ejecución incremental.
+- Auditoría real después de cada endurecimiento.
 
-- Registrar workspace, momento y fuente de cada auditoría.
-- Conservar salida estructurada y conteos por dominio.
-- Verificar que el auditor remoto solo ejecute `SELECT`.
-- Diferenciar ausencia de datos, falta de permisos, tabla no disponible y consulta fallida.
-- Revisar manualmente hallazgos que puedan implicar identidades distintas.
-- Guardar fuera del código la evidencia de ejecución, sin introducir datos sensibles en el repositorio.
+**Contratos obligatorios:**
+
+- UUID es identidad canónica y el folio es referencia comercial.
+- Dos entidades con UUID distintos nunca se fusionan por folio.
+- `runIntegrityAudit()` continúa siendo la entrada pública oficial de auditoría.
+- El hardening no se activa sin auditoría, respaldo y rollback.
+- Cada cambio debe conservar aislamiento por workspace.
 
 **Criterio de salida:**
 
-- Reporte local real.
-- Reporte remoto real.
-- Evidencia de que no se modificaron datos.
-- Hallazgos clasificados por severidad y dominio.
-- Decisión documentada sobre reparación legacy.
-- Decisión documentada sobre el inicio o bloqueo de 25.2D.
-- Repetición confirmada del resultado cuando sea necesario para demostrar determinismo.
+- Generación de folios resistente a colisiones y validada por workspace.
+- Protecciones de escritura e invariantes verificadas.
+- Plan de respaldo y rollback aprobado antes de cualquier restricción.
+- Endurecimientos ejecutados incrementalmente.
+- Auditoría posterior sin errores bloqueantes.
 
-> **Nota de secuencia:** 25.2E está registrada como fase futura. No debe iniciarse durante 25.2C. Su ejecución depende de la decisión y cierre documentado de 25.2D.
+> **Nota de secuencia:** 25.2E permanece registrada como fase futura y pendiente. Su ejecución depende del cierre seguro y documentado de 25.2D.
 
 ## Infraestructura visual y Brand System
 
