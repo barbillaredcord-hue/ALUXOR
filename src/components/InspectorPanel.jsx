@@ -7,6 +7,7 @@ export default function InspectorPanel({
   openPrint,
   openWhatsApp,
   setActiveSection,
+  readOnly = false,
 }) {
   const nextTask = quote.materialRows?.[0]?.nombre
     ? `Comprar ${quote.materialRows[0].nombre}`
@@ -34,8 +35,11 @@ export default function InspectorPanel({
 
       <section className="inspector-card inspector-next-task">
         <h3>Próxima tarea</h3>
-        <p>Siguiente acción recomendada por el sistema.</p>
-        <strong>{nextTask}</strong>
+        {readOnly ? (
+          <strong>Proyecto finalizado. Toda la información es histórica. No puede modificarse.</strong>
+        ) : (
+          <><p>Siguiente acción recomendada por el sistema.</p><strong>{nextTask}</strong></>
+        )}
       </section>
 
       <section className="inspector-card inspector-risks">
@@ -65,9 +69,9 @@ export default function InspectorPanel({
           <button type="button" onClick={() => openPrint('client')}><FileText size={16} /> PDF</button>
           <button type="button" onClick={openWhatsApp}><MessageCircle size={16} /> WhatsApp</button>
           <button type="button" onClick={() => setActiveSection('historial')}><History size={16} /> Historial</button>
-          <button type="button" onClick={() => setActiveSection('catalogo')}><TableProperties size={16} /> Catálogo</button>
-          <button type="button" onClick={() => setActiveSection('cotizador')}><Box size={16} /> Plano</button>
-          <button type="button" onClick={() => setActiveSection('cotizador')}><FolderClock size={16} /> Cotizador</button>
+          {!readOnly && <button type="button" onClick={() => setActiveSection('catalogo')}><TableProperties size={16} /> Catálogo</button>}
+          {!readOnly && <button type="button" onClick={() => setActiveSection('cotizador')}><Box size={16} /> Plano</button>}
+          {!readOnly && <button type="button" onClick={() => setActiveSection('cotizador')}><FolderClock size={16} /> Cotizador</button>}
         </div>
       </section>
     </aside>

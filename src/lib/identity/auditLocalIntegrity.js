@@ -12,15 +12,16 @@ function purchaseItemsFrom(input, purchases) {
   ));
 }
 
-export function auditLocalIntegrity(input = {}) {
+export function auditLocalIntegrity(input = {}, { strict = false } = {}) {
   const purchases = list(input?.purchases);
   const collections = {
+    workspaces: list(input?.workspaces ?? (input?.workspace ? [input.workspace] : [])),
     quotes: list(input?.quotes),
     productionOrders: list(input?.productionOrders ?? input?.production_orders),
     purchases,
     purchaseItems: purchaseItemsFrom(input, purchases),
   };
-  const inspected = inspectIntegrityCollections(collections, { source: 'local' });
+  const inspected = inspectIntegrityCollections(collections, { source: 'local', strict });
   const recordCounts = Object.fromEntries(
     Object.entries(collections).map(([domain, records]) => [domain, records.length]),
   );

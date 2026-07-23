@@ -18,7 +18,7 @@ const fabricationChecklist = [
 
 const progressSteps = ['Pendiente', 'Corte', 'Armado', 'Control de calidad', 'Listo para instalar'];
 
-export default function FabricationSection({ form, quote, decimal, projectStatus }) {
+export default function FabricationSection({ form, quote, decimal, projectStatus, readOnly = false }) {
   const [pieceStatus, setPieceStatus] = useState({});
   const [notes, setNotes] = useState('');
   const material = quote.materialRows?.[0];
@@ -56,7 +56,7 @@ export default function FabricationSection({ form, quote, decimal, projectStatus
                 <span>{item.cantidad} pieza(s)</span>
                 <span>{item.ancho} x {item.alto} x {item.fondo} cm</span>
                 <span>{material?.nombre || form.materialCotizacion || 'Material pendiente'} · {item.grosorMaterial} mm</span>
-                <select value={pieceStatus[item.id] || 'Pendiente'} onChange={(event) => setPieceStatus((current) => ({ ...current, [item.id]: event.target.value }))}>
+                <select disabled={readOnly} value={pieceStatus[item.id] || 'Pendiente'} onChange={(event) => setPieceStatus((current) => ({ ...current, [item.id]: event.target.value }))}>
                   <option>Pendiente</option>
                   <option>Cortando</option>
                   <option>Armando</option>
@@ -112,7 +112,7 @@ export default function FabricationSection({ form, quote, decimal, projectStatus
           <h3><Drill size={18} /> Checklist de fabricación</h3>
           <div className="fabrication-checklist">
             {fabricationChecklist.map((item) => (
-              <label key={item}><input type="checkbox" /> {item}</label>
+              <label key={item}><input type="checkbox" disabled={readOnly} /> {item}</label>
             ))}
           </div>
         </article>
@@ -126,7 +126,7 @@ export default function FabricationSection({ form, quote, decimal, projectStatus
 
         <article className="fabrication-card fabrication-notes">
           <h3>Observaciones del taller</h3>
-          <textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Notas de corte, armado, acabado o instalación..." />
+          <textarea readOnly={readOnly} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Notas de corte, armado, acabado o instalación..." />
         </article>
       </div>
     </section>

@@ -6,6 +6,12 @@ import { auditRemoteIntegrity, classifyRemoteAuditError } from './auditRemoteInt
 
 function clientWith(results) {
   return {
+    auth: {
+      getUser: vi.fn(async () => ({
+        data: { user: { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' } },
+        error: null,
+      })),
+    },
     from: vi.fn((table) => ({
       select: vi.fn(() => ({
         eq: vi.fn(async () => results[table] || { data: [], error: null }),
@@ -29,7 +35,7 @@ describe('auditRemoteIntegrity', () => {
     expect(report.findings).toContainEqual(expect.objectContaining({
       code: 'remote_permission_denied', source: 'remote',
     }));
-    expect(client.from).toHaveBeenCalledTimes(4);
+    expect(client.from).toHaveBeenCalledTimes(5);
   });
 
   it('distingue tabla no disponible de consulta fallida', () => {
@@ -51,6 +57,7 @@ describe('auditRemoteIntegrity', () => {
     const report = await auditRemoteIntegrity({
       workspaceId: 'ws-a',
       client: clientWith({
+        workspaces: unavailable,
         quotes: unavailable,
         production_orders: unavailable,
         purchases: unavailable,
@@ -78,5 +85,19 @@ describe('auditRemoteIntegrity', () => {
     });
     expect(report.findings.some((finding) => finding.code === 'orphan_reference')).toBe(false);
     expect(report.status).toBe('partial');
+  });
+
+  it('no consulta tablas si no existe una sesión autenticada', async () => {
+    const client = clientWith({});
+    client.auth.getUser.mockResolvedValue({ data: { user: null }, error: null });
+    const report = await auditRemoteIntegrity({
+      workspaceId: '11111111-1111-4111-8111-111111111111',
+      client,
+    });
+    expect(report.status).toBe('unavailable');
+    expect(report.findings).toContainEqual(expect.objectContaining({
+      code: 'remote_auth_required', severity: 'critical',
+    }));
+    expect(client.from).not.toHaveBeenCalled();
   });
 });

@@ -156,4 +156,19 @@ describe('ProductionSection filters', () => {
     expect(markup).toContain('Crear compra');
     expect(markup).not.toContain('Ver compra ·');
   });
+
+  it('mantiene una orden entregada visible y elimina sus acciones de mutación', () => {
+    const markup = renderToStaticMarkup(<ProductionSection
+      productionOrders={[{
+        id: 'delivered', quoteId: 'quote-1', folio: 'OT-E', estado: 'Entregado',
+      }]}
+      selectedProductionOrderId="delivered"
+      canManagePurchases
+      purchasesForOrder={() => []}
+    />);
+    expect(markup).toContain('Proyecto entregado.');
+    expect(markup).toContain('Ver cotización');
+    expect(markup).not.toContain('Crear compra');
+    expect(markup).toMatch(/<select disabled=""/);
+  });
 });

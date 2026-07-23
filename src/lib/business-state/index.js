@@ -4,6 +4,7 @@ import { getFinanceSummary } from '../finance/financeSummary.js';
 import { getHistorySummary } from '../history/historySummary.js';
 import { getInventorySummary } from '../inventory/inventorySummary.js';
 import { getProductionSummary } from '../production/productionSummary.js';
+import { isProjectReadOnly } from '../production/productionEngine.js';
 import { getPurchasesSummary } from '../purchases/purchaseSummary.js';
 import { selectPurchaseViews } from '../purchases/purchaseSelectors.js';
 import { getQuotesSummary } from '../quotes/quoteSummary.js';
@@ -51,6 +52,7 @@ export function getBusinessState({
   financeRecords,
   fabricationProjects,
   historyRecords,
+  activeProductionOrder,
 } = {}) {
   const companyName = typeof settings?.company_name === 'string'
     ? settings.company_name.trim() || null
@@ -105,6 +107,10 @@ export function getBusinessState({
         ? `${projectOperations.inProduction} ${projectOperations.inProduction === 1 ? 'proyecto' : 'proyectos'} en producción.`
         : null,
       health: null,
+    },
+    project: {
+      readOnly: isProjectReadOnly(activeProductionOrder),
+      mode: isProjectReadOnly(activeProductionOrder) ? 'read-only' : 'editable',
     },
     indicators: {
       quotes: domainIndicator(

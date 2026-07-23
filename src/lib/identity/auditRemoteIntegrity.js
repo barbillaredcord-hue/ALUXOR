@@ -3,21 +3,26 @@ import { auditLocalIntegrity } from './auditLocalIntegrity.js';
 import { createIntegrityFinding } from './integrityReport.js';
 
 const TABLES = Object.freeze({
+  workspaces: {
+    table: 'workspaces',
+    columns: 'id, name, created_at, updated_at, deleted_at',
+    filter: 'id',
+  },
   quotes: {
     table: 'quotes',
-    columns: 'id, workspace_id, folio',
+    columns: 'id, workspace_id, folio, form_data, version, updated_at',
   },
   productionOrders: {
     table: 'production_orders',
-    columns: 'id, workspace_id, quote_id, folio',
+    columns: 'id, workspace_id, quote_id, folio, version, updated_at',
   },
   purchases: {
     table: 'purchases',
-    columns: 'id, workspace_id, production_order_id, quote_id, folio',
+    columns: 'id, workspace_id, production_order_id, quote_id, folio, version, updated_at',
   },
   purchaseItems: {
     table: 'purchase_items',
-    columns: 'id, workspace_id, purchase_id, source_type, source_id',
+    columns: 'id, workspace_id, purchase_id, source_type, source_id, name, version, updated_at',
   },
 });
 
@@ -26,6 +31,7 @@ const DOMAIN_BY_ENTITY_TYPE = Object.freeze({
   productionOrder: 'productionOrders',
   purchase: 'purchases',
   purchaseItem: 'purchaseItems',
+  workspace: 'workspaces',
 });
 
 function errorText(error) {
@@ -72,13 +78,16 @@ function resolveArguments(input, options) {
 
 export async function auditRemoteIntegrity(input = {}, options = {}) {
   const { workspaceId, client } = resolveArguments(input, options);
+  const emptyRecords = {
+    workspaces: [], quotes: [], productionOrders: [], purchases: [], purchaseItems: [],
+  };
   if (!workspaceId) {
     return {
       source: 'remote',
       workspaceId: null,
       status: 'unavailable',
-      records: { quotes: [], productionOrders: [], purchases: [], purchaseItems: [] },
-      recordCounts: { quotes: 0, productionOrders: 0, purchases: 0, purchaseItems: 0 },
+      records: emptyRecords,
+      recordCounts: Object.fromEntries(Object.keys(emptyRecords).map((domain) => [domain, 0])),
       totalRecords: 0,
       tables: {},
       findings: [createIntegrityFinding({
@@ -91,7 +100,55 @@ export async function auditRemoteIntegrity(input = {}, options = {}) {
     };
   }
 
-  const records = { quotes: [], productionOrders: [], purchases: [], purchaseItems: [] };
+  let authenticatedUser = null;
+  try {
+    const authResult = await client?.auth?.getUser?.();
+    authenticatedUser = authResult?.data?.user || null;
+    if (authResult?.error || !authenticatedUser) {
+      const error = authResult?.error || new Error('No existe una sesión autenticada.');
+      return {
+        source: 'remote',
+        workspaceId,
+        status: 'unavailable',
+        records: emptyRecords,
+        recordCounts: Object.fromEntries(Object.keys(emptyRecords).map((domain) => [domain, 0])),
+        totalRecords: 0,
+        tables: {},
+        findings: [createIntegrityFinding({
+          severity: 'critical',
+          code: 'remote_auth_required',
+          entityType: 'remoteAudit',
+          workspaceId,
+          source: 'remote',
+          message: 'La auditoría remota requiere una sesión autenticada.',
+          metadata: { errorMessage: error.message },
+        })],
+        valid: false,
+      };
+    }
+  } catch (error) {
+    return {
+      source: 'remote',
+      workspaceId,
+      status: 'unavailable',
+      records: emptyRecords,
+      recordCounts: Object.fromEntries(Object.keys(emptyRecords).map((domain) => [domain, 0])),
+      totalRecords: 0,
+      tables: {},
+      findings: [createIntegrityFinding({
+        severity: 'critical',
+        code: 'remote_auth_required',
+        entityType: 'remoteAudit',
+        workspaceId,
+        source: 'remote',
+        message: 'No se pudo verificar la sesión autenticada.',
+        metadata: { errorMessage: error?.message || 'Error de autenticación' },
+      })],
+      valid: false,
+    };
+  }
+
+  const records = { ...emptyRecords };
   const tables = Object.fromEntries(Object.entries(TABLES).map(([domain, config]) => [
     domain,
     { table: config.table, status: 'pending', recordCount: 0, error: null },
@@ -103,7 +160,7 @@ export async function auditRemoteIntegrity(input = {}, options = {}) {
       const { data, error } = await client
         .from(config.table)
         .select(config.columns)
-        .eq('workspace_id', workspaceId);
+        .eq(config.filter || 'workspace_id', workspaceId);
 
       if (error) {
         const category = classifyRemoteAuditError(error);
@@ -140,7 +197,7 @@ export async function auditRemoteIntegrity(input = {}, options = {}) {
   const status = completedCount === Object.keys(TABLES).length
     ? 'completed'
     : completedCount === 0 ? 'unavailable' : 'partial';
-  const integrity = auditLocalIntegrity(records);
+  const integrity = auditLocalIntegrity(records, { strict: true });
   const conclusiveIntegrityFindings = integrity.findings.filter((finding) => {
     if (!['orphan_reference', 'workspace_mismatch'].includes(finding.code)) return true;
     const parentDomain = DOMAIN_BY_ENTITY_TYPE[finding.metadata?.parentType];
@@ -157,6 +214,7 @@ export async function auditRemoteIntegrity(input = {}, options = {}) {
   return {
     source: 'remote',
     workspaceId,
+    authenticated: Boolean(authenticatedUser),
     status,
     records,
     recordCounts: integrity.recordCounts,

@@ -135,4 +135,13 @@ describe('getBusinessState', () => {
     expect(state.status.summary).toBe('1 proyecto en producción.');
     expect(quote.status).toBe('Aceptada');
   });
+
+  it('publica el contrato de solo lectura para un proyecto entregado', () => {
+    expect(getBusinessState({
+      activeProductionOrder: { estado: 'Entregado' },
+    }).project).toEqual({ readOnly: true, mode: 'read-only' });
+    expect(getBusinessState({
+      activeProductionOrder: { estado: 'En instalación' },
+    }).project).toEqual({ readOnly: false, mode: 'editable' });
+  });
 });

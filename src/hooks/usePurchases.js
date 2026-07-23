@@ -8,7 +8,10 @@ import {
   purchaseStatusFromItems,
   updatePurchase as updatePurchaseModel,
 } from '../lib/purchases/purchaseEngine.js';
-import { canAdvanceProductionOrder } from '../lib/production/productionEngine.js';
+import {
+  canAdvanceProductionOrder,
+  isProjectReadOnly,
+} from '../lib/production/productionEngine.js';
 import { PurchaseRepository } from '../lib/purchases/purchaseRepository.js';
 import { PurchaseStorage } from '../lib/purchases/purchaseStorage.js';
 import { PurchaseOfflineQueue } from '../lib/purchases/purchaseOfflineQueue.js';
@@ -382,6 +385,7 @@ export default function usePurchases({
   activeWorkspace,
   workspaceAccessStatus,
   setActiveSection,
+  productionOrders = [],
 }) {
   const [purchases, setPurchases] = useState([]);
   const [selectedPurchaseId, setSelectedPurchaseId] = useState(null);
@@ -410,6 +414,12 @@ export default function usePurchases({
   const activePurchase = useMemo(
     () => purchases.find((purchase) => purchase.id === selectedPurchaseId) || null,
     [purchases, selectedPurchaseId],
+  );
+  const productionOrderForPurchase = (purchase) => productionOrders.find((order) => (
+    order.id === (purchase?.productionOrderId || purchase?.production_order_id)
+  ));
+  const purchaseIsReadOnly = (purchase) => isProjectReadOnly(
+    productionOrderForPurchase(purchase),
   );
 
   function setWorkspacePurchases(workspaceId, nextPurchases) {
@@ -534,6 +544,7 @@ export default function usePurchases({
   }
 
   async function savePendingPurchase(purchase) {
+    if (purchaseIsReadOnly(purchase)) return false;
     const workspaceId = purchase.workspaceId;
     const localId = purchase.id;
     const isCreate = isPendingPurchaseCreate(
@@ -619,6 +630,8 @@ export default function usePurchases({
   async function savePendingPurchaseItem(purchaseId, itemSnapshot) {
     const workspaceId = contextRef.current.workspaceId;
     if (!workspaceId || !itemSnapshot?.id) return false;
+    const purchase = purchasesRef.current.find((entry) => entry.id === purchaseId);
+    if (purchaseIsReadOnly(purchase)) return false;
     let result = await PurchaseRepository.updatePurchaseItemRemote(
       workspaceId,
       itemSnapshot,
@@ -673,6 +686,7 @@ export default function usePurchases({
     }
     const purchase = purchasesRef.current.find((entry) => entry.id === purchaseId);
     const item = purchase?.items.find((entry) => entry.id === itemId);
+    if (purchaseIsReadOnly(purchase)) return false;
     if (!item?.pendingSync) return true;
     if (!navigator.onLine || isPendingPurchaseCreate(
       PurchaseOfflineQueue.load(purchase.workspaceId), purchaseId,
@@ -739,6 +753,10 @@ export default function usePurchases({
           failed = true;
           continue;
         }
+        if (purchaseIsReadOnly(purchase)) {
+          PurchaseOfflineQueue.remove(workspaceId, purchase.id);
+          continue;
+        }
         if (operation.type === 'updateItem') {
           const item = purchase.items.find((entry) => entry.id === operation.itemId);
           if (!item || !(await savePendingPurchaseItem(purchase.id, item))) failed = true;
@@ -766,6 +784,7 @@ export default function usePurchases({
       || PurchaseStorage.loadPurchases(contextRef.current.workspaceId)
         .find((item) => item.id === purchaseId);
     if (!purchase) return false;
+    if (purchaseIsReadOnly(purchase)) return false;
     if (!purchase.pendingSync && !isPendingPurchaseCreate(
       PurchaseOfflineQueue.load(purchase.workspaceId), purchaseId,
     )) return true;
@@ -819,6 +838,7 @@ export default function usePurchases({
   function updatePurchase(purchaseId, changes) {
     const current = purchasesRef.current.find((purchase) => purchase.id === purchaseId);
     if (!current || current.active === false || current.deletedAt) return false;
+    if (purchaseIsReadOnly(current)) return false;
     const expectedVersion = current.pendingExpectedVersion || current.version;
     const normalizedChanges = Object.prototype.hasOwnProperty.call(changes || {}, 'items')
       && !Object.prototype.hasOwnProperty.call(changes || {}, 'status')
@@ -854,6 +874,7 @@ export default function usePurchases({
     const current = purchasesRef.current.find((purchase) => purchase.id === purchaseId);
     const currentItem = current?.items.find((item) => item.id === itemId);
     if (!current || !currentItem || current.active === false || current.deletedAt) return false;
+    if (purchaseIsReadOnly(current)) return false;
     const dirtyFields = Object.keys(changes || {}).filter((field) => (
       !fieldValuesEqual(currentItem[field], changes[field])
     ));

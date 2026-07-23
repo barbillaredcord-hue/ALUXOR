@@ -2,6 +2,7 @@ import { Download, Eraser, RefreshCw, Upload } from 'lucide-react';
 import { getHistorySummary } from '../lib/history/historySummary.js';
 import { quoteCommercialStatusOptions, quoteRecordStatus } from '../lib/quotes/quoteAdapter.js';
 import { productionOrderMatchesQuote } from '../lib/quotes/quoteReference.js';
+import { isProjectReadOnly } from '../lib/production/productionEngine.js';
 import {
   getPurchaseMaterialState,
   getQuoteDisplayStatus,
@@ -64,6 +65,7 @@ export default function HistorySection({
             : [];
           const purchaseState = getPurchaseMaterialState(relatedPurchases, productionOrder);
           const displayStatus = getQuoteDisplayStatus(item, productionOrder, purchaseState);
+          const recordReadOnly = readOnly || isProjectReadOnly(productionOrder);
 
           return (
           <article
@@ -80,24 +82,20 @@ export default function HistorySection({
               <div onClick={(event) => event.stopPropagation()}>
                 <strong>{displayStatus}</strong>
                 <span>Estado controlado por Producción</span>
-                {!readOnly && (
-                  <div className="actions compact">
+                <div className="actions compact">
                     <button type="button" onClick={() => onOpenProduction?.(productionOrder)}>Abrir Producción</button>
-                    {quoteRecordStatus(item) !== 'Cancelada' && (
+                    {!recordReadOnly && quoteRecordStatus(item) !== 'Cancelada' && (
                       <button type="button" className="ghost" onClick={() => updateHistoryStatus(item.id, 'Cancelada')}>Cancelar proyecto</button>
                     )}
-                  </div>
-                )}
+                </div>
               </div>
             ) : (
-              <select disabled={readOnly} value={quoteRecordStatus(item)} onClick={(event) => event.stopPropagation()} onChange={(event) => updateHistoryStatus(item.id, event.target.value)}>
+              <select disabled={recordReadOnly} value={quoteRecordStatus(item)} onClick={(event) => event.stopPropagation()} onChange={(event) => updateHistoryStatus(item.id, event.target.value)}>
                 {QUOTE_STATUS_OPTIONS.map((status) => <option key={status}>{status}</option>)}
               </select>
             )}
-            {!readOnly && (
-              <button type="button" onClick={(event) => { event.stopPropagation(); loadHistoryItem(item); }}>Abrir</button>
-            )}
-            {!readOnly && (
+            <button type="button" onClick={(event) => { event.stopPropagation(); loadHistoryItem(item); }}>Abrir</button>
+            {!recordReadOnly && (
               <button type="button" className="ghost" aria-label={`Eliminar ${item.producto}`} onClick={(event) => { event.stopPropagation(); removeHistoryItem(item.id); }}><Eraser size={16} /></button>
             )}
           </article>

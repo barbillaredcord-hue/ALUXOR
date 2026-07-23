@@ -103,10 +103,16 @@ export function productionHasOperationalActivity(order) {
   return operationalStatuses.has(normalizeProductionStatus(order?.estado ?? order?.status));
 }
 
+export function isProjectReadOnly(order) {
+  return Boolean(order)
+    && normalizeProductionStatus(order.estado ?? order.status) === PRODUCTION_STATUSES.DELIVERED;
+}
+
 export function canAdvanceProductionOrder(order) {
   return Boolean(order)
     && !order.deletedAt
-    && normalizeProductionStatus(order.estado ?? order.status) !== PRODUCTION_STATUSES.REJECTED;
+    && normalizeProductionStatus(order.estado ?? order.status) !== PRODUCTION_STATUSES.REJECTED
+    && !isProjectReadOnly(order);
 }
 
 export function generateProductionOrderNumber(orders = [], date = new Date()) {

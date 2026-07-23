@@ -2,8 +2,8 @@ import { getBusinessState } from '../../lib/business-state/index.js';
 
 const EMPTY_MESSAGE = 'Sin información disponible';
 
-export default function ProjectCenterSettings({ settings }) {
-  const businessState = getBusinessState({ settings });
+export default function ProjectCenterSettings({ settings, activeProductionOrder }) {
+  const businessState = getBusinessState({ settings, activeProductionOrder });
   const companyName = businessState.company.name || EMPTY_MESSAGE;
 
   return (
@@ -25,6 +25,10 @@ export default function ProjectCenterSettings({ settings }) {
         <article className="project-dashboard-card">
           <h3>Estado del negocio</h3>
           <p>Posteriormente será calculado automáticamente desde el ERP.</p>
+          <div className="project-dashboard-row">
+            <strong>Modo del proyecto</strong>
+            <span>{businessState.project.readOnly ? 'Solo lectura · proyecto entregado' : 'Editable'}</span>
+          </div>
           <div className="project-dashboard-row">
             <strong>Fase</strong>
             <span>{businessState.status.phase || EMPTY_MESSAGE}</span>

@@ -18,7 +18,7 @@ function materialQuantity(item, decimal) {
   return `${item.piezasNecesarias || decimal(item.rowQuantity, 0)} pza(s)`;
 }
 
-export default function ReceivingSection({ form, quote, decimal }) {
+export default function ReceivingSection({ form, quote, decimal, readOnly = false }) {
   const items = useMemo(() => [
     ...quote.materialRows.map((item) => ({
       id: `mat-${item.id}`,
@@ -36,11 +36,12 @@ export default function ReceivingSection({ form, quote, decimal }) {
 
   const [rows, setRows] = useState({});
   const rowFor = (id) => rows[id] || { status: 'pendiente', proveedor: '', factura: '', fecha: '', observaciones: '' };
-  const updateRow = (id, field, value) => setRows((current) => ({
+  const updateRow = (id, field, value) => !readOnly && setRows((current) => ({
     ...current,
     [id]: { ...rowFor(id), [field]: value },
   }));
   const markAllReceived = () => {
+    if (readOnly) return;
     setRows(Object.fromEntries(items.map((item) => [item.id, { ...rowFor(item.id), status: 'recibido' }])));
   };
 
@@ -84,7 +85,7 @@ export default function ReceivingSection({ form, quote, decimal }) {
       </div>
 
       <div className="receiving-actions">
-        <button type="button" onClick={markAllReceived}><CheckCircle2 size={18} /> Marcar todo recibido</button>
+        {!readOnly && <button type="button" onClick={markAllReceived}><CheckCircle2 size={18} /> Marcar todo recibido</button>}
         <button type="button" className="ghost" onClick={printReceipt}><FileCheck2 size={18} /> Generar comprobante de recepción</button>
       </div>
 
@@ -102,16 +103,16 @@ export default function ReceivingSection({ form, quote, decimal }) {
                   <em>{row.status}</em>
                 </div>
                 <div className="receiving-fields">
-                  <label>Proveedor<input value={row.proveedor} onChange={(event) => updateRow(item.id, 'proveedor', event.target.value)} /></label>
-                  <label>Factura<input value={row.factura} onChange={(event) => updateRow(item.id, 'factura', event.target.value)} /></label>
-                  <label>Fecha<input type="date" value={row.fecha} onChange={(event) => updateRow(item.id, 'fecha', event.target.value)} /></label>
+                  <label>Proveedor<input readOnly={readOnly} value={row.proveedor} onChange={(event) => updateRow(item.id, 'proveedor', event.target.value)} /></label>
+                  <label>Factura<input readOnly={readOnly} value={row.factura} onChange={(event) => updateRow(item.id, 'factura', event.target.value)} /></label>
+                  <label>Fecha<input disabled={readOnly} type="date" value={row.fecha} onChange={(event) => updateRow(item.id, 'fecha', event.target.value)} /></label>
                 </div>
                 <div className="receiving-statuses">
-                  <button type="button" onClick={() => updateRow(item.id, 'status', 'pendiente')}><Clock3 size={15} /> Pendiente</button>
-                  <button type="button" onClick={() => updateRow(item.id, 'status', 'parcial')}>Parcial</button>
-                  <button type="button" onClick={() => updateRow(item.id, 'status', 'recibido')}><ClipboardCheck size={15} /> Recibido</button>
+                  <button type="button" disabled={readOnly} onClick={() => updateRow(item.id, 'status', 'pendiente')}><Clock3 size={15} /> Pendiente</button>
+                  <button type="button" disabled={readOnly} onClick={() => updateRow(item.id, 'status', 'parcial')}>Parcial</button>
+                  <button type="button" disabled={readOnly} onClick={() => updateRow(item.id, 'status', 'recibido')}><ClipboardCheck size={15} /> Recibido</button>
                 </div>
-                <label className="receiving-notes">Observaciones<textarea value={row.observaciones} onChange={(event) => updateRow(item.id, 'observaciones', event.target.value)} placeholder="Llegó incompleto, dañado, diferente o cambió medida..." /></label>
+                <label className="receiving-notes">Observaciones<textarea readOnly={readOnly} value={row.observaciones} onChange={(event) => updateRow(item.id, 'observaciones', event.target.value)} placeholder="Llegó incompleto, dañado, diferente o cambió medida..." /></label>
               </article>
             );
           })}

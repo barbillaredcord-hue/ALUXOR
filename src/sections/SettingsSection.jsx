@@ -21,6 +21,7 @@ export default function SettingsSection({
   onSaveCompanyName,
   onLogoUpload,
   onRemoveLogo,
+  activeProductionOrder,
 }) {
   const [activeTab, setActiveTab] = useState('general');
   // TODO: Reemplazar esta validación por is_system_workspace cuando exista soporte multiempresa.
@@ -152,7 +153,10 @@ export default function SettingsSection({
           {activeTab === 'backups' && <BackupsSettings />}
           {activeTab === 'about' && <AboutSettings />}
           {isOwner && activeTab === 'project-center' && (
-            <ProjectCenterSettings settings={settings} />
+            <ProjectCenterSettings
+              settings={settings}
+              activeProductionOrder={activeProductionOrder}
+            />
           )}
           {isTemporarySystemWorkspace && activeTab === 'system-project-center' && (
             <SystemProjectCenterSettings />

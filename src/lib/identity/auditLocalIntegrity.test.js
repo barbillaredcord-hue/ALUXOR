@@ -6,12 +6,32 @@ const Q2 = '22222222-2222-4222-8222-222222222222';
 const O1 = '33333333-3333-4333-8333-333333333333';
 const P1 = '44444444-4444-4444-8444-444444444444';
 const I1 = '55555555-5555-4555-8555-555555555555';
+const W1 = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
 describe('auditLocalIntegrity', () => {
   it('acepta colecciones vacías sin leer almacenamiento', () => {
     expect(auditLocalIntegrity()).toMatchObject({
       status: 'completed', totalRecords: 0, valid: true, findings: [],
     });
+  });
+
+  it('en modo estricto valida workspace, updatedAt, version y campos obligatorios', () => {
+    const report = auditLocalIntegrity({
+      workspaces: [{ id: W1, name: 'ALUXOR', updatedAt: '2026-07-22T12:00:00.000Z' }],
+      quotes: [{
+        id: Q1,
+        workspaceId: 'workspace-legacy',
+        version: 0,
+        updatedAt: 'fecha-inválida',
+      }],
+    }, { strict: true });
+    expect(report.valid).toBe(false);
+    expect(report.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'invalid_workspace_id', severity: 'critical' }),
+      expect.objectContaining({ code: 'invalid_updated_at' }),
+      expect.objectContaining({ code: 'invalid_version' }),
+      expect.objectContaining({ code: 'missing_required_field', metadata: { index: 0, field: 'form' } }),
+    ]));
   });
 
   it('distingue UUID faltante, inválido, duplicado y workspace faltante', () => {

@@ -579,7 +579,7 @@ function syncProductionOrderFromQuote(
       setProductionError('No fue posible preparar la actualización de la orden.');
       return false;
     }
-    if (currentOrder.deletedAt) return false;
+    if (!canAdvanceProductionOrder(currentOrder)) return false;
     if (
       currentOrder.estado === PRODUCTION_STATUSES.REJECTED
       && changes?.estado

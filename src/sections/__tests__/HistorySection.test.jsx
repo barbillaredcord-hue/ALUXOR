@@ -36,4 +36,16 @@ describe('autoridad de estado en Historial', () => {
     expect(markup).toContain('Abrir Producción');
     expect(markup).toContain('Cancelar proyecto');
   });
+
+  it('abre el proyecto entregado sin permitir cancelarlo ni eliminarlo', () => {
+    const markup = renderToStaticMarkup(<HistorySection
+      {...baseProps}
+      productionOrders={[{ id: 'ot1', quoteId: 'q1', estado: 'Entregado' }]}
+      purchases={[]}
+    />);
+    expect(markup).toContain('Abrir Producción');
+    expect(markup).toContain('>Abrir</button>');
+    expect(markup).not.toContain('Cancelar proyecto');
+    expect(markup).not.toContain('aria-label="Eliminar Cocina"');
+  });
 });

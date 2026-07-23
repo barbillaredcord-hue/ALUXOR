@@ -40,6 +40,8 @@ import {
   getPurchaseMaterialState,
   getQuoteDisplayStatus,
 } from '../lib/workflow/projectStatus.js';
+import { isProjectReadOnly } from '../lib/production/productionEngine.js';
+import { productionOrderMatchesQuote } from '../lib/quotes/quoteReference.js';
 import useAuth from '../hooks/useAuth.js';
 import useWorkspace from '../hooks/useWorkspace.js';
 import useQuotes from '../hooks/useQuotes.js';
@@ -111,6 +113,7 @@ function App() {
   const productionQuoteSyncRef = useRef(null);
   const productionQuoteNoteSyncRef = useRef(null);
   const quoteDeletionRefreshRef = useRef(null);
+  const projectProductionRef = useRef({ active: null, orders: [] });
   const {
     authSession,
     authLoading,
@@ -145,6 +148,7 @@ function App() {
     setCatalog: (...args) => catalogHydrationRef.current.setCatalog(...args),
     setTypeDetails: (...args) => catalogHydrationRef.current.setTypeDetails(...args),
     StorageEngine,
+    getActiveProductionOrder: () => projectProductionRef.current.active,
   });
   authWorkspaceRefreshRef.current = refreshWorkspace;
   const {
@@ -220,8 +224,17 @@ function App() {
       productionQuoteSyncRef.current?.(...args)
     ),
     onQuoteDeleteCommitted: (...args) => quoteDeletionRefreshRef.current?.(...args),
+    getActiveProductionOrder: () => projectProductionRef.current.active,
+    isQuoteReadOnly: (quoteRecord) => projectProductionRef.current.orders.some((order) => (
+      isProjectReadOnly(order) && productionOrderMatchesQuote(order, quoteRecord)
+    )),
   });
   productionQuoteNoteSyncRef.current = syncQuoteNoteFromProduction;
+  const setProjectForm = (updater) => {
+    if (isProjectReadOnly(projectProductionRef.current.active)) return false;
+    setForm(updater);
+    return true;
+  };
   const {
     catalog,
     setCatalog,
@@ -237,7 +250,7 @@ function App() {
     applyCatalogItem,
   } = useCatalog({
     form,
-    setForm,
+    setForm: setProjectForm,
     setActiveSection,
     activeWorkspace,
     hydratedWorkspaceId,
@@ -255,7 +268,7 @@ function App() {
   };
   const quickCalculator = useQuickCalculator({
     form,
-    setForm,
+    setForm: setProjectForm,
     quote,
     Quote,
     Materials,
@@ -290,7 +303,7 @@ function App() {
     applyQuickCalcToMaterial,
   } = quickCalculator;
   const planEditor = usePlanEditor({
-    setForm,
+    setForm: setProjectForm,
     setActiveSection,
     updateDirtyQuoteForm,
     PlanEngine,
@@ -335,6 +348,10 @@ function App() {
       productionQuoteNoteSyncRef.current?.(...args)
     ),
   });
+  projectProductionRef.current = {
+    active: activeProductionOrder,
+    orders: productionOrders,
+  };
   productionQuoteSyncRef.current = syncProductionOrderFromQuote;
   const {
     purchases,
@@ -357,6 +374,7 @@ function App() {
     activeWorkspace,
     workspaceAccessStatus,
     setActiveSection,
+    productionOrders,
   });
   const canEditPurchases = canManagePurchasing(currentWorkspaceRole);
   const activeProductionPurchases = useMemo(() => (
@@ -377,6 +395,7 @@ function App() {
     activePurchaseMaterialState,
   ), [activeProductionOrder, activePurchaseMaterialState, form]);
   const quoteStatusLocked = Boolean(activeProductionOrder);
+  const projectReadOnly = isProjectReadOnly(activeProductionOrder);
   const contextualProjectSummary = useMemo(() => ({
     ...contextualQuoteSummary,
     estado: quoteDisplayStatus,
@@ -460,6 +479,7 @@ function App() {
       data-quote-conflict={quoteFieldConflicts.includes(field) ? 'true' : undefined}
       type={type}
       value={form[field] ?? ''}
+      readOnly={projectReadOnly}
       onChange={(event) => update(field, type === 'number' ? numberValue(event.target.value) : event.target.value)}
     />
   );
@@ -470,6 +490,7 @@ function App() {
       data-quote-field={field}
       data-quote-conflict={quoteFieldConflicts.includes(field) ? 'true' : undefined}
       value={form[field] ?? ''}
+      readOnly={projectReadOnly}
       onChange={(event) => update(field, event.target.value)}
     />
   );
@@ -537,7 +558,7 @@ function App() {
           onPdf={() => openPrint('client')}
           onGuardar={saveToHistory}
           onHistorial={() => setActiveSection('historial')}
-          canSave={canEditWorkspaceQuotes}
+          canSave={canEditWorkspaceQuotes && !projectReadOnly}
         />
 
         <nav className="menu" aria-label="Secciones principales">
@@ -586,7 +607,7 @@ function App() {
           <div className="hero-main">
             <div className="hero-status-row">
               <p className="eyebrow">Proyecto activo · Versión {APP_VERSION}</p>
-              <span>{quoteDisplayStatus}</span>
+              <span>{projectReadOnly ? 'Proyecto entregado · Solo lectura' : quoteDisplayStatus}</span>
             </div>
 
             <div className="hero-brand-line hero-title-row">
@@ -671,6 +692,7 @@ function App() {
             tonos={tonos}
             mainOutput={mainOutput}
             copyText={copyText}
+            readOnly={projectReadOnly}
           />
         )}
 
@@ -734,6 +756,7 @@ function App() {
             onQuoteFieldBlur={handleQuoteFieldBlur}
             quoteDisplayStatus={quoteDisplayStatus}
             quoteStatusLocked={quoteStatusLocked}
+            readOnly={projectReadOnly}
             onOpenProduction={() => {
               if (activeProductionOrder) setSelectedProductionOrderId(activeProductionOrder.id);
               setActiveSection('produccion');
@@ -767,6 +790,7 @@ function App() {
                     <input
                       id={`pdf-${field}`}
                       value={pdfEditor.doc[field] || ''}
+                      readOnly={projectReadOnly}
                       onChange={(event) => setPdfEditor((current) => ({ ...current, doc: { ...current.doc, [field]: event.target.value } }))}
                     />
                   </Field>
@@ -781,6 +805,7 @@ function App() {
                     <textarea
                       id={`pdf-${field}`}
                       value={pdfEditor.doc[field] || ''}
+                      readOnly={projectReadOnly}
                       onChange={(event) => setPdfEditor((current) => ({ ...current, doc: { ...current.doc, [field]: event.target.value } }))}
                     />
                   </Field>
@@ -811,6 +836,7 @@ function App() {
             numberValue={numberValue}
             applyCatalogItem={applyCatalogItem}
             removeCatalogItem={removeCatalogItem}
+            readOnly={projectReadOnly}
           />
         )}
 
@@ -858,6 +884,7 @@ function App() {
             form={form}
             quote={quote}
             decimal={decimal}
+            readOnly={projectReadOnly}
           />
         )}
 
@@ -867,6 +894,7 @@ function App() {
             quote={quote}
             money={money}
             decimal={decimal}
+            readOnly={projectReadOnly}
           />
         )}
 
@@ -876,6 +904,7 @@ function App() {
             quote={quote}
             decimal={decimal}
             projectStatus={quoteDisplayStatus}
+            readOnly={projectReadOnly}
           />
         )}
 
@@ -883,6 +912,7 @@ function App() {
           <CutOptimizerSection
             quote={quote}
             decimal={decimal}
+            readOnly={projectReadOnly}
           />
         )}
 
@@ -890,13 +920,14 @@ function App() {
           <SettingsSection
             appLogo={appLogo}
             settings={workspaceSettings}
-            canManage={canEditWorkspaceSettings}
+            canManage={canEditWorkspaceSettings && !projectReadOnly}
             isOwner={currentWorkspaceRole === 'owner'}
             saving={workspaceSettingsSaving}
             error={workspaceSettingsError}
             onSaveCompanyName={saveWorkspaceCompanyName}
             onLogoUpload={handleLogoUpload}
             onRemoveLogo={removeAppLogo}
+            activeProductionOrder={activeProductionOrder}
           />
         )}
 
@@ -922,7 +953,7 @@ function App() {
             removeHistoryItem={removeHistoryItem}
             selectedHistoryPreview={selectedHistoryPreview}
             selectHistoryPreview={setSelectedHistoryPreview}
-            readOnly={!canEditWorkspaceQuotes}
+            readOnly={!canEditWorkspaceQuotes || projectReadOnly}
             productionOrders={productionOrders}
             purchases={purchases}
             onOpenProduction={(order) => {
@@ -948,26 +979,26 @@ function App() {
                   <h2>Plano SVG y vista 3D</h2>
                   <p>Arma piezas por medida, usa plantillas o sincroniza con la cotización.</p>
                 </div>
-                <button type="button" className="ghost" onClick={syncPlanWithMeasures}><Ruler size={18} /> Usar medidas</button>
+                {!projectReadOnly && <button type="button" className="ghost" onClick={syncPlanWithMeasures}><Ruler size={18} /> Usar medidas</button>}
               </div>
               <div className="actions compact">
                 {plantillasPlano.map((template) => (
-                  <button key={template.id} type="button" className="ghost" onClick={() => applyPlanTemplate(template)}>{template.label}</button>
+                  <button key={template.id} type="button" className="ghost" disabled={projectReadOnly} onClick={() => applyPlanTemplate(template)}>{template.label}</button>
                 ))}
               </div>
               {PlanEngine.planItemsFromForm(form, planHelpers).map((item) => (
                 <div key={item.id} className="row-card plan-row">
-                  <input value={item.nombre} onChange={(event) => updatePlanItem(item.id, 'nombre', event.target.value)} aria-label="Nombre de pieza" />
-                  <select value={item.forma} onChange={(event) => updatePlanItem(item.id, 'forma', event.target.value)} aria-label="Forma">
+                  <input readOnly={projectReadOnly} value={item.nombre} onChange={(event) => updatePlanItem(item.id, 'nombre', event.target.value)} aria-label="Nombre de pieza" />
+                  <select disabled={projectReadOnly} value={item.forma} onChange={(event) => updatePlanItem(item.id, 'forma', event.target.value)} aria-label="Forma">
                     {formasPlano.map((forma) => <option key={forma}>{forma}</option>)}
                   </select>
-                  <input type="number" value={item.ancho} onChange={(event) => updatePlanItem(item.id, 'ancho', numberValue(event.target.value))} aria-label="Ancho" />
-                  <input type="number" value={item.alto} onChange={(event) => updatePlanItem(item.id, 'alto', numberValue(event.target.value))} aria-label="Alto" />
-                  <input type="number" value={item.fondo} onChange={(event) => updatePlanItem(item.id, 'fondo', numberValue(event.target.value))} aria-label="Fondo" />
-                  <button type="button" className="ghost" onClick={() => removePlanItem(item.id)}><Eraser size={16} /></button>
+                  <input readOnly={projectReadOnly} type="number" value={item.ancho} onChange={(event) => updatePlanItem(item.id, 'ancho', numberValue(event.target.value))} aria-label="Ancho" />
+                  <input readOnly={projectReadOnly} type="number" value={item.alto} onChange={(event) => updatePlanItem(item.id, 'alto', numberValue(event.target.value))} aria-label="Alto" />
+                  <input readOnly={projectReadOnly} type="number" value={item.fondo} onChange={(event) => updatePlanItem(item.id, 'fondo', numberValue(event.target.value))} aria-label="Fondo" />
+                  {!projectReadOnly && <button type="button" className="ghost" onClick={() => removePlanItem(item.id)}><Eraser size={16} /></button>}
                 </div>
               ))}
-              <button type="button" className="ghost" onClick={addPlanItem}>Agregar pieza</button>
+              {!projectReadOnly && <button type="button" className="ghost" onClick={addPlanItem}>Agregar pieza</button>}
             </article>
 
             <article className="panel plan-preview">
@@ -1041,6 +1072,7 @@ function App() {
             openPrint={openPrint}
             openWhatsApp={openWhatsApp}
             setActiveSection={setActiveSection}
+            readOnly={projectReadOnly}
           />
         )}
       />

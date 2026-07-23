@@ -7,6 +7,7 @@ import {
   canManageWorkspaceSettings,
 } from '../lib/workspace/permissions.js';
 import { storageHelpers } from '../app/config/helpers.js';
+import { isProjectReadOnly } from '../lib/production/productionEngine.js';
 export default function useWorkspace({
   authSession,
   catalogDefaults,
@@ -14,6 +15,7 @@ export default function useWorkspace({
   setCatalog,
   setTypeDetails,
   StorageEngine,
+  getActiveProductionOrder,
 }) {
   const [activeWorkspace, setActiveWorkspace] = useState(null);
   const [activeMembership, setActiveMembership] = useState(null);
@@ -200,7 +202,8 @@ export default function useWorkspace({
   const canEditWorkspaceSettings = canManageWorkspaceSettings(currentWorkspaceRole);
 
   async function handleLogoUpload(file, companyName) {
-    if (!file || !activeWorkspace?.id || !canEditWorkspaceSettings) return;
+    if (!file || !activeWorkspace?.id || !canEditWorkspaceSettings
+      || isProjectReadOnly(getActiveProductionOrder?.())) return;
     setWorkspaceSettingsSaving(true);
     setWorkspaceSettingsError('');
     const result = await WorkspaceService.uploadWorkspaceLogo({
@@ -217,7 +220,8 @@ export default function useWorkspace({
   }
 
   async function saveWorkspaceSettings(companyName) {
-    if (!activeWorkspace?.id || !canEditWorkspaceSettings) return;
+    if (!activeWorkspace?.id || !canEditWorkspaceSettings
+      || isProjectReadOnly(getActiveProductionOrder?.())) return;
     setWorkspaceSettingsSaving(true);
     setWorkspaceSettingsError('');
     const result = await WorkspaceService.updateWorkspaceSettings({
@@ -234,7 +238,8 @@ export default function useWorkspace({
   }
 
   async function removeAppLogo(companyName) {
-    if (!activeWorkspace?.id || !canEditWorkspaceSettings) return;
+    if (!activeWorkspace?.id || !canEditWorkspaceSettings
+      || isProjectReadOnly(getActiveProductionOrder?.())) return;
     setWorkspaceSettingsSaving(true);
     setWorkspaceSettingsError('');
     const result = await WorkspaceService.updateWorkspaceSettings({

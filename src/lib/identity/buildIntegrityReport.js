@@ -2,6 +2,7 @@ import { normalizeEntityId } from './entityIdentity.js';
 import { createIntegrityFinding } from './integrityReport.js';
 
 const DOMAIN_MAP = Object.freeze({
+  workspace: 'workspaces',
   quotes: 'quotes',
   production: 'productionOrders',
   purchases: 'purchases',
@@ -14,18 +15,28 @@ const UNIQUE_BLOCKERS = new Set([
   'duplicate_id',
   'duplicate_workspace_entity',
   'malformed_record',
+  'invalid_workspace_id',
 ]);
-const NOT_NULL_BLOCKERS = new Set(['missing_workspace_id', 'malformed_record']);
+const NOT_NULL_BLOCKERS = new Set([
+  'missing_workspace_id', 'missing_required_field', 'malformed_record',
+]);
 const FOREIGN_KEY_BLOCKERS = new Set([
   'orphan_reference',
   'workspace_mismatch',
   'missing_parent',
   'malformed_record',
+  'invalid_workspace_id',
+]);
+const DATA_QUALITY_BLOCKERS = new Set([
+  'invalid_updated_at',
+  'invalid_version',
+  'missing_required_field',
 ]);
 const LEGACY_REPAIR_CODES = new Set([
   ...UNIQUE_BLOCKERS,
   ...NOT_NULL_BLOCKERS,
   ...FOREIGN_KEY_BLOCKERS,
+  ...DATA_QUALITY_BLOCKERS,
 ]);
 
 function list(value) {
@@ -89,12 +100,15 @@ function domainSummary(domain, sourceDomain, localAudit, remoteAudit, findings) 
     ? new Set(['production', 'productionOrder', 'productionOrders'])
     : domain === 'purchaseItems'
       ? new Set(['purchaseItems', 'purchaseItem'])
-      : new Set([domain, domain === 'quotes' ? 'quote' : 'purchase']);
+      : domain === 'workspace'
+        ? new Set(['workspace', 'workspaces'])
+        : new Set([domain, domain === 'quotes' ? 'quote' : 'purchase']);
   const domainFindings = findings.filter((finding) => domainEntityTypes.has(finding.entityType));
   return {
     localRecords: list(localAudit?.records?.[sourceDomain]).length,
     remoteRecords: list(remoteAudit?.records?.[sourceDomain]).length,
     remoteStatus: remoteAudit?.tables?.[sourceDomain]?.status || 'unavailable',
+    critical: domainFindings.filter((finding) => finding.severity === 'critical').length,
     errors: domainFindings.filter((finding) => finding.severity === 'error').length,
     warnings: domainFindings.filter((finding) => finding.severity === 'warning').length,
     info: domainFindings.filter((finding) => finding.severity === 'info').length,
@@ -119,6 +133,7 @@ export function buildIntegrityReport({
     || String(left.entityId || '').localeCompare(String(right.entityId || ''))
   ));
   const totals = {
+    critical: findings.filter((finding) => finding.severity === 'critical').length,
     errors: findings.filter((finding) => finding.severity === 'error').length,
     warnings: findings.filter((finding) => finding.severity === 'warning').length,
     info: findings.filter((finding) => finding.severity === 'info').length,
@@ -126,7 +141,7 @@ export function buildIntegrityReport({
     remoteRecords: Number(remoteAudit?.totalRecords || 0),
   };
   const remoteUnavailable = !remoteAudit || remoteAudit.status === 'unavailable';
-  const status = totals.errors > 0
+  const status = totals.critical > 0 || totals.errors > 0
     ? 'blocked'
     : remoteUnavailable ? 'unavailable'
       : totals.warnings > 0 || totals.info > 0 || remoteAudit.status === 'partial'
@@ -134,6 +149,25 @@ export function buildIntegrityReport({
         : 'clean';
   const codes = new Set(findings.map((finding) => finding.code));
   const availableForConstraints = !remoteUnavailable && remoteAudit.status === 'completed';
+  const hasDataQualityBlocker = [...DATA_QUALITY_BLOCKERS].some((code) => codes.has(code));
+  const readinessStatus = !availableForConstraints
+    || totals.critical > 0
+    || totals.errors > 0
+    || hasDataQualityBlocker
+    ? 'BLOCKED'
+    : totals.warnings > 0 || totals.info > 0 ? 'READY WITH WARNINGS' : 'READY';
+  const readinessReasons = [
+    !availableForConstraints ? 'La auditoría remota no terminó en todas las tablas.' : null,
+    totals.critical > 0 ? `Existen ${totals.critical} hallazgos críticos.` : null,
+    totals.errors > 0 ? `Existen ${totals.errors} errores de integridad.` : null,
+    hasDataQualityBlocker ? 'Existen campos obligatorios, versiones o fechas inválidas.' : null,
+    totals.warnings > 0 && readinessStatus !== 'BLOCKED'
+      ? `Existen ${totals.warnings} advertencias que requieren revisión.`
+      : null,
+    totals.info > 0 && readinessStatus !== 'BLOCKED'
+      ? `Existen ${totals.info} diferencias informativas entre fuentes.`
+      : null,
+  ].filter(Boolean);
 
   const report = {
     generatedAt,
@@ -143,6 +177,8 @@ export function buildIntegrityReport({
     domains: {},
     findings,
     readiness: {
+      status: readinessStatus,
+      reasons: readinessReasons,
       canAddNotNull: availableForConstraints
         && ![...NOT_NULL_BLOCKERS].some((code) => codes.has(code)),
       canAddUniqueIdentity: availableForConstraints

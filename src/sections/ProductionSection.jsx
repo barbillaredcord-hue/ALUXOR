@@ -3,6 +3,7 @@ import { ClipboardList, ExternalLink, ShoppingCart } from 'lucide-react';
 import {
   PRODUCTION_STATUSES,
   canAdvanceProductionOrder,
+  isProjectReadOnly,
   normalizeProductionStatus,
   productionPriorityOptions,
   productionStatusOptions,
@@ -191,6 +192,7 @@ export default function ProductionSection({
   }, [selectedOrder?.id, selectedOrder?.updatedAt, selectedOrder?.version]);
 
   function updateDraft(field, value) {
+    if (!selectedOrderCanAdvance) return;
     setDraft((current) => {
       const nextDraft = { ...current, [field]: value };
       latestDraftRef.current = nextDraft;
@@ -206,6 +208,7 @@ export default function ProductionSection({
 
     if (
       selectedOrder
+      && selectedOrderCanAdvance
       && onUpdateProductionOrder
       && !productionDraftMatchesOrder(selectedOrder, latestDraftRef.current)
     ) {
@@ -226,6 +229,7 @@ export default function ProductionSection({
 
     if (
       !selectedOrder
+      || !selectedOrderCanAdvance
       || !onUpdateProductionOrder
       || productionDraftMatchesOrder(selectedOrder, draft)
     ) return undefined;
@@ -370,6 +374,9 @@ export default function ProductionSection({
         >
           {selectedOrder ? (
             <>
+              {isProjectReadOnly(selectedOrder) && (
+                <p className="advanced-note" role="status"><strong>Proyecto entregado.</strong> Orden visible en modo de solo lectura.</p>
+              )}
               <div className="production-order-detail-head">
                 <div>
                   <span>Detalle de la orden</span>
@@ -460,7 +467,7 @@ export default function ProductionSection({
                 ) : <p>Sin lista de compras.</p>}
               </article>
               <div className="actions compact">
-                {!relatedPurchase && (
+                {!relatedPurchase && !isProjectReadOnly(selectedOrder) && (
                   <button
                     type="button"
                     disabled={!canManagePurchases || !selectedOrderCanAdvance}

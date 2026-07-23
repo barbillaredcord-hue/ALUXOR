@@ -6,6 +6,7 @@ import {
   normalizePurchaseStatus,
 } from '../lib/purchases/purchaseSummary.js';
 import { sortPurchaseItems } from '../lib/purchases/purchaseEngine.js';
+import { isProjectReadOnly } from '../lib/production/productionEngine.js';
 import {
   PURCHASE_OPERATIONAL_STATES,
   filterPurchaseHistory,
@@ -271,8 +272,15 @@ export default function PurchasesSection({
   const displayPurchaseState = displayPurchase
     ? purchaseViews.stateById.get(displayPurchase.id)
     : null;
+  const displayProductionOrder = displayPurchase
+    ? purchaseViews.productionOrdersById.get(
+      displayPurchase.productionOrderId || displayPurchase.production_order_id,
+    )
+    : null;
+  const projectReadOnly = isProjectReadOnly(displayProductionOrder);
   const canEditPurchase = canManage
-    && displayPurchaseState === PURCHASE_OPERATIONAL_STATES.ACTIVE;
+    && displayPurchaseState === PURCHASE_OPERATIONAL_STATES.ACTIVE
+    && !projectReadOnly;
   flushSaveRef.current = flushPurchaseSave;
   const purchaseItems = useMemo(
     () => sortPurchaseItems(displayPurchase?.items || []),
@@ -523,6 +531,9 @@ export default function PurchasesSection({
 
       {displayPurchase ? (
         <>
+          {projectReadOnly && (
+            <div className="purchase-actions" aria-live="polite"><strong>Proyecto entregado · compra en modo de solo lectura</strong></div>
+          )}
           {displayPurchaseState !== PURCHASE_OPERATIONAL_STATES.ACTIVE && (
             <div className="purchase-actions" aria-live="polite">
               <strong>{displayPurchaseState === PURCHASE_OPERATIONAL_STATES.CANCELLED
@@ -585,7 +596,7 @@ export default function PurchasesSection({
               void flushPurchaseSave?.(displayPurchase.id);
               selectPurchaseForView(null);
             }}>Volver al índice</button>
-            <button type="button" disabled={!canEditPurchase} onClick={markAllBought}>Marcar todo como comprado</button>
+            {canEditPurchase && <button type="button" onClick={markAllBought}>Marcar todo como comprado</button>}
             <button type="button" className="ghost" onClick={printList}><Printer size={18} /> Generar lista imprimible</button>
             <button type="button" className="ghost" onClick={() => onOpenProduction?.(displayPurchase)}>Ver Producción</button>
             <button type="button" className="ghost" onClick={() => onOpenReceiving?.(displayPurchase)}>Ver Recepción</button>

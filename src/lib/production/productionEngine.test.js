@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { createProductionOrder, updateProductionOrder } from './productionEngine.js';
+import {
+  canAdvanceProductionOrder,
+  createProductionOrder,
+  isProjectReadOnly,
+  updateProductionOrder,
+} from './productionEngine.js';
 
 const ORDER_ID = '33333333-3333-4333-8333-333333333333';
 
@@ -24,5 +29,19 @@ describe('identidad de órdenes de producción', () => {
     expect(createProductionOrder({
       workspaceId: 'ws', quoteId: 'quote', folio: 'OT-20260722-001',
     }).id).toMatch(/^[0-9a-f-]{36}$/i);
+  });
+});
+
+describe('modo de solo lectura del proyecto', () => {
+  it('depende únicamente del estado canónico Entregado', () => {
+    expect(isProjectReadOnly({ estado: 'Entregado' })).toBe(true);
+    expect(isProjectReadOnly({ status: 'Entregado' })).toBe(true);
+    expect(isProjectReadOnly({ estado: 'En instalación' })).toBe(false);
+    expect(isProjectReadOnly(null)).toBe(false);
+  });
+
+  it('impide avanzar una orden entregada sin afectar órdenes activas', () => {
+    expect(canAdvanceProductionOrder({ estado: 'Entregado' })).toBe(false);
+    expect(canAdvanceProductionOrder({ estado: 'Fabricando' })).toBe(true);
   });
 });

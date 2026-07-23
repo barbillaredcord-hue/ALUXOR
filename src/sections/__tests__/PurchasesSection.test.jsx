@@ -15,6 +15,31 @@ import PurchasesSection, {
 const formatNumber = (value) => Number(value || 0).toFixed(0);
 
 describe('PurchasesSection durable', () => {
+  it('bloquea la compra relacionada con una orden entregada', () => {
+    const purchase = {
+      id: 'purchase-delivered', productionOrderId: 'order-delivered',
+      folio: 'OC-E', supplier: 'Proveedor', status: 'pendiente', active: true,
+      orderedAt: '', expectedAt: '', receivedAt: '', notes: '',
+      items: [{
+        id: 'item-e', group: 'Materiales', name: 'MDF', unit: 'hoja',
+        quantity: 1, unitCost: 100, totalCost: 100, status: 'pendiente',
+      }],
+    };
+    const markup = renderToStaticMarkup(<PurchasesSection
+      purchases={[purchase]}
+      activePurchase={purchase}
+      selectedPurchaseId={purchase.id}
+      productionOrders={[{ id: 'order-delivered', estado: 'Entregado' }]}
+      canManage
+      money={formatNumber}
+      decimal={formatNumber}
+    />);
+    expect(markup).toContain('Proyecto entregado · compra en modo de solo lectura');
+    expect(markup).not.toContain('Marcar todo como comprado');
+    expect(markup).toContain('Generar lista imprimible');
+    expect(markup).toMatch(/<input disabled=""/);
+  });
+
   it('renderiza la compra persistente y no materiales derivados de props de cotización', () => {
     const markup = renderToStaticMarkup(<PurchasesSection
       purchases={[{

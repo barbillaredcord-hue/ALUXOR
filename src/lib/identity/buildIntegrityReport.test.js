@@ -3,6 +3,7 @@ import { auditLocalIntegrity } from './auditLocalIntegrity.js';
 import { buildIntegrityReport } from './buildIntegrityReport.js';
 
 const TABLES_COMPLETED = {
+  workspaces: { status: 'completed' },
   quotes: { status: 'completed' },
   productionOrders: { status: 'completed' },
   purchases: { status: 'completed' },
@@ -11,6 +12,7 @@ const TABLES_COMPLETED = {
 
 function remoteAudit(records = {}) {
   const normalized = {
+    workspaces: records.workspaces || [],
     quotes: records.quotes || [],
     productionOrders: records.productionOrders || [],
     purchases: records.purchases || [],
@@ -33,6 +35,7 @@ describe('buildIntegrityReport', () => {
       status: 'clean',
       totals: { errors: 0, warnings: 0, info: 0, localRecords: 0, remoteRecords: 0 },
       readiness: {
+        status: 'READY', reasons: [],
         canAddNotNull: true, canAddUniqueIdentity: true,
         canAddForeignKeys: true, requiresLegacyRepair: false,
       },
@@ -50,6 +53,8 @@ describe('buildIntegrityReport', () => {
     const report = buildIntegrityReport({ localAudit: local, remoteAudit: remoteAudit() });
     expect(report.status).toBe('blocked');
     expect(report.readiness).toEqual({
+      status: 'BLOCKED',
+      reasons: expect.any(Array),
       canAddNotNull: false,
       canAddUniqueIdentity: false,
       canAddForeignKeys: false,

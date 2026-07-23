@@ -29,6 +29,7 @@ export function QuoteStatusControl({
   onChange,
   onOpenProduction,
   onCancelProject,
+  readOnly = false,
 }) {
   if (locked) {
     return (
@@ -37,7 +38,7 @@ export function QuoteStatusControl({
         <p className="advanced-note">Estado controlado por Producción</p>
         <div className="actions compact">
           <button type="button" className="ghost" onClick={onOpenProduction}>Abrir Producción</button>
-          <button type="button" className="ghost" onClick={onCancelProject}>Cancelar proyecto</button>
+          {!readOnly && <button type="button" className="ghost" onClick={onCancelProject}>Cancelar proyecto</button>}
         </div>
       </div>
     );
@@ -49,6 +50,7 @@ export function QuoteStatusControl({
       data-quote-conflict={hasConflict ? 'true' : undefined}
       id="estadoCotizacion"
       value={value}
+      disabled={readOnly}
       onChange={(event) => onChange?.(event.target.value)}
     >
       {QUOTE_STATUS_OPTIONS.map((status) => <option key={status}>{status}</option>)}
@@ -115,11 +117,13 @@ export default function QuoteSection({
   quoteStatusLocked = false,
   onOpenProduction,
   onCancelProject,
+  readOnly = false,
 }) {
   const isFilled = mode === 'filled';
   const fieldProps = (fieldPath) => ({
     'data-quote-field': fieldPath,
     'data-quote-conflict': quoteFieldConflicts.includes(fieldPath) ? 'true' : undefined,
+    disabled: readOnly,
   });
   const fieldPathFromEvent = (event) => (
     event.target?.dataset?.quoteField || event.target?.id || ''
@@ -133,6 +137,7 @@ export default function QuoteSection({
       onChange={(status) => update('estadoCotizacion', status)}
       onOpenProduction={onOpenProduction}
       onCancelProject={onCancelProject}
+      readOnly={readOnly}
     />
   );
 
@@ -142,6 +147,7 @@ export default function QuoteSection({
             onFocusCapture={(event) => onQuoteFieldFocus(fieldPathFromEvent(event))}
             onBlurCapture={(event) => onQuoteFieldBlur(fieldPathFromEvent(event))}
           >
+            {readOnly && <p className="advanced-note" role="status"><strong>Proyecto entregado.</strong> Solo lectura; toda la información es histórica.</p>}
             {isFilled ? (
               <article className="panel quote-editor quote-main-editor filled-quote-editor">
                 <div className="section-head quote-head">
@@ -227,11 +233,11 @@ export default function QuoteSection({
                         <Field id={`filledNote-${item.id}`} label="Nota">
                           <input {...fieldProps(`materialItems.${item.id}.nota`)} id={`filledNote-${item.id}`} value={item.nota} onChange={(event) => updateMaterialItem(item.id, 'nota', event.target.value, true)} />
                         </Field>
-                        <button type="button" className="ghost filled-remove-button" onClick={() => removeMaterialItem(item.id)} aria-label={`Eliminar ${item.nombre}`}><Eraser size={16} /> Eliminar</button>
+                        <button type="button" className="ghost filled-remove-button" disabled={readOnly} onClick={() => removeMaterialItem(item.id)} aria-label={`Eliminar ${item.nombre}`}><Eraser size={16} /> Eliminar</button>
                       </article>
                     ))}
                   </div>
-                  <button type="button" className="ghost add-row-button" onClick={() => addMaterialItem(true)}>Agregar partida</button>
+                  {!readOnly && <button type="button" className="ghost add-row-button" onClick={() => addMaterialItem(true)}>Agregar partida</button>}
                 </section>
               </article>
             ) : (
@@ -246,7 +252,7 @@ export default function QuoteSection({
               </div>
               <div className="actions compact">
                 {Object.keys(quoteProfiles).map((key) => (
-                  <button key={key} type="button" className="ghost" onClick={() => applyQuoteProfile(key)}>
+                  <button key={key} type="button" className="ghost" disabled={readOnly} onClick={() => applyQuoteProfile(key)}>
                     {quoteProfiles[key].title}
                   </button>
                 ))}
@@ -255,9 +261,9 @@ export default function QuoteSection({
               <details className="quote-accordion quick-calculator">
                 <DashboardSummary number="03" title="Calculadora rápida de material" description="Herramienta de referencia, no suma hasta aplicar." status="Herramienta" highlight />
                 <div className="form-grid">
-                  <Field id="quickNombre" label="Nombre del material"><input id="quickNombre" value={quickCalc.nombre} onChange={(event) => updateQuickCalc('nombre', event.target.value)} /></Field>
+                  <Field id="quickNombre" label="Nombre del material"><input id="quickNombre" disabled={readOnly} value={quickCalc.nombre} onChange={(event) => updateQuickCalc('nombre', event.target.value)} /></Field>
                   <Field id="quickCategoria" label="Categoría">
-                    <select id="quickCategoria" value={quickCalc.categoria} onChange={(event) => updateQuickCalc('categoria', event.target.value)}>
+                    <select id="quickCategoria" disabled={readOnly} value={quickCalc.categoria} onChange={(event) => updateQuickCalc('categoria', event.target.value)}>
                       <option>Vidrio</option>
                       <option>Aluminio</option>
                       <option>Madera/Melamina</option>
@@ -266,7 +272,7 @@ export default function QuoteSection({
                     </select>
                   </Field>
                   <Field id="quickTipoCompra" label="Tipo de compra">
-                    <select id="quickTipoCompra" value={quickCalc.tipoCompra} onChange={(event) => updateQuickCalc('tipoCompra', event.target.value)}>
+                    <select id="quickTipoCompra" disabled={readOnly} value={quickCalc.tipoCompra} onChange={(event) => updateQuickCalc('tipoCompra', event.target.value)}>
                       <option value="hoja">Hoja / placa</option>
                       <option value="pieza">Pieza</option>
                       <option value="area">Metro cuadrado</option>
@@ -275,27 +281,27 @@ export default function QuoteSection({
                     </select>
                   </Field>
                   <Field id="quickMaterialId" label="Material destino">
-                    <select id="quickMaterialId" value={quickCalc.materialId} onChange={(event) => updateQuickCalc('materialId', event.target.value)}>
+                    <select id="quickMaterialId" disabled={readOnly} value={quickCalc.materialId} onChange={(event) => updateQuickCalc('materialId', event.target.value)}>
                       <option value="">Crear nuevo</option>
                       {Quote.materialItemsFromForm(form, quote.areaTotal, quoteHelpers).map((item) => <option key={item.id} value={item.id}>{item.nombre}</option>)}
                     </select>
                   </Field>
                   <Field id="quickBaseUso" label="Usar base">
-                    <select id="quickBaseUso" value={quickCalc.baseUso} onChange={(event) => updateQuickCalc('baseUso', event.target.value)}>
+                    <select id="quickBaseUso" disabled={readOnly} value={quickCalc.baseUso} onChange={(event) => updateQuickCalc('baseUso', event.target.value)}>
                       <option value="medidas">Automático de medidas</option>
                       <option value="manual">Captura manual</option>
                     </select>
                   </Field>
-                  <Field id="quickAncho" label="Ancho cm"><input id="quickAncho" type="number" value={quickCalc.ancho} onChange={(event) => updateQuickCalc('ancho', event.target.value)} /></Field>
-                  <Field id="quickAlto" label="Alto cm"><input id="quickAlto" type="number" value={quickCalc.alto} onChange={(event) => updateQuickCalc('alto', event.target.value)} /></Field>
-                  <Field id="quickLargo" label="Largo cm"><input id="quickLargo" type="number" value={quickCalc.largo} onChange={(event) => updateQuickCalc('largo', event.target.value)} /></Field>
-                  <Field id="quickCantidad" label="Cantidad comprada"><input id="quickCantidad" type="number" value={quickCalc.cantidad} onChange={(event) => updateQuickCalc('cantidad', event.target.value)} /></Field>
-                  <Field id="quickPrecioTotal" label="Precio total de compra"><input id="quickPrecioTotal" type="number" value={quickCalc.precioTotal} onChange={(event) => updateQuickCalc('precioTotal', event.target.value)} /></Field>
-                  <Field id="quickAreaManual" label="Área necesaria manual"><input id="quickAreaManual" type="number" value={quickCalc.areaManual} onChange={(event) => updateQuickCalc('areaManual', event.target.value)} /></Field>
-                  <Field id="quickLinealManual" label="ML necesarios manual"><input id="quickLinealManual" type="number" value={quickCalc.linealManual} onChange={(event) => updateQuickCalc('linealManual', event.target.value)} /></Field>
-                  <Field id="quickCantidadManual" label="Cantidad necesaria manual"><input id="quickCantidadManual" type="number" value={quickCalc.cantidadManual} onChange={(event) => updateQuickCalc('cantidadManual', event.target.value)} /></Field>
-                  <Field id="quickMerma" label="Merma %"><input id="quickMerma" type="number" value={quickCalc.merma} onChange={(event) => updateQuickCalc('merma', event.target.value)} /></Field>
-                  <Field id="quickMargen" label="Margen %"><input id="quickMargen" type="number" value={quickCalc.margen} onChange={(event) => updateQuickCalc('margen', event.target.value)} /></Field>
+                  <Field id="quickAncho" label="Ancho cm"><input id="quickAncho" disabled={readOnly} type="number" value={quickCalc.ancho} onChange={(event) => updateQuickCalc('ancho', event.target.value)} /></Field>
+                  <Field id="quickAlto" label="Alto cm"><input id="quickAlto" disabled={readOnly} type="number" value={quickCalc.alto} onChange={(event) => updateQuickCalc('alto', event.target.value)} /></Field>
+                  <Field id="quickLargo" label="Largo cm"><input id="quickLargo" disabled={readOnly} type="number" value={quickCalc.largo} onChange={(event) => updateQuickCalc('largo', event.target.value)} /></Field>
+                  <Field id="quickCantidad" label="Cantidad comprada"><input id="quickCantidad" disabled={readOnly} type="number" value={quickCalc.cantidad} onChange={(event) => updateQuickCalc('cantidad', event.target.value)} /></Field>
+                  <Field id="quickPrecioTotal" label="Precio total de compra"><input id="quickPrecioTotal" disabled={readOnly} type="number" value={quickCalc.precioTotal} onChange={(event) => updateQuickCalc('precioTotal', event.target.value)} /></Field>
+                  <Field id="quickAreaManual" label="Área necesaria manual"><input id="quickAreaManual" disabled={readOnly} type="number" value={quickCalc.areaManual} onChange={(event) => updateQuickCalc('areaManual', event.target.value)} /></Field>
+                  <Field id="quickLinealManual" label="ML necesarios manual"><input id="quickLinealManual" disabled={readOnly} type="number" value={quickCalc.linealManual} onChange={(event) => updateQuickCalc('linealManual', event.target.value)} /></Field>
+                  <Field id="quickCantidadManual" label="Cantidad necesaria manual"><input id="quickCantidadManual" disabled={readOnly} type="number" value={quickCalc.cantidadManual} onChange={(event) => updateQuickCalc('cantidadManual', event.target.value)} /></Field>
+                  <Field id="quickMerma" label="Merma %"><input id="quickMerma" disabled={readOnly} type="number" value={quickCalc.merma} onChange={(event) => updateQuickCalc('merma', event.target.value)} /></Field>
+                  <Field id="quickMargen" label="Margen %"><input id="quickMargen" disabled={readOnly} type="number" value={quickCalc.margen} onChange={(event) => updateQuickCalc('margen', event.target.value)} /></Field>
                 </div>
                 <div className="quick-result-groups">
                   <section>
@@ -331,7 +337,7 @@ export default function QuoteSection({
                 </details>
                 <div className="actions compact">
                   <button type="button" className="ghost" onClick={() => copyText(quickCalcText(), 'Calculadora de costo')}><Copy size={18} /> Copiar</button>
-                  <button type="button" className="ghost" onClick={applyQuickCalcToMaterial}>Aplicar a material</button>
+                  {!readOnly && <button type="button" className="ghost" onClick={applyQuickCalcToMaterial}>Aplicar a material</button>}
                 </div>
               </details>
 
@@ -398,11 +404,11 @@ export default function QuoteSection({
                         <strong>{decimal(item.areaTotal)} m²</strong>
                         <strong>{decimal(item.linearTotal)} m</strong>
                         <strong>{decimal(item.areaTotal)} m²</strong>
-                        <button type="button" className="ghost" onClick={() => removeMeasureItem(item.id)} aria-label="Eliminar medida"><Eraser size={16} /></button>
+                        <button type="button" className="ghost" disabled={readOnly} onClick={() => removeMeasureItem(item.id)} aria-label="Eliminar medida"><Eraser size={16} /></button>
                       </div>
                     ))}
                   </div>
-                  <button type="button" className="ghost add-row-button" onClick={addMeasureItem}>Agregar medida</button>
+                  {!readOnly && <button type="button" className="ghost add-row-button" onClick={addMeasureItem}>Agregar medida</button>}
                 </details>
 
                 <details className="quote-accordion">
@@ -463,7 +469,7 @@ export default function QuoteSection({
                         <strong>{money(item.costTotal)}</strong>
                         <strong>{money(item.saleTotal)}</strong>
                         <strong>{money(item.marginAmount)}</strong>
-                        <button type="button" className="ghost" onClick={() => removeMaterialItem(item.id)} aria-label="Eliminar material"><Eraser size={16} /></button>
+                        <button type="button" className="ghost" disabled={readOnly} onClick={() => removeMaterialItem(item.id)} aria-label="Eliminar material"><Eraser size={16} /></button>
                         {item.tipoCompra === 'hoja' && (
                           <div className={`material-optimization-note ${item.optimizationStatus === 'optimized' ? 'is-optimized' : 'is-pending'}`}>
                             <strong>{item.optimizationStatus === 'optimized' ? 'Material calculado con optimización' : 'Pendiente de optimizar'}</strong>
@@ -490,7 +496,7 @@ export default function QuoteSection({
                       </div>
                     ))}
                   </div>
-                  <button type="button" className="ghost add-row-button" onClick={addMaterialItem}>Agregar material</button>
+                  {!readOnly && <button type="button" className="ghost add-row-button" onClick={addMaterialItem}>Agregar material</button>}
                 </details>
 
                 <details className="quote-accordion">
@@ -521,7 +527,7 @@ export default function QuoteSection({
                         <input {...fieldProps(`accessoryItems.${item.id}.precioUnitario`)} type="number" value={item.precioManual ? item.precioUnitario : Math.round(item.precioCliente)} onChange={(event) => updateAccessoryItem(item.id, 'precioUnitario', numberValue(event.target.value))} aria-label="Precio unitario" />
                         <strong>{money(item.costTotal)}</strong>
                         <strong>{money(item.saleTotal)}</strong>
-                        <button type="button" className="ghost" onClick={() => removeAccessoryItem(item.id)} aria-label="Eliminar accesorio"><Eraser size={16} /></button>
+                        <button type="button" className="ghost" disabled={readOnly} onClick={() => removeAccessoryItem(item.id)} aria-label="Eliminar accesorio"><Eraser size={16} /></button>
                         <CalculationChain
                           title={`¿Cómo se calculó ${item.nombre}?`}
                           steps={[
@@ -535,7 +541,7 @@ export default function QuoteSection({
                       </div>
                     ))}
                   </div>
-                  <button type="button" className="ghost add-row-button" onClick={addAccessoryItem}>Agregar accesorio</button>
+                  {!readOnly && <button type="button" className="ghost add-row-button" onClick={addAccessoryItem}>Agregar accesorio</button>}
                 </details>
 
                 <details className="quote-accordion">
@@ -646,7 +652,7 @@ export default function QuoteSection({
                     <p className="live-summary-warning" role="status" aria-live="polite">{dataHealth.warnings[0]}</p>
                   )}
                   <div className="actions compact">
-                    <button type="button" onClick={saveToHistory}><Save size={18} /> Guardar</button>
+                    {!readOnly && <button type="button" onClick={saveToHistory}><Save size={18} /> Guardar</button>}
                     {isFilled && <button type="button" className="ghost" onClick={() => openPrint('business')}><FileText size={18} /> PDF interno</button>}
                     <button type="button" className="ghost" onClick={() => openPrint('client')}><FileText size={18} /> {isFilled ? 'PDF cliente' : 'Editar PDF'}</button>
                     <button type="button" className="ghost" onClick={openWhatsApp}><MessageCircle size={18} /> WhatsApp</button>

@@ -24,7 +24,7 @@ function materialQuantity(item, decimal) {
   return { quantity: item.piezasNecesarias || item.rowQuantity, unit: 'pza(s)' };
 }
 
-export default function InventorySection({ form, quote, money, decimal }) {
+export default function InventorySection({ form, quote, money, decimal, readOnly = false }) {
   const items = useMemo(() => [
     ...quote.materialRows.map((item) => {
       const quantity = materialQuantity(item, decimal);
@@ -95,7 +95,7 @@ export default function InventorySection({ form, quote, money, decimal }) {
                         <span>{item.category} · {item.unit}</span>
                       </div>
                       <div><span>Requerido</span><strong>{decimal(item.required)} {item.unit}</strong></div>
-                      <label>Disponible<input type="number" value={availableFor(item.id)} onChange={(event) => setAvailable((current) => ({ ...current, [item.id]: event.target.value }))} /></label>
+                      <label>Disponible<input disabled={readOnly} type="number" value={availableFor(item.id)} onChange={(event) => setAvailable((current) => ({ ...current, [item.id]: event.target.value }))} /></label>
                       <div><span>Faltante</span><strong>{decimal(missing)} {item.unit}</strong></div>
                       <em>{status}</em>
                     </div>
@@ -111,7 +111,7 @@ export default function InventorySection({ form, quote, money, decimal }) {
           {missingItems.length ? missingItems.map((item) => (
             <span key={item.id}>{item.name} · {decimal(missingFor(item))} {item.unit}</span>
           )) : <p>No hay faltantes.</p>}
-          <button type="button">Preparar compra</button>
+          {!readOnly && <button type="button">Preparar compra</button>}
         </aside>
       </div>
     </section>

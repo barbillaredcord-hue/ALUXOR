@@ -30,4 +30,15 @@ describe('autoridad del estado en Cotización', () => {
     expect(markup).toContain('Abrir Producción');
     expect(markup).toContain('Cancelar proyecto');
   });
+
+  it('conserva acceso a Producción y oculta cancelar cuando está entregado', () => {
+    const markup = renderToStaticMarkup(<QuoteStatusControl
+      value="Aceptada"
+      displayStatus="Terminada"
+      locked
+      readOnly
+    />);
+    expect(markup).toContain('Abrir Producción');
+    expect(markup).not.toContain('Cancelar proyecto');
+  });
 });

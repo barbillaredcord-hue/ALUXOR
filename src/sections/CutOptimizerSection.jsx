@@ -7,7 +7,7 @@ const strategyLabels = {
   'input-order': 'Orden capturado',
 };
 
-export default function CutOptimizerSection({ quote, decimal }) {
+export default function CutOptimizerSection({ quote, decimal, readOnly = false }) {
   const [run, setRun] = useState(0);
   const [config, setConfig] = useState({
     allowRotation: true,
@@ -62,6 +62,7 @@ export default function CutOptimizerSection({ quote, decimal }) {
         </div>
         <label className="cut-toggle">
           <input
+            disabled={readOnly}
             type="checkbox"
             checked={config.allowRotation}
             onChange={(event) => setConfig((current) => ({ ...current, allowRotation: event.target.checked }))}
@@ -71,6 +72,7 @@ export default function CutOptimizerSection({ quote, decimal }) {
         <label>
           Kerf / disco
           <input
+            disabled={readOnly}
             type="number"
             min="0"
             step="0.1"
@@ -80,7 +82,7 @@ export default function CutOptimizerSection({ quote, decimal }) {
         </label>
         <label>
           Estrategia
-          <select value={config.strategy} onChange={(event) => setConfig((current) => ({ ...current, strategy: event.target.value }))}>
+          <select disabled={readOnly} value={config.strategy} onChange={(event) => setConfig((current) => ({ ...current, strategy: event.target.value }))}>
             <option value="largest-first">Mayor área primero</option>
             <option value="input-order">Orden capturado</option>
           </select>
@@ -116,7 +118,7 @@ export default function CutOptimizerSection({ quote, decimal }) {
         </div>
       )}
 
-      <button type="button" className="cut-rerun" onClick={() => setRun((value) => value + 1)}><RefreshCw size={18} /> Optimizar nuevamente</button>
+      {!readOnly && <button type="button" className="cut-rerun" onClick={() => setRun((value) => value + 1)}><RefreshCw size={18} /> Optimizar nuevamente</button>}
 
       <div className="cut-sheets">
         {result.sheets.filter((sheet) => sheet.pieces.length > 0).map((sheet) => (

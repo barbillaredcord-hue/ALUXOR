@@ -11,6 +11,7 @@ export default function AnnouncementSection({
   tonos,
   mainOutput,
   copyText,
+  readOnly = false,
 }) {
   return (
     <section className="panel-grid two-cols">
@@ -18,13 +19,13 @@ export default function AnnouncementSection({
         <h2>Datos del anuncio</h2>
         <div className="form-grid">
           <Field id="giro" label="Giro">
-            <select id="giro" value={form.giro} onChange={(event) => update('giro', event.target.value)}>
+            <select id="giro" disabled={readOnly} value={form.giro} onChange={(event) => update('giro', event.target.value)}>
               <option>Carpintería</option>
               <option>Vidriería</option>
             </select>
           </Field>
           <Field id="tipoTrabajo" label="Tipo de trabajo" {...guideFor('tipoTrabajo')}>
-            <select id="tipoTrabajo" value={form.tipoTrabajo} onChange={(event) => update('tipoTrabajo', event.target.value)}>
+            <select id="tipoTrabajo" disabled={readOnly} value={form.tipoTrabajo} onChange={(event) => update('tipoTrabajo', event.target.value)}>
               {currentTypeOptions.map((item) => <option key={item}>{item}</option>)}
             </select>
           </Field>
@@ -37,7 +38,7 @@ export default function AnnouncementSection({
           <Field id="incluye" label="Incluye">{textareaInput('incluye')}</Field>
           <Field id="promocion" label="Promoción">{input('promocion')}</Field>
           <Field id="tono" label="Tono">
-            <select id="tono" value={form.tono} onChange={(event) => update('tono', event.target.value)}>
+            <select id="tono" disabled={readOnly} value={form.tono} onChange={(event) => update('tono', event.target.value)}>
               {Object.entries(tonos).map(([key, tone]) => <option key={key} value={key}>{tone.title}</option>)}
             </select>
           </Field>

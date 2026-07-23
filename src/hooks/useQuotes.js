@@ -10,6 +10,7 @@ import {
   quoteReferencesFromProductionOrder,
   resolveSharedProjectNote,
 } from '../lib/quotes/quoteReference.js';
+import { isProjectReadOnly } from '../lib/production/productionEngine.js';
 import {
   Pricing,
   Report,
@@ -347,6 +348,8 @@ export default function useQuotes({
   workspaceSettings,
   syncProductionOrderFromQuote,
   onQuoteDeleteCommitted,
+  getActiveProductionOrder,
+  isQuoteReadOnly,
 }) {
   const [form, setForm] = useState(defaults);
   const [history, setHistory] = useState([]);
@@ -1398,12 +1401,14 @@ export default function useQuotes({
   }, [authSession?.user?.id]);
 
   function updateDirtyQuoteForm(updater) {
+    if (isProjectReadOnly(getActiveProductionOrder?.())) return false;
     setQuoteCollaborationStatus('Guardando…');
     setForm((current) => {
       const next = typeof updater === 'function' ? updater(current) : updater;
       markQuoteFormDirty(current, next);
       return next;
     });
+    return true;
   }
 
   function update(field, value) {
@@ -1847,6 +1852,15 @@ export default function useQuotes({
           break;
         }
 
+        const queuedQuote = historyRef.current.find((item) => (
+          item.id === operation.quoteId
+        )) || { id: operation.quoteId };
+        if (isQuoteReadOnly?.(queuedQuote)) {
+          OfflineQueue.removeOperation(operation.id);
+          refreshPendingOfflineCount();
+          continue;
+        }
+
         if (operation.conflict) {
           const localItem = historyRef.current
             .find((item) => item.id === operation.quoteId);
@@ -2006,6 +2020,11 @@ export default function useQuotes({
     const autoConflictRetry = Boolean(options.autoConflictRetry);
     const navigateToHistory = !silent && options.navigateToHistory !== false;
     const editSession = quoteEditSessionRef.current;
+
+    if (isProjectReadOnly(getActiveProductionOrder?.())) {
+      setSyncStatus('Proyecto entregado · solo lectura');
+      return false;
+    }
 
     if (quoteSaveInFlightRef.current) {
       if (silent) {
@@ -2739,6 +2758,11 @@ export default function useQuotes({
   }
 
   function removeHistoryItem(id) {
+    const target = historyRef.current.find((item) => item.id === id);
+    if (isQuoteReadOnly?.(target || { id })) {
+      setSyncStatus('Proyecto entregado · solo lectura');
+      return false;
+    }
     const workspaceId = activeWorkspace?.id;
     const removedItem = historyRef.current.find((item) => item.id === id);
     const nextHistory = HistoryEngine.normalizeHistory(
@@ -2851,6 +2875,11 @@ export default function useQuotes({
   }
 
   function importHistoryBackup(event) {
+    if (isProjectReadOnly(getActiveProductionOrder?.())) {
+      event.target.value = '';
+      setSyncStatus('Proyecto entregado · solo lectura');
+      return;
+    }
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -2881,6 +2910,10 @@ export default function useQuotes({
     const editSession = quoteEditSessionRef.current;
     const previousItem = historyRef.current.find((item) => item.id === id);
     if (!previousItem) return;
+    if (isQuoteReadOnly?.(previousItem)) {
+      setSyncStatus('Proyecto entregado · solo lectura');
+      return false;
+    }
 
     const now = Date.now();
     const normalizedStatus = QuoteAdapter.normalizeQuoteStatus(nextStatus);
@@ -3030,6 +3063,7 @@ export default function useQuotes({
   }
 
   async function syncQuoteNoteFromProduction(order) {
+    if (isProjectReadOnly(order)) return false;
     const editSession = quoteEditSessionRef.current;
     const update = quoteNoteUpdateFromProduction(historyRef.current, order);
     if (!update.nextQuote) {
