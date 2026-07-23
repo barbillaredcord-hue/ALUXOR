@@ -101,6 +101,10 @@ export function startNewQuoteAndClearProductionSelection(
   return true;
 }
 
+export function getHistorySectionReadOnly(canEditWorkspaceQuotes) {
+  return !canEditWorkspaceQuotes;
+}
+
 function App() {
   const [largeText, setLargeText] = useState(false);
   const [activeSection, setActiveSection] = useState('inicio');
@@ -953,7 +957,7 @@ function App() {
             removeHistoryItem={removeHistoryItem}
             selectedHistoryPreview={selectedHistoryPreview}
             selectHistoryPreview={setSelectedHistoryPreview}
-            readOnly={!canEditWorkspaceQuotes || projectReadOnly}
+            readOnly={getHistorySectionReadOnly(canEditWorkspaceQuotes)}
             productionOrders={productionOrders}
             purchases={purchases}
             onOpenProduction={(order) => {

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { getHistorySectionReadOnly } from '../../app/App.jsx';
 import HistorySection from '../HistorySection.jsx';
 
 const quote = {
@@ -47,5 +48,27 @@ describe('autoridad de estado en Historial', () => {
     expect(markup).toContain('>Abrir</button>');
     expect(markup).not.toContain('Cancelar proyecto');
     expect(markup).not.toContain('aria-label="Eliminar Cocina"');
+  });
+
+  it('al volver de un Entregado permite cambiar otra cotización activa sin desbloquear el Entregado', () => {
+    const activeQuote = {
+      ...quote,
+      id: 'q2',
+      producto: 'Clóset',
+      status: 'Pendiente',
+      estadoCotizacion: 'Pendiente',
+    };
+    const markup = renderToStaticMarkup(<HistorySection
+      {...baseProps}
+      history={[quote, activeQuote]}
+      readOnly={getHistorySectionReadOnly(true)}
+      productionOrders={[{ id: 'ot1', quoteId: 'q1', estado: 'Entregado' }]}
+      purchases={[]}
+    />);
+
+    expect(markup).toContain('<select');
+    expect(markup).not.toContain('<select disabled=""');
+    expect(markup).not.toContain('aria-label="Eliminar Cocina"');
+    expect(markup).toContain('aria-label="Eliminar Clóset"');
   });
 });
