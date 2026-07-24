@@ -1,0 +1,19 @@
+.br-print-only {
+  display: none !important;
+}
+
+@media print {
+  .br-print-hidden {
+    display: none !important;
+  }
+
+  .br-print-only {
+    display: block !important;
+  }
+
+  .br-panel,
+  .br-card {
+    box-shadow: none !important;
+    break-inside: avoid;
+  }
+}

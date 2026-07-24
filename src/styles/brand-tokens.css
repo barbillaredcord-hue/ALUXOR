@@ -1,49 +1,135 @@
 /*
- * ALUXOR / BosqueReal — Brand Book v1.0
- * Base documental: no importar en la aplicación hasta una fase autorizada.
+ * ALUXOR / BosqueReal — Brand System v1
+ * Fuente CSS oficial. Los alias --brand-* se conservan por compatibilidad.
  */
 
 :root {
-  --brand-forest-950: #111512;
-  --brand-forest-900: #18231d;
-  --brand-forest-800: #263a30;
+  --br-color-graphite-950: #111915;
+  --br-color-graphite-900: #14241c;
+  --br-color-graphite-850: #17251d;
+  --br-color-graphite-800: #1b2a22;
+  --br-color-graphite-750: #102018;
+  --br-color-forest-700: #1f6b52;
+  --br-color-forest-600: #22745f;
+  --br-color-forest-800: #1b5d4c;
+  --br-color-tool-500: #f0c84e;
+  --br-color-gold-600: #c89b3c;
 
+  --br-surface-root: #eef1ed;
+  --br-surface-app: #eef2ed;
+  --br-surface-app-start: #f4f0e7;
+  --br-surface-app-end: #e8eee9;
+  --br-surface-base: #f6f2ea;
+  --br-surface-soft: #fcfaf6;
+  --br-surface-forest-soft: #e7f1ec;
+  --br-surface-sand: #efe3cf;
+  --br-surface-dashboard-row: #eef4f1;
+  --br-surface-dashboard-plan: #f8faf8;
+  --br-surface-raised: #fffdf8;
+  --br-surface-white: #ffffff;
+  --br-surface-inverse: #17201b;
+
+  --br-text-primary: #17201b;
+  --br-text-secondary: #526159;
+  --br-text-shell-secondary: #617068;
+  --br-text-shell-heading: #1d3429;
+  --br-text-muted: #7c8a83;
+  --br-text-inverse: #f8faf8;
+  --br-text-sidebar: #f6fbf7;
+
+  --br-border-subtle: #e5e7eb;
+  --br-border-default: #d1d5db;
+  --br-border-strong: #94a3b8;
+  --br-border-shell: rgba(17, 25, 21, 0.12);
+  --br-border-aluxor: rgba(23, 32, 27, 0.12);
+  --br-border-dashboard-row: #d7e2dc;
+  --br-focus-ring: #e3b64b;
+
+  --br-success: #22745f;
+  --br-success-soft: #e6f5ef;
+  --br-warning: #c98a18;
+  --br-warning-soft: #fff4d6;
+  --br-danger: #c43d3d;
+  --br-danger-soft: #fce8e8;
+  --br-info: #2563eb;
+  --br-info-soft: #e8f1ff;
+
+  --br-space-1: 2px;
+  --br-space-2: 4px;
+  --br-space-3: 8px;
+  --br-space-4: 12px;
+  --br-space-5: 16px;
+  --br-space-6: 24px;
+  --br-space-7: 32px;
+  --br-space-8: 40px;
+  --br-space-9: 48px;
+  --br-space-10: 64px;
+
+  --br-radius-xs: 4px;
+  --br-radius-sm: 8px;
+  --br-radius-md: 12px;
+  --br-radius-lg: 16px;
+  --br-radius-xl: 20px;
+  --br-radius-2xl: 28px;
+  --br-radius-pill: 999px;
+
+  --br-shadow-soft: 0 2px 8px rgba(23, 32, 27, 0.06);
+  --br-shadow-medium: 0 8px 24px rgba(23, 32, 27, 0.1);
+  --br-shadow-floating: 0 18px 46px rgba(20, 36, 28, 0.14);
+  --br-shadow-shell: 0 18px 42px rgba(17, 25, 21, 0.1);
+  --br-shadow-overlay: 0 28px 72px rgba(17, 24, 39, 0.2);
+  --br-shadow-focus: 0 0 0 3px rgba(34, 116, 95, 0.22);
+
+  --br-font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --br-font-mono: "JetBrains Mono", Menlo, Consolas, monospace;
+  --br-font-size-caption: 12px;
+  --br-font-size-body: 14px;
+  --br-font-size-body-lg: 16px;
+  --br-font-size-heading: 20px;
+  --br-font-size-title: 28px;
+  --br-line-height-compact: 1.15;
+  --br-line-height-normal: 1.4;
+  --br-line-height-relaxed: 1.6;
+
+  --br-duration-fast: 120ms;
+  --br-duration-normal: 180ms;
+  --br-duration-slow: 260ms;
+  --br-easing-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  --br-z-sticky: 100;
+  --br-z-header: 200;
+  --br-z-sidebar: 250;
+  --br-z-dropdown: 500;
+  --br-z-tooltip: 700;
+  --br-z-overlay: 800;
+  --br-z-modal: 1000;
+
+  --br-layout-sidebar: 292px;
+  --br-layout-workspace-sidebar: 304px;
+  --br-layout-inspector: 340px;
+  --br-layout-content-max: 1280px;
+
+  --brand-forest-950: var(--br-color-graphite-950);
+  --brand-forest-900: var(--br-color-graphite-900);
+  --brand-forest-800: var(--br-color-graphite-800);
   --brand-gold-600: #c6a15b;
   --brand-gold-400: #e0c27a;
-
   --brand-aluminum-200: #d8dde0;
   --brand-aluminum-600: #6f787d;
-
   --brand-wood-600: #8a5a35;
-
   --brand-ivory-100: #f4f1e8;
-  --brand-white: #ffffff;
-
-  --brand-space-1: 4px;
-  --brand-space-2: 8px;
-  --brand-space-3: 12px;
-  --brand-space-4: 16px;
-  --brand-space-6: 24px;
-  --brand-space-8: 32px;
-  --brand-space-12: 48px;
-  --brand-space-16: 64px;
-
+  --brand-white: var(--br-surface-white);
+  --brand-space-1: var(--br-space-2);
+  --brand-space-2: var(--br-space-3);
+  --brand-space-3: var(--br-space-4);
+  --brand-space-4: var(--br-space-5);
+  --brand-space-6: var(--br-space-6);
+  --brand-space-8: var(--br-space-7);
+  --brand-space-12: var(--br-space-9);
+  --brand-space-16: var(--br-space-10);
   --brand-radius-sm: 6px;
   --brand-radius-md: 10px;
-  --brand-radius-lg: 16px;
-
-  --brand-font-sans:
-    Inter,
-    ui-sans-serif,
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    sans-serif;
-
-  --brand-font-mono:
-    "SFMono-Regular",
-    Consolas,
-    "Liberation Mono",
-    monospace;
+  --brand-radius-lg: var(--br-radius-lg);
+  --brand-font-sans: var(--br-font-sans);
+  --brand-font-mono: var(--br-font-mono);
 }

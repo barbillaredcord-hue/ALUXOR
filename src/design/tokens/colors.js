@@ -9,6 +9,18 @@
  */
 
 export const colors = {
+  shell: {
+    app: '#EEF2ED',
+    raised: '#FFFDF8',
+    graphite: '#111915',
+    sidebar: '#14241C',
+    sidebarMid: '#17251D',
+    sidebarEnd: '#102018',
+    forest: '#1F6B52',
+    tool: '#F0C84E',
+    focus: '#E3B64B'
+  },
+
   surface: {
     primary: '#F6F2EA',
     secondary: '#FCFAF6',

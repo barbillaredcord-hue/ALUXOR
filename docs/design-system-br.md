@@ -6,7 +6,7 @@
 
 > Lenguaje visual, funcional y operativo compartido por los productos desarrollados por BR Studios.
 
-**Estado ALUXOR:** Aprobado en Fase 23.5 Día 1; Día 2 iniciado para Workspace 2.0; Día 3 pendiente antes de Fase 24.
+**Estado ALUXOR:** base visual iniciada en Fase 23.5 e infraestructura técnica consolidada en Fase 25.2E. La adopción permanece gradual y separada del dominio.
 
 ---
 
@@ -485,6 +485,24 @@ Los componentes iniciales del BR Design System serán:
 - BRStat.
 - BRModal.
 - BRTooltip.
+
+## Infraestructura disponible en Fase 25.2E
+
+El punto único de entrada es `src/design/index.js`. Desde ahí se exportan:
+
+- Tokens de color, tipografía, espaciado, radios, sombras, movimiento y capas.
+- El objeto `theme` y helpers puros para clases, variables CSS, unidades y lectura de tokens.
+- Los 15 componentes base BR existentes.
+
+La capa CSS oficial se divide por responsabilidad:
+
+- `brand-tokens.css`: variables oficiales y alias heredados compatibles.
+- `brand-components.css`: apariencia de componentes BR.
+- `brand-layout.css`: utilidades reutilizables de composición y layout.
+- `brand-accessibility.css`: foco visible, contenido para lectores de pantalla y movimiento reducido.
+- `brand-print.css`: reglas exclusivas de impresión.
+
+La adopción inicial se limita a Login, Header, Sidebar, Dashboard y Shell mediante sustituciones de valor exactamente equivalentes. Cotizaciones, Producción, Compras y demás superficies operativas no se migran en esta fase.
 
 ---
 
