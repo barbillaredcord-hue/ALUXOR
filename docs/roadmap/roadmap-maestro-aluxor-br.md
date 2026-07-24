@@ -10,7 +10,7 @@
 
 **Versión:** 1.0 (Borrador operativo)
 
-**Estado del Proyecto:** Era II — ERP Operativo (Fase 23.5 Día 2 en ejecución)
+**Estado del Proyecto:** Etapa III — ERP Operativo (Fase 25.3 implementada)
 
 **Fecha:** Julio 2026
 
@@ -96,17 +96,18 @@ Este documento debe actualizarse cada vez que:
 | Inventario | 🟡 En evolución | Requiere reservas, movimientos y conexión por proyecto. |
 | Fabricación | 🟡 En evolución | Requiere planeación y seguimiento real. |
 | Historial | 🟡 Funcional | Preparado para backend remoto con `VITE_HISTORY_API_URL`; backend remoto aún no implementado. |
+| Business State | 🟢 Implementado | Adapter 2.0 derivado, sin persistencia ni reglas de dominio; consumidores completos pendientes. |
 | IA | 🔵 Planeada | Aún no debe ser prioridad hasta consolidar trazabilidad. |
 
-## Dashboard de la Era II
+## Dashboard del estado actual
 
-- Era actual: Era II — ERP Operativo.
-- Fase activa: Fase 23.5 — Architecture & Design Bridge.
-- Estado general: Fase 23.5 Día 1 cerrada y aprobada; Día 2 iniciado y aún no cerrado; Día 3 pendiente.
-- Objetivo inmediato: Cerrar Fase 23.5 Día 2 y ejecutar Día 3 — Validación, pulido y cierre.
+- Etapa actual: Etapa III — ERP Operativo.
+- Fase oficial: 25.3 — Business State 2.0.
+- Estado general: Brand System 25.2E completado y Business State 2.0 implementado.
+- Objetivo inmediato: preparar 25.4 — Operational Center.
 - Build: Estable.
-- Pruebas: Aprobadas (estado base).
-- Próximo hito: Cerrar Día 3 de Fase 23.5 antes de iniciar Fase 24.
+- Pruebas: Aprobadas.
+- Próximo hito: adopción incremental del adapter común en consumidores operativos.
 
 ## Avance del Proyecto
 
@@ -115,11 +116,11 @@ Este documento debe actualizarse cada vez que:
 | Era 0 | ✅ | 100% |
 | Era I | ✅ | 100% |
 | Fase 22 | ✅ | 100% |
-| Era II | 🟡 | 25% |
+| Era II | ✅ | Base histórica completada |
 | Fase 23 | ✅ | 100% |
 | Fase 23.5 | 🟡 | Día 2 iniciado; Día 3 pendiente |
 | Fase 24 | ⏳ | 0% |
-| Fase 25 | ⏳ | 0% |
+| Fase 25 | 🟡 | 25.3 implementada; 25.4 siguiente |
 | Fase 26 | ⏳ | 0% |
 | Fase 27 | ⏳ | 0% |
 | Fase 28 | ⏳ | 0% |
@@ -388,11 +389,28 @@ Estado: pendiente.
 
 ### Siguiente paso inmediato
 
-Cerrar el Día 2 de la Fase 23.5 y ejecutar Día 3 antes de iniciar Fase 24.
+Preparar la Fase 25.4 — Operational Center sobre el contrato común de Business State 2.0.
 
 ### Pendiente de continuidad
 
-La Fase 24 permanece planeada y no ha iniciado. Cualquier referencia a Fase 24 debe entenderse como posterior al cierre completo de Día 3 de Fase 23.5.
+Dashboard, Inspector Inteligente, Project Companion y Centro del Proyecto todavía no consumen el contrato completo.
+
+## Actualización oficial — Fase 25.3
+
+Las secciones históricas 6 a 12 conservan la planeación original. La numeración oficial vigente y el estado verificable pertenecen a `PROJECT_MASTER.md`.
+
+**Business State 2.0 — implementado el 24/07/2026**
+
+- Centraliza la vista derivada del ERP sin almacenar datos.
+- Consume summaries de Cotización, Producción, Compras, Workflow y summaries existentes disponibles.
+- Expone proyecto, cliente, cotización, producción, compras, workflow, salud, riesgos, pendientes, actividad, alertas, indicadores, última actualización y read only.
+- Conserva la propiedad de datos y reglas dentro de cada dominio.
+- No introduce Context, Redux, Zustand, Providers, stores ni persistencia.
+- Prepara Dashboard, Inspector Inteligente, Project Companion y Centro del Proyecto sin migrarlos de forma general.
+
+Arquitectura vigente:
+
+Dominios propietarios → Summaries → Business State → Consumidores.
 
 ---
 
@@ -646,11 +664,11 @@ Antes de iniciar cualquier tarea se debe responder:
 
 # Próxima Sesión de Desarrollo
 
-- **Objetivo:** Cerrar Fase 23.5 Día 2 y preparar Día 3 — Validación, pulido y cierre.
-- **Módulos afectados:** Cotización, Producción, Historial y Project Companion.
-- **Motores afectados:** BR Engine y Project Companion.
-- **Validaciones esperadas:** Base visual estable, flujo centrado en proyecto, estado local/remoto claro y motor principal de cálculo sin cambios.
-- **Resultado esperado:** Workspace 2.0 cerrado y Día 3 listo para completar la fase puente antes de iniciar Fase 24.
+- **Objetivo:** preparar Fase 25.4 — Operational Center.
+- **Consumidores previstos:** Dashboard, Inspector Inteligente, Project Companion y Centro del Proyecto.
+- **Motores afectados:** ninguno; los consumidores deberán leer Business State.
+- **Validaciones esperadas:** misma información derivada en todos los consumidores, sin cálculos locales ni fuentes paralelas.
+- **Resultado esperado:** primera adopción controlada del adapter central.
 
 ---
 
@@ -672,4 +690,4 @@ La plataforma se expande más allá de carpintería, vidrio y aluminio hacia mú
 
 # 18. Próximo Objetivo Inmediato
 
-Cerrar Fase 23.5 Día 2 — Workspace 2.0 guiado por estaciones, ejecutar Día 3 — Validación, pulido y cierre, y solo después preparar el inicio de Fase 24.
+Preparar Fase 25.4 — Operational Center mediante adopción incremental de Business State 2.0, sin mover reglas ni datos fuera de sus dominios.

@@ -4,8 +4,8 @@
 
 - **Workspace operativo actual:** ALUXOR / BosqueReal
 - **Etapa activa:** Etapa III — ERP operativo
-- **Fase oficial:** 25.2E — Brand System e infraestructura visual
-- **Última actualización:** 23/07/2026
+- **Fase oficial:** 25.3 — Business State 2.0
+- **Última actualización:** 24/07/2026
 
 ## 1. Identidad del proyecto
 
@@ -91,9 +91,9 @@ Componentes verificados:
 - **Integrity:** `runIntegrityAudit()` es la entrada pública explícita; combina auditor local estricto, auditor remoto autenticado de solo lectura, comparación local/remota, reporte consolidado, recomendaciones y readiness conservador.
 - **Read Only:** `isProjectReadOnly()` pertenece al Production Engine y deriva únicamente de `Entregado`; los hooks de Cotización, Producción, Compras y Workspace rechazan mutaciones y las secciones existentes reflejan el mismo contrato sin duplicar pantallas.
 - **Cut Optimizer:** motor determinista, validación física y salida consumida por BR Engine y Fabricación; su persistencia operacional sigue pendiente.
-- **Business State:** adapter derivado que agrega summaries de cotización, producción, compras, inventario, clientes, finanzas, fabricación, historial y workflow; también expone `project.readOnly` y `project.mode` desde la orden activa.
+- **Business State:** adapter central derivado y sin persistencia. Agrega summaries existentes y expone proyecto, cliente, cotización, producción, compras, workflow, salud, riesgos, pendientes, actividad, alertas, indicadores, última actualización y read only sin apropiarse de los dominios.
 - **Workspace:** aislamiento y permisos como contexto empresarial; el indicador permanente de workspace del sistema sigue pendiente.
-- **Brand System:** branding y PWA oficiales están integrados. Existen tokens JavaScript, tokens CSS no importados y un `BRCard` funcional; el índice de diseño, utilidad de tema y la mayoría de componentes `BR*` continúan vacíos o sin adopción.
+- **Brand System:** infraestructura visual consolidada en 25.2E con tokens JavaScript y CSS, tema funcional, helpers, componentes `BR*`, clases de layout y capas separadas de accesibilidad e impresión.
 - **Storage, Offline y Realtime:** implementados en los dominios durables, no todavía en todo el ERP.
 - **Supabase:** persistencia remota de los dominios habilitados, bajo sesión y RLS existentes.
 
@@ -130,7 +130,7 @@ Reglas oficiales:
 - Fabricación consume la orden y el plan de corte; no recalcula la optimización.
 - Una orden con estado `Entregado` permanece consultable, pero no admite actualizaciones, nuevas compras, cambios de historial ni configuración del workspace desde el proyecto activo.
 - Los summaries y fuentes reutilizables alimentan Business State.
-- Inicio e Inspector consumirán Business State en fases posteriores; actualmente todavía usan datos directos o parciales.
+- Dashboard, Inspector Inteligente y Project Companion consumirán Business State en fases posteriores; el Centro del Proyecto mantiene su consumo parcial existente.
 
 ## 7. Roadmap maestro por etapas
 
@@ -138,8 +138,8 @@ Reglas oficiales:
 |---|---|---|---|
 | I — Fundación | Establecer aplicación, workspace, diseño, motores y pruebas base. | Completada | Base React/Vite, BR Engine, estructura por proyecto y pruebas. |
 | II — Cotizador profesional | Operar cotizaciones reales con cálculo, historial, colaboración y persistencia. | Completada con evolución continua | Cotización durable, PDF, catálogo, offline, Realtime e identidad canónica. |
-| III — ERP operativo | Conectar el flujo desde Cotización hasta Entrega. | En desarrollo | Producción y Compras tienen base durable; faltan completar Recepción, Inventario, Fabricación, Instalación y Entrega. La infraestructura visual transversal se consolidará en 25.2E sin sustituir las condiciones operativas. Cierra funcionalmente en Fase 26.0. |
-| IV — Inteligencia operativa | Convertir datos operativos en alertas, prioridades y decisiones. | Planeada | Business State completo, Inicio e Inspector dinámicos y trazabilidad confiable. |
+| III — ERP operativo | Conectar el flujo desde Cotización hasta Entrega. | En desarrollo | Producción y Compras tienen base durable; Brand System y Business State 2.0 están consolidados. Faltan completar Recepción, Inventario, Fabricación, Instalación y Entrega. Cierra funcionalmente en Fase 26.0. |
+| IV — Inteligencia operativa | Convertir datos operativos en alertas, prioridades y decisiones. | Planeada | Business State 2.0 disponible; faltan consumidores dinámicos completos y trazabilidad de los dominios aún no durables. |
 | V — Optimización industrial | Optimizar materiales, capacidad, tiempos y fabricación. | Planeada | Cut Optimizer persistente e integrado al flujo real del taller. |
 | VI — IA empresarial | Asistencia contextual basada en fuentes confiables. | Planeada | Datos durables, auditables y aislados por workspace. |
 | VII — CRM | Administrar relación y seguimiento de clientes. | Planeada | Identidad de clientes, historial y comunicación conectados. |
@@ -315,88 +315,83 @@ Validación de cierre:
 
 ### 25.2E — Brand System e infraestructura visual
 
-**Estado:** SIGUIENTE FASE.
+**Estado:** completada.
 
-La condición de entrada quedó satisfecha con el cierre documentado de 25.2D.
+Consolidó tokens JavaScript y CSS, el índice público de diseño, helpers y tema funcionales, los componentes `BR*` existentes y capas independientes para componentes, layout, accesibilidad e impresión. La adopción inicial mantuvo valores visuales equivalentes y no modificó dominio, contratos ni comportamiento operativo.
 
-**Propósito:**
+### 25.3 — Business State 2.0
 
-Convertir el Brand Book v1.0 en una infraestructura visual reutilizable, progresiva y aislada de la lógica del ERP, de manera que las fases funcionales posteriores puedan utilizar una identidad coherente sin introducir una reestructuración general ni retrabajo innecesario.
+**Estado:** implementada.
 
-**Base disponible:**
+**Objetivo:**
 
-- Brand Book v1.0 documental.
-- README de identidad visual.
-- Tokens CSS iniciales no importados.
-- Tokens JavaScript de color, movimiento, radios, sombras, espaciado, tipografía y capas, todavía sin un índice público activo.
-- `BRCard` implementado como primer componente visual aislado; la mayoría de archivos `BR*` son scaffolds vacíos y no deben considerarse componentes terminados.
-- Logos oficiales ya integrados en recursos de branding.
-- Branding existente en autenticación, navegación, encabezado, PWA, reportes y documentos seleccionados.
+Convertir `getBusinessState()` en el adapter central de lectura del ERP sin transformarlo en dominio, store o fuente persistente.
 
-**Alcance permitido:**
+**Arquitectura:**
 
-- Consolidar tokens de color, tipografía, espaciado, radios y sombras.
-- Crear capas CSS visuales independientes cuando sea necesario; se prevén `brand-theme.css`, `brand-components.css`, `brand-layout.css`, `brand-print.css` y `brand-accessibility.css`, pero todavía no se consideran existentes.
-- Importar los tokens de forma controlada cuando se demuestre que no cambia el comportamiento.
-- Sustituir valores visuales hardcodeados por variables equivalentes de forma incremental.
-- Preservar inicialmente la apariencia y dimensiones existentes.
-- Definir componentes o clases visuales reutilizables sin apropiarse de comportamiento.
-- Aplicar progresivamente el sistema visual a login, navegación, encabezados, dashboard, documentos y superficies no críticas.
-- Preparar nuevas pantallas para que nazcan con la identidad oficial.
-- Documentar versiones, decisiones y excepciones visuales.
+Dominios propietarios → Summaries existentes → Business State → Consumidores.
 
-**Fuera de alcance:**
+El flujo inverso queda prohibido. Business State no escribe, no persiste, no reconstruye información y no contiene reglas propietarias de Cotización, Producción, Compras o Workflow.
 
-- Rediseñar módulos completos o reorganizar componentes.
-- Cambiar flujos de usuario, lógica de negocio, cálculos, estados, hooks o eventos.
-- Introducir Context, ThemeProvider o una nueva fuente de verdad visual en React.
-- Migrar a Tailwind, CSS-in-JS o una biblioteca visual nueva.
-- Modificar BR Engine, Workflow, Business State, Identity o Integrity.
-- Modificar repositories, Supabase, storage, offline, Realtime o versionado.
-- Alterar permisos o aislamiento por workspace.
-- Cambiar estados semánticos por colores decorativos de la marca.
-- Aplicar masivamente estilos sin validación por superficie.
-- Bloquear fases funcionales por mejoras puramente estéticas.
+**Fuentes consumidas:**
 
-**Orden de implementación recomendado:**
+- Summary de Cotización.
+- Summary de Producción.
+- Summary y selectors de Compras.
+- Summary derivado de Workflow.
+- Summaries existentes de clientes, finanzas, inventario, fabricación e historial cuando sus entradas están disponibles.
+- `isProjectReadOnly()` como contrato canónico de proyecto entregado.
 
-1. Tokens y variables visuales.
-2. Tema global compatible con los estilos existentes.
-3. Clases visuales compartidas.
-4. Impresión y PDFs.
-5. Login y autenticación visual.
-6. Sidebar y encabezado.
-7. Dashboard / Inicio.
-8. Inspector y Companion.
-9. Centro del Proyecto y biblioteca visual.
-10. Migración gradual de módulos operativos únicamente cuando no interfiera con su fase funcional.
+**Estado empresarial expuesto:**
 
-**Reglas de seguridad:**
+- Proyecto y read only.
+- Cliente.
+- Cotización.
+- Producción.
+- Compras.
+- Workflow.
+- Salud empresarial.
+- Riesgos.
+- Pendientes.
+- Actividad.
+- Alertas.
+- Indicadores.
+- Última actualización.
 
-- Cada cambio debe ser visualmente verificable y reversible.
-- La primera sustitución de valores debe conservar el mismo valor calculado.
-- No modificar simultáneamente estilo y lógica en un mismo cambio.
-- No mover JSX solo para adaptar el diseño.
-- No cambiar nombres, eventos ni props de componentes por razones visuales.
-- No alterar selectores utilizados por pruebas o automatización sin necesidad comprobada.
-- No introducir dependencias externas para implementar la identidad.
-- Mantener contraste y accesibilidad.
-- Validar responsive e impresión cuando corresponda.
-- Si una migración visual requiere tocar lógica, debe aplazarse y tratarse en una fase separada.
+**Summaries derivados del adapter:**
 
-**Criterios de salida:**
+- Salud: `completed`, `attention`, `healthy` o `unavailable`, siempre acompañada por su fuente.
+- Riesgos: ausencia verificable de cliente o materiales, OT pendiente y compras incompletas.
+- Pendientes: atender OT, comprar material, recibir compras, continuar fabricación y completar instalación o entrega.
+- Actividad: orden cronológico de las últimas actualizaciones publicadas por summaries existentes.
+- Indicadores: venta, costo, utilidad, estado read only/editable, avance de compras y materiales comprados o pendientes.
 
-- Tokens oficiales integrados de forma segura.
-- Capas visuales definidas y documentadas.
-- Ninguna regresión funcional.
-- Ningún cambio de contrato en módulos operativos.
-- Build y pruebas existentes correctos.
-- Validación visual de las superficies migradas.
-- Documentación de componentes, colores y estados.
-- Estrategia clara para migración progresiva.
-- Las fases 25.3 a 26.0 pueden construir nuevas interfaces sobre el sistema visual sin depender de una reescritura.
+Estos resultados se exponen directamente y también bajo `summaries.business` como contrato agrupado para consumidores futuros.
 
-> La Fase 25.2E no declara finalizado el diseño completo del ERP. Establece la infraestructura para una evolución visual progresiva. La operación, estabilidad e integridad conservan prioridad sobre la estética.
+Si no existe una señal canónica suficiente, Business State no inventa el riesgo, pendiente o estado. Por ejemplo, “proyecto detenido” no se publica sin una fuente que lo determine.
+
+**Consumidores preparados:**
+
+- Dashboard.
+- Inspector Inteligente.
+- Project Companion.
+- Centro del Proyecto.
+
+No se migraron estas pantallas en 25.3. El Centro del Proyecto conserva su consumo parcial preexistente; la migración general corresponde a fases posteriores.
+
+**Estado alcanzado:**
+
+- Contrato funcional y sin estado global.
+- Compatibilidad conservada para `company`, `status`, `project`, `indicators`, `summaries` y colecciones heredadas.
+- Sin Context, Redux, Zustand, Providers, persistencia ni dominios nuevos.
+- BR Engine, Workflow Engine, Identity, repositories, Supabase y Workspace no fueron modificados.
+
+**Validación de cierre:**
+
+- `npm test`: 48 archivos y 363 pruebas aprobadas.
+- `npm run build`: correcto.
+- `git diff --check`: correcto.
+- Warning conocido: chunk de Vite superior a 500 kB; es informativo y no bloquea el cierre.
 
 ### Transición y fases posteriores de la Etapa III
 
@@ -404,9 +399,9 @@ Convertir el Brand Book v1.0 en una infraestructura visual reutilizable, progres
 |---|---|
 | 25.2C — Auditoría real de integridad | Completada |
 | 25.2D — Hardening Operativo | Completada |
-| 25.2E — Brand System e infraestructura visual | Siguiente fase |
-| 25.3 — Business State 2.0 | Pendiente |
-| 25.4 — Operational Center | Pendiente |
+| 25.2E — Brand System e infraestructura visual | Completada |
+| 25.3 — Business State 2.0 | Implementada |
+| 25.4 — Operational Center | Siguiente fase |
 | 25.5 — Recepción | Pendiente |
 | 25.6 — Inventario | Pendiente |
 | 25.7 — Cut Optimizer persistente | Pendiente |
@@ -432,15 +427,15 @@ Convertir el Brand Book v1.0 en una infraestructura visual reutilizable, progres
 | Inspector Inteligente | Interfaz funcional parcial | Calcula riesgos y acciones desde Cotización. Para proyectos entregados muestra información histórica y conserva únicamente accesos de consulta. Aún no consume Business State ni todos los dominios. |
 | Project Companion | Interfaz funcional parcial | Usa Workflow Engine con contexto incompleto y contiene actividad fija; la integración común con Business State está pendiente. |
 | Centro del Proyecto | Estructura visual existente | La FLDSMDFR empresarial consume Business State solo con settings y orden activa, y muestra el modo editable/solo lectura. El resto continúa mayormente informativo o vacío y no sincroniza `PROJECT_MASTER.md`. |
-| Business State | Adapter derivado implementado parcialmente | Agrega summaries reales de varios dominios y expone `project.readOnly`/`project.mode`. Objetivos, roadmap, decisiones, alertas, salud y consumidores completos todavía no tienen una fuente durable. |
+| Business State | Adapter central derivado implementado | Expone las vistas y summaries empresariales de 25.3 sin persistencia ni reglas de dominio. Dashboard, Inspector y Companion todavía no consumen el contrato completo; objetivos, roadmap y decisiones permanecen vacíos por falta de fuente canónica. |
 | Identity Infrastructure | Implementada con convergencia pendiente | Normaliza, compara y preserva UUID, detecta duplicados y separa folio de identidad. Producción y Compras aún no consumen exclusivamente `createUuid.js`. |
 | Integrity Audit | Implementada y validada operacionalmente | `runIntegrityAudit()` auditó el workspace real con almacenamiento local y Supabase autenticado: `READY WITH WARNINGS`, sin errores ni deuda legacy bloqueante. Persiste una advertencia de folio comercial duplicado y tres diferencias informativas. |
 | Workspace | Operativo y durable | Bootstrap RPC idempotente, membresías, roles, permisos, settings, branding, auditoría y Realtime bajo RLS. Las mutaciones de settings se bloquean durante un proyecto entregado; `is_system_workspace` sigue pendiente. |
-| Brand System | Branding operativo; Design System parcial | Logos, favicons, PWA y branding dinámico existen. Tokens JS y CSS están disponibles pero no gobiernan la app; solo `BRCard` tiene implementación y no hay adopción general de componentes `BR*`. |
+| Brand System | Infraestructura visual implementada | Tokens JS/CSS, tema, helpers, componentes `BR*` y capas de layout, accesibilidad e impresión disponibles. La adopción operativa continúa siendo incremental. |
 
 ### Estado visual transversal
 
-El branding oficial ya está presente en recursos PWA y superficies seleccionadas, y el Brand Book v1.0 está documentado. Existen tokens CSS y módulos JavaScript, pero no están importados por `main.jsx` ni gobiernan la interfaz. `BRCard` es el único componente compartido implementado y no tiene consumidores; los demás archivos `BR*`, el índice de diseño y la utilidad de tema están vacíos. La interfaz conserva estilos históricos y reglas visuales dispersas; su consolidación corresponde a 25.2E. Un módulo no se considera más operativo o durable por recibir mejoras visuales.
+El Brand System quedó consolidado en 25.2E y se importa mediante las capas CSS oficiales. Los componentes y el índice público están disponibles para adopción incremental. Un módulo no se considera más operativo o durable por recibir mejoras visuales.
 
 ## 10. Pendientes funcionales prioritarios
 
@@ -502,24 +497,18 @@ La sincronización bidireccional entre **Notas internas** y **Observaciones** pu
 - Conservar merge por UUID, `updatedAt` y `version`.
 - Completar el contrato arquitectónico por dominio sin rediseñar módulos que puedan evolucionar incrementalmente.
 
-### Pendientes de infraestructura visual
+### Evolución pendiente de infraestructura visual
 
-- Definir y exportar un único contrato de tokens; actualmente conviven CSS y módulos JavaScript sin integración.
-- Integrar tokens sin cambiar valores calculados.
-- Separar tokens de marca y colores semánticos.
-- Consolidar estilos repetidos de forma incremental.
-- Definir capas de tema, componentes, layout, impresión y accesibilidad.
+- Consolidar estilos legacy repetidos de forma incremental.
 - Evitar dependencias entre CSS visual y reglas de negocio.
 - Documentar excepciones y estilos legacy.
-- Crear una estrategia de migración por superficie.
+- Continuar la estrategia de migración por superficie.
 - Conservar los selectores requeridos por pruebas y automatización.
 - Verificar contraste, responsive e impresión.
-- Evitar que 25.2E exceda el alcance de infraestructura y se convierta en un rediseño general.
 - Reducir progresivamente estilos duplicados.
 - Definir versión oficial del Design System.
 - Mantener historial de cambios visuales.
 - Preparar la futura Biblioteca Visual para consulta interna.
-- Completar o retirar los scaffolds vacíos de componentes `BR*`; solo `BRCard` tiene implementación verificable.
 
 ## 12. Fuentes reutilizables del ERP
 
@@ -539,7 +528,7 @@ Las fuentes reutilizables no dependen de React, JSX, DOM ni componentes. Los cá
 | 6 | Finanzas | Summary derivado disponible; dominio administrativo pendiente. |
 | 7 | Fabricación | Summary y lectura del plan de corte disponibles; persistencia pendiente. |
 | 8 | Recepción e Historial | Summaries disponibles; dominios transversales completos pendientes. |
-| 9 | Integración con Business State | Agregación inicial implementada; consumidores y campos empresariales pendientes. |
+| 9 | Integración con Business State | Adapter 2.0 implementado con salud, riesgos, pendientes, actividad, alertas, indicadores, última actualización y read only. Consumidores completos pendientes. |
 
 ## 13. Centro del Proyecto
 
@@ -555,7 +544,7 @@ El Centro del Proyecto nació en Fase 23 como estructura de gobierno y memoria. 
 - Salud del proyecto.
 - Próximo sprint.
 
-Actualmente existen superficies para la FLDSMDFR empresarial y la FLDSMDFR del Sistema. La empresarial invoca `getBusinessState()` con los settings y la orden de Producción activa, por lo que puede mostrar el nombre del workspace y el modo editable/solo lectura. Los objetivos, roadmap, pendientes, decisiones, historial, próximos pasos y alertas siguen vacíos; varias partes continúan visuales, estáticas o informativas. `PROJECT_MASTER.md` es documentación manual y no sincroniza automáticamente con la UI.
+Actualmente existen superficies para la FLDSMDFR empresarial y la FLDSMDFR del Sistema. La empresarial ya invoca `getBusinessState()` y puede mostrar el nombre del workspace, modo editable/solo lectura, pendientes, alertas e indicadores cuando recibe sus fuentes. Objetivos, roadmap, decisiones, historial documental y próximos pasos permanecen vacíos porque no existe una fuente canónica para ellos. `PROJECT_MASTER.md` es documentación manual y no sincroniza automáticamente con la UI.
 
 Pendientes:
 
@@ -564,7 +553,7 @@ Pendientes:
 - Incorporar roadmap visual y gestor de pendientes.
 - Registrar decisiones, salud y métricas reales.
 - Hacer navegable la documentación sin convertir la UI en fuente de verdad.
-- Incorporar, después de completar la infraestructura mínima de 25.2E, una Biblioteca Visual de solo lectura basada en el Brand Book.
+- Incorporar una Biblioteca Visual de solo lectura basada en el Brand Book.
 - Mostrar en esa biblioteca paleta, tipografías, espaciados, logos, componentes y estados.
 - Mantener la documentación como fuente de verdad; la UI únicamente la presenta.
 - No destinar a la Biblioteca Visual más tiempo del límite definido para el Centro del Proyecto.
@@ -630,7 +619,7 @@ Este cambio no forma parte de la actualización documental actual.
 | Pendiente de validación | Recepción depende de partidas de Compras. | Preservar trazabilidad y evitar reconstrucciones. | Vigente; implementación pendiente |
 | Pendiente de validación | Inventario se basará en movimientos. | Garantizar trazabilidad de existencias. | Pendiente |
 | Pendiente de validación | Cut Optimizer será persistente y conectado al flujo. | Conservar planes de corte como evidencia operacional. | Pendiente |
-| 20/07/2026 | Business State no contiene lógica de negocio. | Concentrar summaries sin apropiarse de reglas. | Implementada parcialmente |
+| 24/07/2026 | Business State es el adapter central de lectura y solo agrega summaries existentes. | Ofrecer una vista empresarial única sin apropiarse de datos, persistencia ni reglas de dominio. | Implementada en 25.3 |
 | Pendiente de validación | FLDSMDFR empresarial y del Sistema nunca se mezclan. | Separar negocio y desarrollo interno. | Vigente |
 | 22/07/2026 | UUID es identidad y folio es referencia comercial. | Evitar colisiones y merges incorrectos. | Implementada |
 | 22/07/2026 | No activar constraints sin auditoría real. | Prevenir fallos o pérdida de continuidad por deuda legacy. | Vigente |
@@ -647,7 +636,7 @@ Este cambio no forma parte de la actualización documental actual.
 | Pendiente de validación | No rediseñar módulos que puedan completarse incrementalmente. | Reducir riesgo y conservar valor operativo. | Vigente |
 | Pendiente de validación | Inicio evolucionará hacia Centro de Operaciones. | Mostrar el estado real del flujo. | Pendiente |
 | Pendiente de validación | Una función importante requiere operación, documentación, roadmap y pendientes derivados para cerrarse. | Evitar cierres únicamente visuales. | Vigente |
-| 22/07/2026 | Implementar el Brand System en 25.2E, después de integridad y antes de Business State 2.0. | Evitar retrabajo visual en los nuevos módulos sin distraer la auditoría ni modificar lógica operativa. | Siguiente fase oficial |
+| 22/07/2026 | Implementar el Brand System en 25.2E, después de integridad y antes de Business State 2.0. | Evitar retrabajo visual en los nuevos módulos sin distraer la auditoría ni modificar lógica operativa. | Completada |
 | 22/07/2026 | La identidad visual será una capa transversal separada de las reglas del dominio. | Preservar estabilidad, mantenibilidad y fuentes de verdad. | Vigente |
 | 22/07/2026 | El Brand System adoptará una estrategia incremental por superficie. | Reducir riesgo y facilitar la validación visual. | Vigente |
 | 22/07/2026 | Después de finalizar 25.2E, los cambios globales del sistema visual deberán pasar por revisión arquitectónica. | Evitar regresiones visuales y mantener consistencia. | Vigente |
@@ -656,33 +645,19 @@ Las fechas no verificables se mantienen como **Pendiente de validación**; no se
 
 ## 16. Próximo sprint oficial
 
-### Fase 25.2E — Brand System e infraestructura visual
+### Fase 25.4 — Operational Center
 
 **Estado:** SIGUIENTE FASE.
 
-**Propósito:** consolidar la identidad visual oficial como infraestructura reutilizable y progresiva, sin modificar dominio, repositories, sincronización, permisos ni comportamiento del ERP.
+**Propósito:** comenzar la adopción controlada de Business State 2.0 en el centro operativo sin crear una segunda fuente de verdad.
 
-**Base real existente:**
+**Condición de entrada satisfecha:**
 
-- `docs/design-system-br.md`
-- `docs/ui-blueprint-aluxor.md`
-- `src/styles/brand-tokens.css`
-- `src/design/tokens/colors.js`
-- `src/design/tokens/motion.js`
-- `src/design/tokens/radius.js`
-- `src/design/tokens/shadows.js`
-- `src/design/tokens/spacing.js`
-- `src/design/tokens/typography.js`
-- `src/design/tokens/zIndex.js`
-- `src/design/utils/theme.js`
-- `src/design/index.js`
-- Componentes `src/components/ui/BR*`.
+- 25.2E consolidó la infraestructura visual.
+- 25.3 consolidó el adapter empresarial derivado.
+- Los dominios continúan siendo propietarios de sus datos y reglas.
 
-`BRCard` es el primer componente visual funcional. La existencia de los demás archivos `BR*` no demuestra implementación completa; actualmente son scaffolds vacíos. La adopción será incremental y por superficie.
-
-No se creará un ThemeProvider ni un Context visual nuevo sin necesidad demostrada. La fase no modificará lógica de negocio, dominio, repositories, sincronización, permisos ni comportamiento del ERP.
-
-El alcance, orden recomendado, reglas de seguridad y criterios de salida permanecen definidos en la sección oficial 25.2E, sin duplicarlos aquí. La condición de entrada quedó satisfecha con el cierre de 25.2D.
+La migración deberá ser incremental. Dashboard, Inspector Inteligente, Project Companion y Centro del Proyecto consumirán el mismo contrato, sin consultas cruzadas entre componentes ni cálculos empresariales locales.
 
 ## Infraestructura visual y Brand System
 
@@ -692,9 +667,9 @@ El alcance, orden recomendado, reglas de seguridad y criterios de salida permane
 - `docs/branding/README.md`
 - `src/styles/brand-tokens.css`
 - `src/design/tokens/*.js`
-- `src/components/ui/BRCard.jsx`
+- `src/components/ui/BR*.jsx`
 
-Los dos documentos de branding, la base CSS y siete módulos JavaScript de tokens existen. `src/styles/brand-tokens.css` y `src/design/` todavía no están importados por la aplicación. `BRCard.jsx` es funcional, pero no tiene consumidores; el resto de los componentes `BR*`, `src/design/index.js` y `src/design/utils/theme.js` están vacíos. Esta infraestructura parcial no equivale al cierre de 25.2E.
+Los documentos de branding, tokens CSS y JavaScript, índice público, tema, helpers, componentes `BR*` y capas visuales especializadas existen y están disponibles. La adopción por superficies sigue siendo incremental.
 
 ### Relación de capas
 
@@ -784,7 +759,9 @@ El congelamiento aplica únicamente a la infraestructura visual. No limita la ev
 | 22/07/2026 | 25.2B | Infraestructura de auditoría completada. |
 | 23/07/2026 | 25.2C | Auditoría real certificada (`READY WITH WARNINGS`). |
 | 23/07/2026 | 25.2D | Hardening operativo del núcleo completado. |
-| Próxima | 25.2E | Brand System e infraestructura visual. |
+| 23/07/2026 | 25.2E | Brand System e infraestructura visual completados. |
+| 24/07/2026 | 25.3 | Business State 2.0 implementado como adapter central derivado. |
+| Próxima | 25.4 | Operational Center. |
 
 ## Estado del núcleo del ERP
 
@@ -795,4 +772,5 @@ Compras ............... Durable
 Read-only ............. Estable
 Integrity Audit ....... Certificada
 Hardening ............. Completado
-Brand System .......... Pendiente
+Brand System .......... Consolidado
+Business State 2.0 .... Implementado
