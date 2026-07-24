@@ -321,7 +321,15 @@ Consolidó tokens JavaScript y CSS, el índice público de diseño, helpers y te
 
 ### 25.3 — Business State 2.0
 
-**Estado:** implementada.
+**Estado:** cerrada e integrada en `main`.
+
+**Fecha de cierre:** 24/07/2026.
+
+**Commit oficial de cierre:**
+
+- **Hash:** `660a217ba73f4845f68047d88ec551663f22d5cd`
+- **Mensaje:** `feat(business-state): complete Phase 25.3 Business State 2.0`
+- **Integración:** el commit forma parte de la rama `main`.
 
 **Objetivo:**
 
@@ -400,7 +408,7 @@ No se migraron estas pantallas en 25.3. El Centro del Proyecto conserva su consu
 | 25.2C — Auditoría real de integridad | Completada |
 | 25.2D — Hardening Operativo | Completada |
 | 25.2E — Brand System e infraestructura visual | Completada |
-| 25.3 — Business State 2.0 | Implementada |
+| 25.3 — Business State 2.0 | Cerrada e integrada en `main` mediante `660a217ba73f4845f68047d88ec551663f22d5cd` |
 | 25.4 — Operational Center | Siguiente fase |
 | 25.5 — Recepción | Pendiente |
 | 25.6 — Inventario | Pendiente |
@@ -760,7 +768,7 @@ El congelamiento aplica únicamente a la infraestructura visual. No limita la ev
 | 23/07/2026 | 25.2C | Auditoría real certificada (`READY WITH WARNINGS`). |
 | 23/07/2026 | 25.2D | Hardening operativo del núcleo completado. |
 | 23/07/2026 | 25.2E | Brand System e infraestructura visual completados. |
-| 24/07/2026 | 25.3 | Business State 2.0 implementado como adapter central derivado. |
+| 24/07/2026 | 25.3 | Cerrada e integrada en `main` mediante `660a217ba73f4845f68047d88ec551663f22d5cd` (`feat(business-state): complete Phase 25.3 Business State 2.0`). |
 | Próxima | 25.4 | Operational Center. |
 
 ## Estado del núcleo del ERP
