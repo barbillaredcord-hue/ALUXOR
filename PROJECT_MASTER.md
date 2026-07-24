@@ -4,7 +4,7 @@
 
 - **Workspace operativo actual:** ALUXOR / BosqueReal
 - **Etapa activa:** Etapa III — ERP operativo
-- **Fase oficial:** 25.2D — Hardening Operativo
+- **Fase oficial:** 25.2E — Brand System e infraestructura visual
 - **Última actualización:** 23/07/2026
 
 ## 1. Identidad del proyecto
@@ -235,7 +235,7 @@ Hallazgo `duplicate_commercial_reference`:
 - UUID `463ffceb-f9ac-4fc5-8b71-93a9aee8a5ee`.
 - Son registros distintos, con UUID canónicos y momentos de creación diferentes.
 - No existe identidad duplicada, no deben fusionarse y el folio conserva su función de referencia comercial.
-- El hallazgo corresponde al generador de folios, no bloquea el cierre de 25.2C y queda como pendiente oficial de 25.2D.
+- El hallazgo corresponde al generador de folios, no bloqueó el cierre de 25.2C y su prevención quedó atendida en 25.2D. Los dos registros históricos no fueron borrados, fusionados ni renumerados: continúan siendo entidades distintas y válidas por UUID.
 
 Diferencias informativas:
 
@@ -249,17 +249,75 @@ La evidencia estructurada se conserva fuera del repositorio como reporte JSON ge
 
 ### 25.2D — Hardening Operativo
 
-**Estado:** PENDIENTE / SIGUIENTE FASE.
+**Estado:** COMPLETADA.
 
-**Objetivo:** endurecer reglas operativas, invariantes y protecciones antes de ampliar dominios.
+**Fecha de cierre:** 2026-07-23.
 
-El primer frente obligatorio será un generador resiliente de folios comerciales: unicidad por workspace, cálculo sobre el máximo local y remoto, prevención de colisiones entre dispositivos y sesiones nuevas o con información local incompleta, y reintento con incremento ante colisión. El folio nunca será identidad ni sustituirá el UUID.
+**Objetivo cumplido:** fortalecer reglas operativas, invariantes, aislamiento por workspace y resistencia ante colisiones sin ampliar módulos, modificar la experiencia de usuario ni alterar la arquitectura general.
 
-También deberá incorporar validación previa a escritura, invariantes operativas, protección de estados terminales, evaluación de `NOT NULL`, unicidad de identidad y Foreign Keys, respaldo, rollback documentado, ejecución incremental y una auditoría posterior a cada endurecimiento.
+#### Contrato definitivo de identidad
+
+- El UUID continúa siendo la identidad canónica de cada entidad.
+- El folio es únicamente una referencia comercial y nunca participa en la comparación de identidad.
+- Dos entidades con UUID diferentes nunca se fusionan por compartir folio.
+- El hardening no modificó UUID existentes.
+- Un reintento por colisión conserva intacto el UUID original y modifica únicamente la referencia comercial candidata.
+- `nextAvailableCommercialReference()` centraliza el cálculo compartido del siguiente folio disponible.
+
+Este contrato atiende preventivamente el hallazgo `duplicate_commercial_reference` detectado durante 25.2C. No implica que los dos registros históricos del hallazgo hayan sido alterados.
+
+#### Generador resiliente de folios comerciales
+
+Cotizaciones, Producción y Compras utilizan el generador compartido. Antes de insertar, sus repositories consultan las referencias históricas del workspace, incluidas las pertenecientes a registros eliminados o inactivos. Si la referencia candidata ya existe, se incrementa hasta encontrar la siguiente disponible.
+
+Cuando Supabase devuelve una colisión `23505`, el repository revalida la entidad por UUID y relación canónica, vuelve a consultar los folios del workspace, recalcula y reintenta. El flujo contempla múltiples dispositivos, sesiones simultáneas y estados locales incompletos; la colisión afecta al folio y nunca autoriza reemplazar el UUID.
+
+Evidencia principal: `src/lib/identity/entityIdentity.js`, `src/lib/quotes/quoteRepository.js`, `src/lib/production/productionOrderRepository.js` y `src/lib/purchases/purchaseRepository.js`.
+
+Este hardening es lógico y de repositories. No presenta el folio como una nueva restricción SQL ni declara cambios de esquema.
+
+#### Invariantes operativas reforzadas
+
+- Toda escritura durable se ejecuta dentro de un workspace válido.
+- Una Cotización no puede actualizarse, eliminarse ni restaurarse sin contexto de workspace.
+- Una escritura no puede modificar una entidad perteneciente a otro workspace.
+- Una Orden de Producción requiere workspace y cotización relacionada.
+- Una Compra requiere OT, workspace y cotización relacionada.
+- Las relaciones se validan mediante UUID y contexto canónico.
+- Las escrituras cruzadas entre workspaces y las relaciones faltantes se rechazan antes de persistir.
+
+Son invariantes del dominio aplicadas en motores y repositories, no validaciones meramente visuales.
+
+#### Guards del dominio
+
+Los casos verificados en Cotización, Producción y Compras incluyen `WORKSPACE_MISMATCH` y `MISSING_WORKSPACE_ID`. La creación rechaza entidades cuyo workspace no coincide; las actualizaciones quedan acotadas por `workspace_id` y no pueden afectar filas de otro workspace. También se rechazan actualización de cotización sin workspace; OT sin workspace o cotización; compra sin OT, workspace o cotización; y eliminación o restauración de cotización sin workspace.
+
+Después de una colisión `23505` se revalidan el UUID, el workspace y la relación canónica correspondiente antes de decidir entre idempotencia, entidad existente o incremento de folio. Estos códigos no se declaran como contrato universal de repositories ajenos a Cotización, Producción y Compras.
+
+#### Continuidad del contrato read-only
+
+`isProjectReadOnly()` continúa siendo la función canónica. Business State deriva `project.readOnly` y `project.mode` desde ella, y las mutaciones la utilizan directamente o mediante `canAdvanceProductionOrder()`. No se crearon implementaciones paralelas.
+
+La protección sigue siendo por entidad y proyecto, no un bloqueo global del Historial. El ajuste previo de Historial eliminó el estado residual global sin debilitar la protección: los proyectos entregados siguen siendo consultables y exportables, pero no editables.
+
+#### Resultado de 25.2D
+
+La fase dejó folios comerciales resistentes a colisiones, mayor aislamiento por workspace, relaciones operativas protegidas, reintentos seguros ante concurrencia, guards previos a escritura, UUID preservado como identidad, read-only sin contratos paralelos y un núcleo preparado para continuar sin ampliar deuda técnica.
+
+No se aplicaron restricciones SQL, Foreign Keys ni nuevos `NOT NULL`; tampoco se modificaron RLS ni Supabase Schema. Esas acciones futuras continúan requiriendo respaldo, rollback, ejecución incremental y auditoría posterior.
+
+Validación de cierre:
+
+- `npm test`: 48 archivos y 361 pruebas aprobadas.
+- `npm run build`: correcto.
+- `git diff --check`: correcto.
+- Warning conocido: chunk de Vite superior a 500 kB; es informativo, no representa un fallo funcional ni bloquea el cierre.
 
 ### 25.2E — Brand System e infraestructura visual
 
-**Estado:** pendiente y condicionado al cierre seguro de 25.2D.
+**Estado:** SIGUIENTE FASE.
+
+La condición de entrada quedó satisfecha con el cierre documentado de 25.2D.
 
 **Propósito:**
 
@@ -340,11 +398,13 @@ Convertir el Brand Book v1.0 en una infraestructura visual reutilizable, progres
 
 > La Fase 25.2E no declara finalizado el diseño completo del ERP. Establece la infraestructura para una evolución visual progresiva. La operación, estabilidad e integridad conservan prioridad sobre la estética.
 
-### Fases posteriores de la Etapa III
+### Transición y fases posteriores de la Etapa III
 
 | Fase | Estado |
 |---|---|
-| 25.2E — Brand System e infraestructura visual | Pendiente y condicionada |
+| 25.2C — Auditoría real de integridad | Completada |
+| 25.2D — Hardening Operativo | Completada |
+| 25.2E — Brand System e infraestructura visual | Siguiente fase |
 | 25.3 — Business State 2.0 | Pendiente |
 | 25.4 — Operational Center | Pendiente |
 | 25.5 — Recepción | Pendiente |
@@ -425,16 +485,16 @@ La sincronización bidireccional entre **Notas internas** y **Observaciones** pu
 
 ## 11. Pendientes de arquitectura
 
-- Implementar en 25.2D un generador resiliente de folios comerciales por workspace, sin convertir el folio en identidad.
-- Mantener la evidencia operacional de 25.2C fuera del código y repetir la auditoría después de cada endurecimiento.
+- Mantener la evidencia operacional de 25.2C fuera del código y repetir la auditoría después de futuros endurecimientos de esquema o constraints.
 - No iniciar reparación legacy mientras la evidencia no demuestre su necesidad; 25.2C concluyó con `requiresLegacyRepair: false`.
 - Activar constraints únicamente después de validación adicional, respaldo y rollback documentado.
 - Converger la generación UUID de Producción y Compras hacia `createUuid.js` sin regenerar identidades existentes.
-- Evaluar en 25.2D si el estado terminal `Entregado` requiere enforcement adicional en base de datos; actualmente la protección es de motor, hooks y UI.
+- Evaluar en una fase futura si el estado terminal `Entregado` requiere enforcement adicional en base de datos; actualmente la protección es de motor, hooks y UI.
 - Revisar y dividir `useQuotes.js`.
 - Reducir `QuoteSection.jsx`.
 - Revisar `useProduction.js`.
 - Reducir `ProductionSection.jsx`.
+- Optimizar el chunk principal de Vite, actualmente superior a 500 kB, sin mezclar ese trabajo con cambios funcionales.
 - No introducir Context sin necesidad demostrada.
 - Evitar lógica de negocio en componentes y fuentes de verdad duplicadas.
 - Consolidar una sola suscripción Realtime por workspace cuando corresponda.
@@ -580,10 +640,14 @@ Este cambio no forma parte de la actualización documental actual.
 | 22/07/2026 | Las pruebas con mocks no cierran 25.2C. | La readiness para 25.2D requiere evidencia de los datos reales bajo sesión y RLS reales. | Cumplida mediante auditoría real el 23/07/2026 |
 | 23/07/2026 | Dos entidades con UUID distintos nunca se fusionan por compartir folio. | El folio es referencia comercial; la identidad canónica pertenece al UUID dentro del workspace. | Vigente |
 | 23/07/2026 | Toda restricción SQL futura debe estar precedida por auditoría real, respaldo y rollback documentado. | Conservar continuidad operacional y evitar endurecer datos sin evidencia suficiente. | Vigente |
+| 23/07/2026 | El siguiente folio comercial se calcula sobre referencias existentes del workspace y se reintenta ante colisión concurrente. | Evitar reutilización de folios sin convertirlos en identidad. | Vigente |
+| 23/07/2026 | Toda escritura durable de Cotización, Producción y Compras debe validar workspace y relaciones canónicas antes de persistir. | Impedir escrituras cruzadas y entidades operativas huérfanas. | Vigente |
+| 23/07/2026 | Una colisión `23505` de folio no autoriza regenerar ni reemplazar el UUID. | Preservar identidad, idempotencia y trazabilidad. | Vigente |
+| 23/07/2026 | 25.2D cerró con hardening lógico y de repositories, no con restricciones SQL. | El SQL futuro requiere respaldo, rollback y ejecución incremental. | Vigente |
 | Pendiente de validación | No rediseñar módulos que puedan completarse incrementalmente. | Reducir riesgo y conservar valor operativo. | Vigente |
 | Pendiente de validación | Inicio evolucionará hacia Centro de Operaciones. | Mostrar el estado real del flujo. | Pendiente |
 | Pendiente de validación | Una función importante requiere operación, documentación, roadmap y pendientes derivados para cerrarse. | Evitar cierres únicamente visuales. | Vigente |
-| 22/07/2026 | Implementar el Brand System en 25.2E, después de integridad y antes de Business State 2.0. | Evitar retrabajo visual en los nuevos módulos sin distraer la auditoría ni modificar lógica operativa. | Planeada |
+| 22/07/2026 | Implementar el Brand System en 25.2E, después de integridad y antes de Business State 2.0. | Evitar retrabajo visual en los nuevos módulos sin distraer la auditoría ni modificar lógica operativa. | Siguiente fase oficial |
 | 22/07/2026 | La identidad visual será una capa transversal separada de las reglas del dominio. | Preservar estabilidad, mantenibilidad y fuentes de verdad. | Vigente |
 | 22/07/2026 | El Brand System adoptará una estrategia incremental por superficie. | Reducir riesgo y facilitar la validación visual. | Vigente |
 | 22/07/2026 | Después de finalizar 25.2E, los cambios globales del sistema visual deberán pasar por revisión arquitectónica. | Evitar regresiones visuales y mantener consistencia. | Vigente |
@@ -592,56 +656,33 @@ Las fechas no verificables se mantienen como **Pendiente de validación**; no se
 
 ## 16. Próximo sprint oficial
 
-### Fase 25.2D — Hardening Operativo
+### Fase 25.2E — Brand System e infraestructura visual
 
-**Estado:** PENDIENTE / SIGUIENTE FASE.
+**Estado:** SIGUIENTE FASE.
 
-**Propósito:** endurecer reglas operativas, invariantes y protecciones antes de ampliar dominios, apoyándose en la evidencia real de 25.2C.
+**Propósito:** consolidar la identidad visual oficial como infraestructura reutilizable y progresiva, sin modificar dominio, repositories, sincronización, permisos ni comportamiento del ERP.
 
-**Evidencia habilitante:**
+**Base real existente:**
 
-- Auditoría real cerrada como `READY WITH WARNINGS`.
-- Cero hallazgos `CRITICAL` y cero `ERROR`.
-- Readiness positiva para `NOT NULL`, identidad única y Foreign Keys.
-- Reparación legacy no requerida.
-- Un folio comercial duplicado pendiente de prevención.
+- `docs/design-system-br.md`
+- `docs/ui-blueprint-aluxor.md`
+- `src/styles/brand-tokens.css`
+- `src/design/tokens/colors.js`
+- `src/design/tokens/motion.js`
+- `src/design/tokens/radius.js`
+- `src/design/tokens/shadows.js`
+- `src/design/tokens/spacing.js`
+- `src/design/tokens/typography.js`
+- `src/design/tokens/zIndex.js`
+- `src/design/utils/theme.js`
+- `src/design/index.js`
+- Componentes `src/components/ui/BR*`.
 
-**Primer frente obligatorio: generador resiliente de folios comerciales**
+`BRCard` es el primer componente visual funcional. La existencia de los demás archivos `BR*` no demuestra implementación completa; actualmente son scaffolds vacíos. La adopción será incremental y por superficie.
 
-- Garantizar unicidad por workspace.
-- Calcular el siguiente folio considerando el máximo local y remoto.
-- Prevenir colisiones entre dispositivos, sesiones nuevas y estados locales incompletos.
-- Reintentar e incrementar ante una colisión confirmada.
-- Mantener el folio como referencia comercial.
-- Nunca usar el folio como identidad ni reemplazar el UUID.
+No se creará un ThemeProvider ni un Context visual nuevo sin necesidad demostrada. La fase no modificará lógica de negocio, dominio, repositories, sincronización, permisos ni comportamiento del ERP.
 
-**Frentes posteriores:**
-
-- Validación previa a escritura.
-- Invariantes operativas.
-- Protección durable de estados terminales.
-- Evaluación gradual de `NOT NULL`, unicidad de identidad y Foreign Keys.
-- Respaldo y rollback documentado antes de cualquier restricción.
-- Ejecución incremental.
-- Auditoría real después de cada endurecimiento.
-
-**Contratos obligatorios:**
-
-- UUID es identidad canónica y el folio es referencia comercial.
-- Dos entidades con UUID distintos nunca se fusionan por folio.
-- `runIntegrityAudit()` continúa siendo la entrada pública oficial de auditoría.
-- El hardening no se activa sin auditoría, respaldo y rollback.
-- Cada cambio debe conservar aislamiento por workspace.
-
-**Criterio de salida:**
-
-- Generación de folios resistente a colisiones y validada por workspace.
-- Protecciones de escritura e invariantes verificadas.
-- Plan de respaldo y rollback aprobado antes de cualquier restricción.
-- Endurecimientos ejecutados incrementalmente.
-- Auditoría posterior sin errores bloqueantes.
-
-> **Nota de secuencia:** 25.2E permanece registrada como fase futura y pendiente. Su ejecución depende del cierre seguro y documentado de 25.2D.
+El alcance, orden recomendado, reglas de seguridad y criterios de salida permanecen definidos en la sección oficial 25.2E, sin duplicarlos aquí. La condición de entrada quedó satisfecha con el cierre de 25.2D.
 
 ## Infraestructura visual y Brand System
 
@@ -734,3 +775,24 @@ Una vez concluida la Fase 25.2E:
 - Los cambios visuales masivos requerirán validación de compatibilidad con impresión, responsive y accesibilidad.
 
 El congelamiento aplica únicamente a la infraestructura visual. No limita la evolución funcional del ERP.
+
+## Historial reciente
+
+| Fecha | Fase | Resultado |
+|-------|------|-----------|
+| 22/07/2026 | 25.2A | Identidad canónica e idempotencia completadas. |
+| 22/07/2026 | 25.2B | Infraestructura de auditoría completada. |
+| 23/07/2026 | 25.2C | Auditoría real certificada (`READY WITH WARNINGS`). |
+| 23/07/2026 | 25.2D | Hardening operativo del núcleo completado. |
+| Próxima | 25.2E | Brand System e infraestructura visual. |
+
+## Estado del núcleo del ERP
+
+Identidad ............. Estable
+Workspace ............. Estable
+Producción ............ Durable
+Compras ............... Durable
+Read-only ............. Estable
+Integrity Audit ....... Certificada
+Hardening ............. Completado
+Brand System .......... Pendiente
