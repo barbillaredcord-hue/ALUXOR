@@ -7,7 +7,10 @@ import {
   purchaseToInsertPayload,
   purchaseToUpdatePayload,
 } from './purchaseAdapter.js';
-import { normalizeEntityId } from '../identity/entityIdentity.js';
+import {
+  nextAvailableCommercialReference,
+  normalizeEntityId,
+} from '../identity/entityIdentity.js';
 
 const purchaseColumns = `
   id, workspace_id, production_order_id, production_order_folio, quote_id,
@@ -139,6 +142,13 @@ async function authenticatedUser() {
   return result?.data?.user || null;
 }
 
+async function loadWorkspacePurchaseFolios(workspaceId) {
+  return execute(() => supabase
+    .from('purchases')
+    .select('folio')
+    .eq('workspace_id', workspaceId));
+}
+
 async function insertItems(workspaceId, purchaseId, items, userId) {
   const payload = items.map((item) => (
     purchaseItemToInsertPayload(item, workspaceId, purchaseId, userId)
@@ -157,6 +167,13 @@ export async function createPurchaseRemote(workspaceId, purchase) {
     return {
       data: null,
       error: error('La compra requiere un UUID estable.', 'MISSING_STABLE_ENTITY_ID'),
+      existing: false,
+    };
+  }
+  if (String(purchase?.workspaceId || '').trim() !== String(workspaceId).trim()) {
+    return {
+      data: null,
+      error: error('La compra pertenece a otro workspace.', 'WORKSPACE_MISMATCH'),
       existing: false,
     };
   }
@@ -188,19 +205,54 @@ export async function createPurchaseRemote(workspaceId, purchase) {
   }
   const user = await authenticatedUser();
   if (!user) return { data: null, error: error('No existe una sesión activa.'), existing: false };
-  let inserted = await execute(() => supabase
-    .from('purchases')
-    .insert({ ...purchaseToInsertPayload(purchase, workspaceId, user.id), id })
-    .select(purchaseColumns)
-    .single());
-  if (inserted.error?.code === '23505') {
+  const remoteFolios = await loadWorkspacePurchaseFolios(workspaceId);
+  if (remoteFolios.error) {
+    return { data: null, error: remoteFolios.error, existing: false };
+  }
+  const payload = {
+    ...purchaseToInsertPayload(purchase, workspaceId, user.id),
+    id,
+    folio: nextAvailableCommercialReference(purchase?.folio, remoteFolios.data),
+  };
+  let inserted;
+
+  while (true) {
+    inserted = await execute(() => supabase
+      .from('purchases')
+      .insert(payload)
+      .select(purchaseColumns)
+      .single());
+    if (inserted.error?.code !== '23505') break;
+
     const raced = await getPurchase(workspaceId, id);
-    if (raced.data && !raced.error) {
+    if (raced.error) return { data: null, error: raced.error, existing: false };
+    if (raced.data) {
       const itemResult = await insertItems(workspaceId, id, purchase.items || [], user.id);
       if (itemResult.error) return { data: null, error: itemResult.error, existing: false };
       const refreshed = await getPurchase(workspaceId, id);
       return { ...refreshed, existing: true };
     }
+
+    const racedByProduction = await getPurchaseByProductionOrder(
+      workspaceId,
+      purchase?.productionOrderId,
+    );
+    if (racedByProduction.error) {
+      return { data: null, error: racedByProduction.error, existing: false };
+    }
+    if (racedByProduction.data) return { ...racedByProduction, existing: true };
+
+    const refreshedFolios = await loadWorkspacePurchaseFolios(workspaceId);
+    if (refreshedFolios.error) {
+      return { data: null, error: refreshedFolios.error, existing: false };
+    }
+    if (!refreshedFolios.data?.some((row) => row?.folio === payload.folio)) {
+      break;
+    }
+    payload.folio = nextAvailableCommercialReference(
+      payload.folio,
+      refreshedFolios.data,
+    );
   }
   if (inserted.error) {
     return { data: null, error: inserted.error, existing: false };

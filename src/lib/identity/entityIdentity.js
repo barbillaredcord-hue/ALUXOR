@@ -88,6 +88,35 @@ export function detectDuplicateBusinessReferences(collection, selector) {
     ));
 }
 
+export function nextAvailableCommercialReference(
+  candidate,
+  collection = [],
+  selector = (entity) => entity?.folio,
+) {
+  const initial = String(candidate ?? '').trim();
+  if (!initial) return '';
+
+  const occupied = new Set(
+    (Array.isArray(collection) ? collection : [])
+      .map((entity) => String(selector(entity) ?? '').trim())
+      .filter(Boolean),
+  );
+  if (!occupied.has(initial)) return initial;
+
+  const match = initial.match(/^(.*?)(\d+)$/);
+  const prefix = match ? match[1] : `${initial}-`;
+  const width = match ? match[2].length : 3;
+  let consecutive = match ? Number.parseInt(match[2], 10) + 1 : 2;
+  let reference = `${prefix}${String(consecutive).padStart(width, '0')}`;
+
+  while (occupied.has(reference)) {
+    consecutive += 1;
+    reference = `${prefix}${String(consecutive).padStart(width, '0')}`;
+  }
+
+  return reference;
+}
+
 export const EntityIdentity = {
   normalizeEntityId,
   hasStableEntityId,
@@ -98,4 +127,5 @@ export const EntityIdentity = {
   indexEntitiesById,
   detectDuplicateIds,
   detectDuplicateBusinessReferences,
+  nextAvailableCommercialReference,
 };

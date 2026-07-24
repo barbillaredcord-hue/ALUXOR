@@ -167,6 +167,12 @@ export function normalizeProductionOrder(order = {}) {
 
 export function createProductionOrder(input = {}, existingOrders = []) {
   const source = isObject(input) ? input : {};
+  if (!clean(source.workspaceId)) {
+    throw new Error('La orden de producción requiere workspaceId.');
+  }
+  if (!clean(source.quoteId ?? source.quote?.id)) {
+    throw new Error('La orden de producción requiere una cotización.');
+  }
   const now = toIsoDate(source.fechaCreacion, new Date().toISOString());
   const folio = clean(source.folio) || generateProductionOrderNumber(existingOrders, now);
   const createdBy = clean(source.createdBy);

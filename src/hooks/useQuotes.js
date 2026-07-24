@@ -4,6 +4,7 @@ import { QuoteAdapter } from '../lib/quotes/quoteAdapter.js';
 import { OfflineQueue } from '../lib/quotes/offlineQueue.js';
 import { ConflictResolver } from '../lib/quotes/conflictResolver.js';
 import { createUuid } from '../lib/identity/createUuid'
+import { nextAvailableCommercialReference } from '../lib/identity/entityIdentity.js';
 import {
   findQuoteForProductionOrder,
   normalizeQuoteReference,
@@ -1675,7 +1676,10 @@ export default function useQuotes({
           : maximum;
       }, 0);
 
-    return `${prefix}-${String(maxConsecutive + 1).padStart(3, '0')}`;
+    return nextAvailableCommercialReference(
+      `${prefix}-${String(maxConsecutive + 1).padStart(3, '0')}`,
+      historyItems,
+    );
   }
 
   function warnCreateQuoteError(error) {
@@ -1884,9 +1888,13 @@ export default function useQuotes({
             operation.quoteId,
             operation.payload,
             operation.expectedVersion,
+            operation.workspaceId,
           );
         } else {
-          result = await QuoteRepository.softDeleteQuote(operation.quoteId);
+          result = await QuoteRepository.softDeleteQuote(
+            operation.quoteId,
+            operation.workspaceId,
+          );
         }
 
         const operationFailed = result?.error || !result?.data;
@@ -2189,6 +2197,7 @@ export default function useQuotes({
         currentIdentity.id,
         payload,
         currentIdentity.version,
+        workspaceId,
       )
       : (async () => {
         const firstAttempt = await QuoteRepository.createQuote(workspaceId, payload);
@@ -2787,7 +2796,7 @@ export default function useQuotes({
         return;
       }
 
-      void QuoteRepository.softDeleteQuote(id)
+      void QuoteRepository.softDeleteQuote(id, workspaceId)
         .then(({ data, error }) => {
           if (error || !data) {
             if (workspaceId && isNetworkError(error)) {
@@ -2987,6 +2996,7 @@ export default function useQuotes({
         id,
         payload,
         expectedVersion,
+        workspaceId,
       );
 
       if (error?.code === 'QUOTE_VERSION_CONFLICT') {
@@ -3153,6 +3163,7 @@ export default function useQuotes({
       quoteId,
       QuoteAdapter.historyItemToQuotePayload(pendingItem),
       pendingVersion,
+      workspaceId,
     );
 
     if (result.error?.code === 'QUOTE_VERSION_CONFLICT') {
@@ -3180,6 +3191,7 @@ export default function useQuotes({
           quoteId,
           QuoteAdapter.historyItemToQuotePayload(pendingItem),
           pendingVersion,
+          workspaceId,
         );
       }
     }

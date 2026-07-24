@@ -1,6 +1,9 @@
 import { supabase } from '../supabase/client';
 import { normalizeQuotePayload } from './quoteAdapter.js';
-import { normalizeEntityId } from '../identity/entityIdentity.js';
+import {
+  nextAvailableCommercialReference,
+  normalizeEntityId,
+} from '../identity/entityIdentity.js';
 
 const quoteColumns = `
   id,
@@ -65,6 +68,13 @@ async function getQuoteInWorkspace(workspaceId, id) {
     .maybeSingle());
 }
 
+async function loadWorkspaceQuoteFolios(workspaceId) {
+  return execute(() => supabase
+    .from('quotes')
+    .select('folio')
+    .eq('workspace_id', workspaceId));
+}
+
 export async function createQuote(workspaceId, form) {
   if (!workspaceId) {
     return { data: null, error: new Error('Falta el identificador del workspace.') };
@@ -84,6 +94,17 @@ export async function createQuote(workspaceId, form) {
     }
 
     const canonicalForm = normalizeQuotePayload(form);
+    if (
+      canonicalForm.workspace_id
+      && String(canonicalForm.workspace_id).trim() !== String(workspaceId).trim()
+    ) {
+      return {
+        data: null,
+        error: Object.assign(new Error('La cotización pertenece a otro workspace.'), {
+          code: 'WORKSPACE_MISMATCH',
+        }),
+      };
+    }
     const id = normalizeEntityId(canonicalForm.id);
     if (!id) {
       return {
@@ -100,11 +121,17 @@ export async function createQuote(workspaceId, form) {
       return updateQuote(id, canonicalForm, Number(existing.data.version), workspaceId);
     }
 
+    const remoteFolios = await loadWorkspaceQuoteFolios(workspaceId);
+    if (remoteFolios.error) return remoteFolios;
+
     const quote = {
       id,
       workspace_id: workspaceId,
       created_by: user.id,
-      folio: canonicalForm.folio,
+      folio: nextAvailableCommercialReference(
+        canonicalForm.folio,
+        remoteFolios.data,
+      ),
       status: canonicalForm.status,
       client_name: canonicalForm.client_name,
       client_phone: canonicalForm.client_phone,
@@ -115,16 +142,31 @@ export async function createQuote(workspaceId, form) {
       form_data: canonicalForm.form_data,
     };
 
-    const inserted = await supabase
-      .from('quotes')
-      .insert(quote)
-      .select()
-      .single();
+    while (true) {
+      const inserted = await supabase
+        .from('quotes')
+        .insert(quote)
+        .select()
+        .single();
 
-    if (inserted.error?.code !== '23505') return inserted;
-    const raced = await getQuoteInWorkspace(workspaceId, id);
-    if (raced.error || !raced.data) return inserted;
-    return updateQuote(id, canonicalForm, Number(raced.data.version), workspaceId);
+      if (inserted.error?.code !== '23505') return inserted;
+
+      const raced = await getQuoteInWorkspace(workspaceId, id);
+      if (raced.error) return raced;
+      if (raced.data) {
+        return updateQuote(id, canonicalForm, Number(raced.data.version), workspaceId);
+      }
+
+      const refreshedFolios = await loadWorkspaceQuoteFolios(workspaceId);
+      if (refreshedFolios.error) return refreshedFolios;
+      if (!refreshedFolios.data?.some((row) => row?.folio === quote.folio)) {
+        return inserted;
+      }
+      quote.folio = nextAvailableCommercialReference(
+        quote.folio,
+        refreshedFolios.data,
+      );
+    }
   });
 }
 
@@ -135,6 +177,29 @@ export async function updateQuote(id, form, expectedVersion, workspaceId = '') {
 
   return execute(async () => {
     const canonicalForm = normalizeQuotePayload(form);
+    const normalizedWorkspaceId = String(
+      workspaceId || canonicalForm.workspace_id || '',
+    ).trim();
+    if (!normalizedWorkspaceId) {
+      return {
+        data: null,
+        error: Object.assign(new Error('Falta el workspace de la cotización.'), {
+          code: 'MISSING_WORKSPACE_ID',
+        }),
+      };
+    }
+    if (
+      workspaceId
+      && canonicalForm.workspace_id
+      && String(canonicalForm.workspace_id).trim() !== normalizedWorkspaceId
+    ) {
+      return {
+        data: null,
+        error: Object.assign(new Error('La cotización pertenece a otro workspace.'), {
+          code: 'WORKSPACE_MISMATCH',
+        }),
+      };
+    }
     const quote = {
       status: canonicalForm.status,
       client_name: canonicalForm.client_name,
@@ -149,10 +214,8 @@ export async function updateQuote(id, form, expectedVersion, workspaceId = '') {
     let query = supabase
       .from('quotes')
       .update(quote)
+      .eq('workspace_id', normalizedWorkspaceId)
       .eq('id', id);
-
-    const normalizedWorkspaceId = String(workspaceId || canonicalForm.workspace_id || '').trim();
-    if (normalizedWorkspaceId) query = query.eq('workspace_id', normalizedWorkspaceId);
 
     if (Number.isInteger(expectedVersion) && expectedVersion > 0) {
       query = query.eq('version', expectedVersion);
@@ -174,27 +237,29 @@ export async function updateQuote(id, form, expectedVersion, workspaceId = '') {
   });
 }
 
-export async function softDeleteQuote(id) {
-  if (!id) {
-    return { data: null, error: new Error('Falta el identificador de la cotización.') };
+export async function softDeleteQuote(id, workspaceId) {
+  if (!id || !workspaceId) {
+    return { data: null, error: new Error('Faltan identificadores de la cotización.') };
   }
 
   return execute(() => supabase
     .from('quotes')
     .update({ deleted_at: new Date().toISOString() })
+    .eq('workspace_id', workspaceId)
     .eq('id', id)
     .select()
     .single());
 }
 
-export async function restoreQuote(id) {
-  if (!id) {
-    return { data: null, error: new Error('Falta el identificador de la cotización.') };
+export async function restoreQuote(id, workspaceId) {
+  if (!id || !workspaceId) {
+    return { data: null, error: new Error('Faltan identificadores de la cotización.') };
   }
 
   return execute(() => supabase
     .from('quotes')
     .update({ deleted_at: null })
+    .eq('workspace_id', workspaceId)
     .eq('id', id)
     .select()
     .single());

@@ -235,6 +235,9 @@ export function createPurchaseFromProductionOrder({
   idFactory = () => globalThis.crypto?.randomUUID?.(),
 } = {}) {
   const order = object(productionOrder) ? productionOrder : {};
+  if (!text(order.id)) throw new Error('La compra requiere una Orden de Producción.');
+  if (!text(order.workspaceId)) throw new Error('La compra requiere workspaceId.');
+  if (!text(order.quoteId)) throw new Error('La compra requiere una cotización.');
   const createdAt = date(now, new Date().toISOString());
   const folio = generatePurchaseNumber(purchases, createdAt);
   const id = text(idFactory());

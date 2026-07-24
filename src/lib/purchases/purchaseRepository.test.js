@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   unsubscribe, subscribe, on, channel, from, update, select, eq, is, order, maybeSingle,
+  insert, single, getUser, awaited,
 } = vi.hoisted(() => ({
   unsubscribe: vi.fn(),
   subscribe: vi.fn(),
@@ -14,10 +15,14 @@ const {
   is: vi.fn(),
   order: vi.fn(),
   maybeSingle: vi.fn(),
+  insert: vi.fn(),
+  single: vi.fn(),
+  getUser: vi.fn(),
+  awaited: [],
 }));
 
 vi.mock('../supabase/client.js', () => ({
-  supabase: { channel, from },
+  supabase: { channel, from, auth: { getUser } },
 }));
 
 import { PurchaseRepository } from './purchaseRepository.js';
@@ -35,8 +40,17 @@ describe('PurchaseRepository', () => {
     is.mockReset();
     order.mockReset();
     maybeSingle.mockReset();
+    insert.mockReset();
+    single.mockReset();
+    getUser.mockReset();
+    awaited.length = 0;
     const builder = { on, subscribe, unsubscribe };
-    const query = { update, select, eq, is, order, maybeSingle };
+    const query = {
+      update, select, eq, is, order, maybeSingle, insert, single,
+      then: (resolve) => Promise.resolve(
+        awaited.shift() || { data: [], error: null },
+      ).then(resolve),
+    };
     on.mockReturnValue(builder);
     subscribe.mockReturnValue(builder);
     channel.mockReturnValue(builder);
@@ -45,7 +59,9 @@ describe('PurchaseRepository', () => {
     select.mockReturnValue(query);
     eq.mockReturnValue(query);
     is.mockReturnValue(query);
-    order.mockResolvedValue({ data: [], error: null });
+    order.mockReturnValue(query);
+    insert.mockReturnValue(query);
+    getUser.mockResolvedValue({ data: { user: { id: 'user-1' } }, error: null });
     maybeSingle.mockResolvedValue({
       data: {
         id: 'item-1', workspace_id: 'ws-1', purchase_id: 'purchase-1',
@@ -70,6 +86,19 @@ describe('PurchaseRepository', () => {
     expect(from).not.toHaveBeenCalled();
   });
 
+  it('rechaza una compra de otro workspace antes de consultar', async () => {
+    const result = await PurchaseRepository.createPurchaseRemote('ws-a', {
+      id: '55555555-5555-4555-8555-555555555555',
+      workspaceId: 'ws-b',
+      productionOrderId: 'order-1',
+      quoteId: 'quote-1',
+      folio: 'OC-1',
+      items: [],
+    });
+    expect(result.error?.code).toBe('WORKSPACE_MISMATCH');
+    expect(from).not.toHaveBeenCalled();
+  });
+
   it('carga el conjunto canónico incluyendo compras eliminadas lógicamente', async () => {
     const result = await PurchaseRepository.loadPurchases('ws-1');
     expect(result).toEqual({ data: [], error: null });
@@ -84,6 +113,46 @@ describe('PurchaseRepository', () => {
     stop();
     stop();
     expect(unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it('no reutiliza el folio de una compra remota inactiva o eliminada', async () => {
+    const purchase = {
+      id: '55555555-5555-4555-8555-555555555555',
+      workspaceId: 'ws-1',
+      productionOrderId: 'order-1',
+      quoteId: 'quote-1',
+      folio: 'OC-20260723-001',
+      items: [],
+    };
+    maybeSingle.mockResolvedValueOnce({ data: null, error: null });
+    awaited.push(
+      { data: [], error: null },
+      {
+        data: [{
+          folio: 'OC-20260723-001',
+          is_active: false,
+          deleted_at: '2026-07-23T00:00:00Z',
+        }],
+        error: null,
+      },
+    );
+    single.mockResolvedValueOnce({
+      data: {
+        id: purchase.id,
+        workspace_id: 'ws-1',
+        production_order_id: 'order-1',
+        quote_id: 'quote-1',
+        folio: 'OC-20260723-002',
+        status: 'pendiente',
+        version: 1,
+      },
+      error: null,
+    });
+
+    const result = await PurchaseRepository.createPurchaseRemote('ws-1', purchase);
+
+    expect(result.data.folio).toBe('OC-20260723-002');
+    expect(insert.mock.calls[0][0].folio).toBe('OC-20260723-002');
   });
 
   it('actualiza exclusivamente una partida por workspace, id y versión', async () => {

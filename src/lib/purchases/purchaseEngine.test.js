@@ -72,6 +72,16 @@ describe('purchaseEngine', () => {
     });
   });
 
+  it('rechaza una compra sin OT, workspace o cotización', () => {
+    expect(() => createPurchaseFromProductionOrder()).toThrow(/Orden de Producción/);
+    expect(() => createPurchaseFromProductionOrder({
+      productionOrder: { id: 'ot-1', quoteId: 'quote-1' },
+    })).toThrow(/workspaceId/);
+    expect(() => createPurchaseFromProductionOrder({
+      productionOrder: { id: 'ot-1', workspaceId: 'ws-1' },
+    })).toThrow(/cotización/);
+  });
+
   it('deriva el estado agregado de las partidas', () => {
     expect(purchaseStatusFromItems([{ status: 'comprado' }, { status: 'recibido' }])).toBe('comprado');
     expect(purchaseStatusFromItems([{ status: 'recibido' }])).toBe('recibido');

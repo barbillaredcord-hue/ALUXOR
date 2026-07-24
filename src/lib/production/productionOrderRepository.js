@@ -1,5 +1,8 @@
 import { supabase } from '../supabase/client';
-import { normalizeEntityId } from '../identity/entityIdentity.js';
+import {
+  nextAvailableCommercialReference,
+  normalizeEntityId,
+} from '../identity/entityIdentity.js';
 import {
   productionOrderRowToModel,
   productionOrderToInsertPayload,
@@ -109,6 +112,13 @@ async function insertProductionOrder(payload) {
     .single());
 }
 
+async function loadWorkspaceProductionFolios(workspaceId) {
+  return execute(() => supabase
+    .from('production_orders')
+    .select('folio')
+    .eq('workspace_id', workspaceId));
+}
+
 export async function createProductionOrderRemote(workspaceId, order) {
   if (!workspaceId) {
     return { data: null, error: readableError('Falta el identificador del workspace.'), existing: false };
@@ -120,6 +130,16 @@ export async function createProductionOrderRemote(workspaceId, order) {
       return {
         data: null,
         error: readableError('La orden requiere un UUID estable.', 'MISSING_STABLE_ENTITY_ID'),
+        existing: false,
+      };
+    }
+    if (String(order?.workspaceId || '').trim() !== String(workspaceId).trim()) {
+      return {
+        data: null,
+        error: readableError(
+          'La orden pertenece a otro workspace.',
+          'WORKSPACE_MISMATCH',
+        ),
         existing: false,
       };
     }
@@ -159,11 +179,15 @@ export async function createProductionOrderRemote(workspaceId, order) {
       };
     }
 
+    const remoteFolios = await loadWorkspaceProductionFolios(workspaceId);
+    if (remoteFolios.error) return { data: null, error: remoteFolios.error, existing: false };
+
     const payload = {
       ...productionOrderToInsertPayload(order),
       id,
       workspace_id: workspaceId,
       created_by: user.id,
+      folio: nextAvailableCommercialReference(order?.folio, remoteFolios.data),
     };
 
     if (!payload.quote_id || !payload.folio) {
@@ -174,22 +198,41 @@ export async function createProductionOrderRemote(workspaceId, order) {
       };
     }
 
-    let result = await insertProductionOrder(payload);
+    while (true) {
+      const result = await insertProductionOrder(payload);
 
-    if (!result.error) {
-      return {
-        data: productionOrderRowToModel(result.data),
-        error: null,
-        existing: false,
-      };
-    }
+      if (!result.error) {
+        return {
+          data: productionOrderRowToModel(result.data),
+          error: null,
+          existing: false,
+        };
+      }
 
-    if (result.error?.code === '23505') {
+      if (result.error?.code !== '23505') {
+        return { data: null, error: result.error, existing: false };
+      }
+
       const raced = await getProductionOrder(workspaceId, id);
+      if (raced.error) return { ...raced, existing: false };
       if (raced.data && !raced.error) return { ...raced, existing: true };
-    }
 
-    return { data: null, error: result.error, existing: false };
+      const racedByQuote = await getProductionOrderByQuoteId(workspaceId, order?.quoteId);
+      if (racedByQuote.error) return { ...racedByQuote, existing: false };
+      if (racedByQuote.data) return { ...racedByQuote, existing: true };
+
+      const refreshedFolios = await loadWorkspaceProductionFolios(workspaceId);
+      if (refreshedFolios.error) {
+        return { data: null, error: refreshedFolios.error, existing: false };
+      }
+      if (!refreshedFolios.data?.some((row) => row?.folio === payload.folio)) {
+        return { data: null, error: result.error, existing: false };
+      }
+      payload.folio = nextAvailableCommercialReference(
+        payload.folio,
+        refreshedFolios.data,
+      );
+    }
   } catch (error) {
     return { data: null, error, existing: false };
   }

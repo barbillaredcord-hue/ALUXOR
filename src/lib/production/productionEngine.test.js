@@ -30,6 +30,13 @@ describe('identidad de órdenes de producción', () => {
       workspaceId: 'ws', quoteId: 'quote', folio: 'OT-20260722-001',
     }).id).toMatch(/^[0-9a-f-]{36}$/i);
   });
+
+  it('rechaza una orden sin workspace o sin cotización', () => {
+    expect(() => createProductionOrder({ quoteId: 'quote' }))
+      .toThrow(/workspaceId/);
+    expect(() => createProductionOrder({ workspaceId: 'ws' }))
+      .toThrow(/cotización/);
+  });
 });
 
 describe('modo de solo lectura del proyecto', () => {

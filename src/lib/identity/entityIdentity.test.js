@@ -7,6 +7,7 @@ import {
   hasStableEntityId,
   indexEntitiesById,
   normalizeEntityId,
+  nextAvailableCommercialReference,
   preserveEntityIdentity,
   sameEntity,
 } from './entityIdentity.js';
@@ -44,5 +45,20 @@ describe('contrato canónico de identidad', () => {
       { id: ID_A, workspaceId: 'ws', folio: 'ALX-1' },
       { id: ID_B, workspaceId: 'ws', folio: 'ALX-1' },
     ], (entity) => entity.folio)[0].reference).toBe('ALX-1');
+  });
+
+  it('incrementa el folio hasta encontrar el siguiente libre sin alterar UUID', () => {
+    const entities = [
+      { id: ID_A, folio: 'ALX-20260723-001' },
+      { id: ID_B, folio: 'ALX-20260723-002' },
+    ];
+    expect(nextAvailableCommercialReference(
+      'ALX-20260723-001',
+      entities,
+    )).toBe('ALX-20260723-003');
+    expect(nextAvailableCommercialReference('MANUAL', [
+      { folio: 'MANUAL' },
+      { folio: 'MANUAL-002' },
+    ])).toBe('MANUAL-003');
   });
 });
