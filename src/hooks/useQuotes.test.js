@@ -234,6 +234,7 @@ describe('Nueva cotización limpia', () => {
     const modifiedForm = { ...cleanForm, producto: 'Cocina nueva' };
     expect(hasRealQuoteFormChanges(cleanForm, modifiedForm)).toBe(true);
     expect(canScheduleQuoteAutoSave(false, 'cotizador')).toBe(true);
+    expect(canScheduleQuoteAutoSave(false, 'material-studio')).toBe(true);
     expect(canScheduleQuoteAutoSave(false, 'produccion')).toBe(false);
   });
 

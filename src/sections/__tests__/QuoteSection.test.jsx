@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { QuoteStatusControl } from '../QuoteSection.jsx';
+import {
+  MaterialStudioLauncher,
+  QuoteStatusControl,
+} from '../QuoteSection.jsx';
 
 describe('autoridad del estado en Cotización', () => {
   it('mantiene editable únicamente el estado comercial antes de Producción', () => {
@@ -40,5 +43,17 @@ describe('autoridad del estado en Cotización', () => {
     />);
     expect(markup).toContain('Abrir Producción');
     expect(markup).not.toContain('Cancelar proyecto');
+  });
+});
+
+describe('acceso a BR Material Studio', () => {
+  it('deja en Cotización únicamente el acceso al workspace dedicado', () => {
+    const markup = renderToStaticMarkup(<MaterialStudioLauncher />);
+
+    expect(markup).toContain('BR Material Studio');
+    expect(markup).toContain('Selecciona piezas, calcula materiales y optimiza cortes.');
+    expect(markup).toContain('03');
+    expect(markup).not.toContain('Modo por proyecto');
+    expect(markup).not.toContain('Resultado y acciones');
   });
 });

@@ -82,6 +82,7 @@ export function createCleanQuoteForm(baseDefaults) {
     fondo: 0,
     grosorMaterial: 0,
     cantidad: 0,
+    pieceGroups: [],
     measureItems: [],
     materialCotizacion: '',
     precioM2: 0,
@@ -139,7 +140,7 @@ export function isCurrentQuoteEditSession(editSessionRef, editSession) {
 
 export function canScheduleQuoteAutoSave(autoSaveSuppressed, activeSection) {
   return !autoSaveSuppressed
-    && ['cotizador', 'cotizador-rellenado'].includes(activeSection);
+    && ['cotizador', 'cotizador-rellenado', 'material-studio'].includes(activeSection);
 }
 
 export function hasRealQuoteFormChanges(confirmedForm, currentForm) {
@@ -2630,8 +2631,8 @@ export default function useQuotes({
     previousActiveSectionRef.current = activeSection;
 
     if (
-      ['cotizador', 'cotizador-rellenado'].includes(previousSection)
-      && !['cotizador', 'cotizador-rellenado'].includes(activeSection)
+      ['cotizador', 'cotizador-rellenado', 'material-studio'].includes(previousSection)
+      && !['cotizador', 'cotizador-rellenado', 'material-studio'].includes(activeSection)
     ) {
       if (quoteAutoSaveTimerRef.current !== null) {
         window.clearTimeout(quoteAutoSaveTimerRef.current);

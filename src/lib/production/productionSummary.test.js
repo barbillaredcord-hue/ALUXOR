@@ -26,7 +26,7 @@ describe('getProductionSummary', () => {
       installation: 1,
       delivered: 1,
       rejected: 0,
-      active: 8,
+      active: 7,
       updatedAt: '2026-07-12T10:00:00.000Z',
     });
   });
@@ -65,5 +65,25 @@ describe('getProductionSummary', () => {
       { estado: 'Rechazado' },
     ]);
     expect(summary).toMatchObject({ total: 2, active: 1, pending: 1, rejected: 1 });
+  });
+
+  it('excluye entregadas, rechazadas y archivadas de las órdenes activas', () => {
+    const summary = getProductionSummary([
+      { estado: 'Pendiente' },
+      { estado: 'Listo' },
+      { estado: 'Entregado' },
+      { estado: 'Rechazado' },
+      { estado: 'Fabricando', deletedAt: '2026-07-24T10:00:00.000Z' },
+    ]);
+
+    expect(summary).toMatchObject({
+      total: 5,
+      active: 2,
+      pending: 1,
+      ready: 1,
+      delivered: 1,
+      rejected: 1,
+      inProcess: 0,
+    });
   });
 });

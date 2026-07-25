@@ -1,8 +1,9 @@
 // cSpell:words ALUXOR AnunciaPro anunciapro aluxor Clóset clóset clósets Cotizacion cotizacion Telefono telefono whatsapp promocion jaladera Jaladera jaladeras Jaladeras tornillería Silicón categoria bano economico descripcion triplay Triplay buro buró Buró burós pzas Vidrieria Carpinteria zoclo herrajes melamina merma cotizador metalnes
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Accessibility,
   Box,
+  Calculator,
   ClipboardList,
   Eraser,
   FileText,
@@ -15,6 +16,7 @@ import AuthGate from '../components/auth/AuthGate.jsx';
 import UserSessionCard from '../components/auth/UserSessionCard.jsx';
 import Field from '../components/Field.jsx';
 import InspectorPanel from '../components/InspectorPanel.jsx';
+import MaterialCalculator from '../components/material-calculator/MaterialCalculator.jsx';
 import PlanCanvas3D from '../components/PlanCanvas3D.jsx';
 import ProjectFlow from '../components/ProjectFlow.jsx';
 import SummaryPanel from '../components/SummaryPanel.jsx';
@@ -40,6 +42,7 @@ import {
   getPurchaseMaterialState,
   getQuoteDisplayStatus,
 } from '../lib/workflow/projectStatus.js';
+import { getBusinessState } from '../lib/business-state/index.js';
 import { isProjectReadOnly } from '../lib/production/productionEngine.js';
 import { productionOrderMatchesQuote } from '../lib/quotes/quoteReference.js';
 import useAuth from '../hooks/useAuth.js';
@@ -105,9 +108,58 @@ export function getHistorySectionReadOnly(canEditWorkspaceQuotes) {
   return !canEditWorkspaceQuotes;
 }
 
+export function buildMaterialStudioSession({
+  activeSection,
+  activeQuoteId = null,
+  selectedPieceIds = [],
+  hasActiveQuote = false,
+  timestamp = Date.now(),
+} = {}) {
+  return {
+    id: `${timestamp}-${activeQuoteId || 'quick'}`,
+    sourceSection: activeSection || 'cotizador',
+    initialMode: hasActiveQuote ? 'project' : 'quick',
+    initialSelectedPieceIds: Array.isArray(selectedPieceIds) ? selectedPieceIds : [],
+  };
+}
+
+export function canLeaveMaterialStudio({
+  hasTemporaryChanges = false,
+  confirmDiscard = () => true,
+} = {}) {
+  return !hasTemporaryChanges || confirmDiscard();
+}
+
+export function applyFocusedProjectSelection({
+  projectId,
+  projects,
+  history,
+  setFocusedProjectId,
+  setSelectedProductionOrderId,
+  setSelectedPurchaseId,
+  loadHistoryItem,
+  preserveSection = null,
+  setActiveSection,
+}) {
+  const project = (Array.isArray(projects) ? projects : [])
+    .find((item) => item.id === projectId);
+  if (!project) return null;
+
+  setFocusedProjectId(project.id);
+  setSelectedProductionOrderId(project.productionOrderId || null);
+  setSelectedPurchaseId?.(project.purchaseIds?.[0] || null);
+  const projectQuote = (Array.isArray(history) ? history : [])
+    .find((item) => item.id === project.quoteId);
+  if (projectQuote) loadHistoryItem(projectQuote);
+  if (preserveSection) setActiveSection(preserveSection);
+  return project;
+}
+
 function App() {
   const [largeText, setLargeText] = useState(false);
   const [activeSection, setActiveSection] = useState('inicio');
+  const [focusedProjectId, setFocusedProjectId] = useState(null);
+  const [materialStudioSession, setMaterialStudioSession] = useState(null);
   const [floatingSummary, setFloatingSummary] = useState({ x: 24, y: 120, compact: false, minimized: false });
   const authWorkspaceRefreshRef = useRef(null);
   const catalogHydrationRef = useRef({
@@ -305,6 +357,8 @@ function App() {
     updateQuickCalc,
     quickCalcText,
     applyQuickCalcToMaterial,
+    createPieceGroup,
+    applyProfessionalMaterial,
   } = quickCalculator;
   const planEditor = usePlanEditor({
     setForm: setProjectForm,
@@ -381,6 +435,61 @@ function App() {
     productionOrders,
   });
   const canEditPurchases = canManagePurchasing(currentWorkspaceRole);
+  const businessState = useMemo(() => getBusinessState({
+    settings: workspaceSettings,
+    quotes: history,
+    productionOrders,
+    purchases,
+    activeProductionOrder,
+  }), [
+    activeProductionOrder,
+    history,
+    productionOrders,
+    purchases,
+    workspaceSettings,
+  ]);
+  const focusedProject = businessState.projects.find((project) => (
+    project.id === focusedProjectId
+  )) || businessState.projects[0] || null;
+
+  useEffect(() => {
+    const projects = businessState.projects;
+    if (!projects.length) {
+      if (focusedProjectId !== null) setFocusedProjectId(null);
+      return;
+    }
+
+    const activeProject = projects.find((project) => (
+      project.quoteId === activeQuoteIdentity?.id
+    ));
+    if (focusedProjectId && activeProject && activeProject.id !== focusedProjectId) {
+      setFocusedProjectId(activeProject.id);
+      setSelectedProductionOrderId(activeProject.productionOrderId || null);
+      return;
+    }
+
+    if (!focusedProjectId || !projects.some((project) => project.id === focusedProjectId)) {
+      applyFocusedProjectSelection({
+        projectId: projects[0].id,
+        projects,
+        history,
+        setFocusedProjectId,
+        setSelectedProductionOrderId,
+        setSelectedPurchaseId,
+        loadHistoryItem,
+        preserveSection: activeSection,
+        setActiveSection,
+      });
+    }
+  }, [
+    activeQuoteIdentity?.id,
+    activeSection,
+    businessState.projects,
+    focusedProjectId,
+    history,
+    setSelectedPurchaseId,
+    setSelectedProductionOrderId,
+  ]);
   const activeProductionPurchases = useMemo(() => (
     activeProductionOrder
       ? purchases.filter((purchase) => (
@@ -439,6 +548,55 @@ function App() {
 
   function handleSelectProductionOrder(orderId) {
     setSelectedProductionOrderId(orderId);
+  }
+
+  function openMaterialCalculator(options = {}) {
+    const contextOptions = options?.currentTarget ? {} : options;
+    const initialSelectedPieceIds = contextOptions.selectedPieceIds || [];
+    setMaterialStudioSession(buildMaterialStudioSession({
+      activeSection: contextOptions.sourceSection || activeSection,
+      activeQuoteId: activeQuoteIdentity?.id || null,
+      selectedPieceIds: initialSelectedPieceIds,
+      hasActiveQuote: Boolean(
+        activeQuoteIdentity
+        || form.producto
+        || form.clienteNombre
+        || quote.measureRows.length,
+      ),
+    }));
+    setActiveSection('material-studio');
+  }
+
+  function closeMaterialStudio({
+    hasTemporaryChanges = false,
+    focusPieceId = null,
+  } = {}) {
+    if (!canLeaveMaterialStudio({
+      hasTemporaryChanges,
+      confirmDiscard: () => globalThis.confirm?.(
+        'Hay una selección o cálculo temporal sin confirmar. ¿Deseas descartarlo y volver a Cotización?',
+      ) ?? true,
+    })) return;
+    setMaterialStudioSession(null);
+    setActiveSection('cotizador');
+    if (focusPieceId) {
+      globalThis.requestAnimationFrame?.(() => {
+        globalThis.document
+          ?.querySelector(`[data-quote-field="measureItems.${focusPieceId}.ancho"]`)
+          ?.focus();
+      });
+    }
+  }
+
+  function changeMaterialStudioProject({ hasTemporaryChanges = false } = {}) {
+    if (!canLeaveMaterialStudio({
+      hasTemporaryChanges,
+      confirmDiscard: () => globalThis.confirm?.(
+        'Hay una selección o cálculo temporal sin confirmar. ¿Deseas descartarlo y cambiar de proyecto?',
+      ) ?? true,
+    })) return;
+    setMaterialStudioSession(null);
+    setActiveSection('inicio');
   }
 
   function handleStartNewQuote() {
@@ -543,7 +701,7 @@ function App() {
           <p className="workspace-session-error" role="alert">{workspaceError}</p>
         )}
 
-        <SummaryPanel
+        {activeSection !== 'material-studio' && <SummaryPanel
           key={activeSection === 'produccion'
             ? selectedProductionOrderId
             : activeSection === 'compras' ? selectedPurchaseId : 'quote-summary'}
@@ -563,7 +721,7 @@ function App() {
           onGuardar={saveToHistory}
           onHistorial={() => setActiveSection('historial')}
           canSave={canEditWorkspaceQuotes && !projectReadOnly}
-        />
+        />}
 
         <nav className="menu" aria-label="Secciones principales">
           {menuItems.map(({ id, label, icon: Icon }) => (
@@ -605,7 +763,9 @@ function App() {
         )}
 
         content={(
-      <section className="content">
+      <section className={activeSection === 'material-studio' ? 'content material-studio-content' : 'content'}>
+        {activeSection !== 'material-studio' && (
+        <>
         <div className="project-context-layer">
         <header className="hero hero-compact">
           <div className="hero-main">
@@ -621,15 +781,15 @@ function App() {
                 className={appLogo ? 'hero-logo' : 'hero-logo hero-logo-official'}
               />
               <div>
-                <h1>{form.producto || 'Proyecto sin nombre'}</h1>
-                <p>{form.clienteNombre || 'Cliente pendiente'} · Responsable: Taller ALUXOR</p>
+                <h1>{focusedProject?.projectName || form.producto || 'Proyecto sin nombre'}</h1>
+                <p>{focusedProject?.customerName || form.clienteNombre || 'Cliente no registrado'} · Responsable: Taller ALUXOR</p>
               </div>
             </div>
 
             <div className="hero-project-meta compact-meta">
-              <span>Avance <strong>{decimal(dataHealth.score, 0)}%</strong></span>
-              <span>Entrega <strong>{form.entrega || 'Por definir'}</strong></span>
-              <span>Próxima acción <strong>{quote.materialRows?.[0]?.nombre ? `Comprar ${quote.materialRows[0].nombre}` : 'Revisar datos'}</strong></span>
+              <span>Avance <strong>{decimal(focusedProject?.progress ?? dataHealth.score, 0)}%</strong></span>
+              <span>Entrega <strong>{focusedProject?.deliveryDate || form.entrega || 'Entrega sin programar'}</strong></span>
+              <span>Próxima acción <strong>{focusedProject?.recommendedAction || 'Revisar datos'}</strong></span>
             </div>
           </div>
 
@@ -650,6 +810,7 @@ function App() {
               </button>
             )}
             <button type="button" className="ghost" onClick={() => setActiveSection('textos')}><FileText size={16} /> Textos</button>
+            <button type="button" className="ghost" onClick={() => openMaterialCalculator()}><Calculator size={16} /> Calcular material</button>
             <button type="button" onClick={openWhatsApp}><MessageCircle size={16} /> WhatsApp</button>
             <button type="button" onClick={() => openPrint('client')}><FileText size={16} /> PDF</button>
           </div>
@@ -659,29 +820,94 @@ function App() {
         <div className="workflow-layer">
           <ProjectFlow
             activeSection={activeSection}
-            projectName={form.producto || 'Proyecto sin nombre'}
-            projectStatus={quoteDisplayStatus}
-            customer={form.clienteNombre || 'Cliente pendiente'}
-            progress={dataHealth.score}
+            projectName={focusedProject?.projectName || form.producto || 'Proyecto sin nombre'}
+            projectStatus={focusedProject?.status || quoteDisplayStatus}
+            customer={focusedProject?.customerName || form.clienteNombre || 'Cliente no registrado'}
+            progress={focusedProject?.progress ?? dataHealth.score}
             total={quote.total}
-            nextAction={quote.materialRows?.[0]?.nombre ? `Comprar ${quote.materialRows[0].nombre}` : 'Revisar datos'}
+            nextAction={focusedProject?.recommendedAction || 'Revisar datos'}
           />
         </div>
+        </>
+        )}
         <section className="work-layer">
 
         {activeSection === 'inicio' && (
           <DashboardSection
-            form={form}
-            quote={quote}
-            dataHealth={dataHealth}
+            businessState={businessState}
+            selectedProjectId={focusedProject?.id || null}
+            onSelectProject={(projectId) => applyFocusedProjectSelection({
+              projectId,
+              projects: businessState.projects,
+              history,
+              setFocusedProjectId,
+              setSelectedProductionOrderId,
+              setSelectedPurchaseId,
+              loadHistoryItem,
+              preserveSection: 'inicio',
+              setActiveSection,
+            })}
             money={money}
-            decimal={decimal}
-            onOpenProduction={(purchase) => {
-              setSelectedProductionOrderId(purchase.productionOrderId || null);
-              setActiveSection('produccion');
+            onOpenProject={(project) => {
+              applyFocusedProjectSelection({
+                projectId: project.id,
+                projects: businessState.projects,
+                history,
+                setFocusedProjectId,
+                setSelectedProductionOrderId,
+                setSelectedPurchaseId,
+                loadHistoryItem,
+                setActiveSection,
+              });
             }}
-            onOpenReceiving={() => setActiveSection('recepcion')}
-            onOpenInventory={() => setActiveSection('inventario')}
+            onOpenSection={(sectionId, project) => {
+              if (sectionId === 'produccion' && project?.productionOrderId) {
+                setSelectedProductionOrderId(project.productionOrderId);
+              }
+              setActiveSection(sectionId);
+            }}
+          />
+        )}
+
+        {activeSection === 'material-studio' && (
+          <MaterialCalculator
+            key={materialStudioSession?.id}
+            context={{
+              quoteId: activeQuoteIdentity?.id || null,
+              projectId: activeProductionOrder?.id || null,
+              projectName: form.producto,
+              customerName: form.clienteNombre,
+              sourceSection: materialStudioSession?.sourceSection,
+            }}
+            pieces={quote.measureRows}
+            pieceGroups={Quote.pieceGroupsFromForm(form, quoteHelpers)}
+            materials={[
+              ...Quote.materialItemsFromForm(form, quote.areaTotal, quoteHelpers),
+              ...catalog
+                .filter((item) => item.materialCotizacion)
+                .map((item) => ({
+                  id: `catalog-${item.id}`,
+                  nombre: item.materialCotizacion,
+                  categoria: item.categoria,
+                  tipoCompra: item.unidad === 'metro lineal' ? 'lineal' : 'area',
+                  unidad: item.unidad || 'm²',
+                  costoUnitario: numberValue(item.costo),
+                  precioUnitario: numberValue(item.precio),
+                  merma: numberValue(item.merma),
+                }))
+                .filter((catalogMaterial) => (
+                  !Quote.materialItemsFromForm(form, quote.areaTotal, quoteHelpers)
+                    .some((material) => material.nombre === catalogMaterial.nombre)
+                )),
+            ]}
+            money={money}
+            readOnly={projectReadOnly}
+            initialMode={materialStudioSession?.initialMode || 'project'}
+            initialSelectedPieceIds={materialStudioSession?.initialSelectedPieceIds}
+            onCreateGroup={createPieceGroup}
+            onApply={applyProfessionalMaterial}
+            onBack={closeMaterialStudio}
+            onChangeProject={changeMaterialStudioProject}
           />
         )}
 
@@ -727,6 +953,7 @@ function App() {
             copyText={copyText}
             quickCalcText={quickCalcText}
             applyQuickCalcToMaterial={applyQuickCalcToMaterial}
+            onOpenMaterialStudio={() => openMaterialCalculator({ sourceSection: 'cotizador' })}
             guideFor={guideFor}
             input={input}
             textareaInput={textareaInput}
@@ -859,6 +1086,7 @@ function App() {
             productionLoading={productionLoading}
             productionError={productionError}
             productionSyncStatus={productionSyncStatus}
+            onCalculateMaterial={() => openMaterialCalculator({ sourceSection: 'produccion' })}
           />
         )}
 
@@ -917,6 +1145,11 @@ function App() {
             quote={quote}
             decimal={decimal}
             readOnly={projectReadOnly}
+            contextQuoteId={activeQuoteIdentity?.id || null}
+            onCalculateMaterial={(payload) => openMaterialCalculator({
+              sourceSection: 'corte',
+              ...payload,
+            })}
           />
         )}
 

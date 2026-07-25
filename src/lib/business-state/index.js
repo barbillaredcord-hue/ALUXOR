@@ -4,11 +4,25 @@ import { getFinanceSummary } from '../finance/financeSummary.js';
 import { getHistorySummary } from '../history/historySummary.js';
 import { getInventorySummary } from '../inventory/inventorySummary.js';
 import { getProductionSummary } from '../production/productionSummary.js';
-import { isProjectReadOnly } from '../production/productionEngine.js';
+import {
+  PRODUCTION_STATUSES,
+  isProjectReadOnly,
+} from '../production/productionEngine.js';
 import { getPurchasesSummary } from '../purchases/purchaseSummary.js';
 import { selectPurchaseViews } from '../purchases/purchaseSelectors.js';
+import {
+  QUOTE_STATUSES,
+  quoteRecordStatus,
+} from '../quotes/quoteAdapter.js';
+import { productionOrderMatchesQuote } from '../quotes/quoteReference.js';
 import { getQuotesSummary } from '../quotes/quoteSummary.js';
-import { getProjectStatusSummary } from '../workflow/projectStatus.js';
+import {
+  PRODUCTION_OPERATIONAL_STATES,
+  getProjectStatusSummary,
+  getProductionOperationalState,
+  getPurchaseMaterialState,
+  getQuoteDisplayStatus,
+} from '../workflow/projectStatus.js';
 
 const indicator = ({
   label,
@@ -67,6 +81,435 @@ function derivedItem(id, label, count, source, detail, severity = 'attention') {
     detail,
     severity,
   };
+}
+
+function text(value, fallback = '') {
+  if (value === null || value === undefined) return fallback;
+  return String(value).trim() || fallback;
+}
+
+function recordTimestamp(record) {
+  const values = [
+    record?.updatedAt,
+    record?.updated_at,
+    record?.fechaFinal,
+    record?.createdAt,
+    record?.created_at,
+  ];
+
+  for (const value of values) {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    const parsed = Date.parse(value || '');
+    if (!Number.isNaN(parsed)) return parsed;
+  }
+
+  return 0;
+}
+
+function quoteForm(quote) {
+  return quote?.form || quote?.form_data || {};
+}
+
+function projectPurchases(purchases, order, quote) {
+  return availableInput(purchases).filter((purchase) => (
+    (order?.id && (
+      purchase?.productionOrderId === order.id
+      || purchase?.production_order_id === order.id
+    ))
+    || (quote?.id && (
+      purchase?.quoteId === quote.id
+      || purchase?.quote_id === quote.id
+    ))
+  ));
+}
+
+function operationalEvent({
+  projectId,
+  projectName,
+  eventType,
+  description,
+  occurredAt,
+  destination,
+  source,
+  sourceId,
+}) {
+  const timestamp = recordTimestamp({ updatedAt: occurredAt });
+  if (!timestamp) return null;
+  const normalizedOccurredAt = new Date(timestamp).toISOString();
+
+  return {
+    id: [projectId, eventType, sourceId || '', normalizedOccurredAt].join(':'),
+    projectId,
+    projectName,
+    eventType,
+    description,
+    occurredAt: normalizedOccurredAt,
+    destination,
+    label: description,
+    updatedAt: normalizedOccurredAt,
+    source,
+  };
+}
+
+function productionTimelineEvent(entry, context) {
+  const eventName = text(entry?.evento);
+  if (!eventName) return null;
+
+  if (eventName === 'Orden creada') {
+    return operationalEvent({
+      ...context,
+      eventType: 'production_order_created',
+      description: 'Orden enviada a producción',
+      occurredAt: entry.fecha,
+      destination: 'produccion',
+      source: 'production-timeline',
+    });
+  }
+
+  const changedStatus = Object.values(PRODUCTION_STATUSES).find((status) => (
+    eventName === `Estado cambiado a ${status}`
+  ));
+  if (!changedStatus) return null;
+
+  const delivered = changedStatus === PRODUCTION_STATUSES.DELIVERED;
+  const rejected = changedStatus === PRODUCTION_STATUSES.REJECTED;
+  return operationalEvent({
+    ...context,
+    eventType: delivered
+      ? 'project_delivered'
+      : rejected ? 'production_rejected' : 'production_status_changed',
+    description: delivered
+      ? 'Proyecto entregado'
+      : rejected ? 'Orden de producción rechazada' : `Producción actualizada: ${changedStatus}`,
+    occurredAt: entry.fecha,
+    destination: 'produccion',
+    source: 'production-timeline',
+  });
+}
+
+function getProjectOperationalActivity({
+  quote,
+  order,
+  purchases,
+  projectId,
+  projectName,
+  operationalStatus,
+}) {
+  const events = [];
+  const quoteEvent = operationalEvent({
+    projectId,
+    projectName,
+    eventType: 'quote_updated',
+    description: 'Cotización actualizada',
+    occurredAt: quote?.updatedAt ?? quote?.updated_at,
+    destination: 'cotizador',
+    source: 'quote',
+    sourceId: quote?.id,
+  });
+  if (quoteEvent) events.push(quoteEvent);
+
+  const timelineEvents = availableInput(order?.timeline)
+    .map((entry, index) => productionTimelineEvent(entry, {
+      projectId,
+      projectName,
+      sourceId: `${order?.id || ''}-${index}`,
+    }))
+    .filter(Boolean);
+  events.push(...timelineEvents);
+
+  if (order && timelineEvents.length === 0) {
+    const orderEvent = operationalEvent({
+      projectId,
+      projectName,
+      eventType: operationalStatus === PRODUCTION_OPERATIONAL_STATES.DELIVERED
+        ? 'project_delivered'
+        : 'production_updated',
+      description: operationalStatus === PRODUCTION_OPERATIONAL_STATES.DELIVERED
+        ? 'Proyecto entregado'
+        : operationalStatus === PRODUCTION_OPERATIONAL_STATES.WAITING_PURCHASES
+          ? 'Producción bloqueada por material'
+          : `Producción actualizada: ${operationalStatus}`,
+      occurredAt: order.updatedAt ?? order.updated_at,
+      destination: 'produccion',
+      source: 'production-order',
+      sourceId: order.id,
+    });
+    if (orderEvent) events.push(orderEvent);
+  }
+
+  availableInput(purchases).forEach((purchase) => {
+    const purchaseEvent = operationalEvent({
+      projectId,
+      projectName,
+      eventType: 'purchase_updated',
+      description: 'Compra registrada',
+      occurredAt: purchase.updatedAt ?? purchase.updated_at,
+      destination: 'compras',
+      source: 'purchase',
+      sourceId: purchase.id,
+    });
+    if (purchaseEvent) events.push(purchaseEvent);
+  });
+
+  const uniqueEvents = new Map();
+  events.forEach((event) => {
+    const signature = [
+      event.projectId,
+      event.eventType,
+      event.description,
+      event.occurredAt,
+    ].join('|');
+    if (!uniqueEvents.has(signature)) uniqueEvents.set(signature, event);
+  });
+
+  return [...uniqueEvents.values()]
+    .sort((left, right) => Date.parse(right.occurredAt) - Date.parse(left.occurredAt))
+    .slice(0, 6);
+}
+
+const projectProgressByOperationalState = Object.freeze({
+  [PRODUCTION_OPERATIONAL_STATES.PENDING]: 20,
+  [PRODUCTION_OPERATIONAL_STATES.WAITING_PURCHASES]: 30,
+  [PRODUCTION_OPERATIONAL_STATES.MATERIAL_AVAILABLE]: 40,
+  [PRODUCTION_OPERATIONAL_STATES.CUTTING]: 50,
+  [PRODUCTION_OPERATIONAL_STATES.FABRICATING]: 60,
+  [PRODUCTION_OPERATIONAL_STATES.ASSEMBLY]: 70,
+  [PRODUCTION_OPERATIONAL_STATES.READY_FOR_INSTALLATION]: 80,
+  [PRODUCTION_OPERATIONAL_STATES.INSTALLING]: 90,
+  [PRODUCTION_OPERATIONAL_STATES.DELIVERED]: 100,
+  [PRODUCTION_OPERATIONAL_STATES.REJECTED]: 0,
+});
+
+function projectProgress(commercialStatus, operationalStatus) {
+  if (commercialStatus === QUOTE_STATUSES.CANCELLED) return 0;
+  if (operationalStatus && Object.prototype.hasOwnProperty.call(
+    projectProgressByOperationalState,
+    operationalStatus,
+  )) return projectProgressByOperationalState[operationalStatus];
+  return commercialStatus === QUOTE_STATUSES.ACCEPTED ? 10 : 0;
+}
+
+function projectDeliveryDate(quote, order) {
+  const form = quoteForm(quote);
+  const value = text(
+    order?.fechaCompromiso
+      || order?.deliveryDate
+      || form.entrega
+      || form.deliveryDate,
+  );
+  if ([
+    'por definir',
+    'entrega según agenda',
+    'instalación con cita previa',
+  ].includes(value.toLocaleLowerCase('es-MX'))) return null;
+  return value || null;
+}
+
+function deliveryPriority(deliveryDate, now, terminal) {
+  if (!deliveryDate || terminal) return { rank: 0, reason: null, overdue: false };
+  const deliveryTimestamp = Date.parse(deliveryDate);
+  if (Number.isNaN(deliveryTimestamp)) {
+    return { rank: 0, reason: null, overdue: false };
+  }
+
+  if (deliveryTimestamp < now) {
+    return { rank: 3, reason: 'Entrega vencida', overdue: true };
+  }
+  const remainingDays = Math.ceil((deliveryTimestamp - now) / 86400000);
+  if (remainingDays <= 7) {
+    return { rank: 2, reason: 'Entrega próxima', overdue: false };
+  }
+  return { rank: 1, reason: null, overdue: false };
+}
+
+function productionPriority(order, operationalStatus, terminal) {
+  if (terminal) return 0;
+  if ([
+    PRODUCTION_OPERATIONAL_STATES.PENDING,
+    PRODUCTION_OPERATIONAL_STATES.WAITING_PURCHASES,
+  ].includes(operationalStatus)) return 3;
+  if (operationalStatus) return 2;
+  return order ? 2 : 1;
+}
+
+function purchasePriority(summary, terminal) {
+  if (terminal) return 0;
+  if (positiveCount(summary?.pending) > 0) return 2;
+  if (positiveCount(summary?.purchased) > 0) return 1;
+  return 0;
+}
+
+function recencyPriority(updatedAt, now) {
+  if (!updatedAt) return 0;
+  const ageDays = Math.max(0, Math.floor((now - updatedAt) / 86400000));
+  return Math.max(0, 999 - Math.min(999, ageDays));
+}
+
+/**
+ * Codificación lexicográfica del foco, no ponderación de negocio:
+ * riesgo → entrega → estado operativo → compras → actividad reciente.
+ * Cada banda domina la suma máxima de todas las bandas inferiores.
+ */
+function projectFocusScore({
+  riskRank,
+  deliveryRank,
+  operationalRank,
+  purchaseRank,
+  recencyRank,
+}) {
+  return (
+    (riskRank * 100000000)
+    + (deliveryRank * 1000000)
+    + (operationalRank * 10000)
+    + (purchaseRank * 1000)
+    + recencyRank
+  );
+}
+
+export function getBusinessProjects({
+  quotes = [],
+  productionOrders = [],
+  purchases = [],
+  now = Date.now(),
+} = {}) {
+  const referenceNow = Number.isFinite(Number(now)) ? Number(now) : Date.now();
+
+  return availableInput(quotes)
+    .filter((quote) => quote && !quote.deletedAt && !quote.deleted_at)
+    .map((quote) => {
+      const order = availableInput(productionOrders).find((candidate) => (
+        productionOrderMatchesQuote(candidate, quote)
+      )) || null;
+      const relatedPurchases = projectPurchases(purchases, order, quote);
+      const purchaseViews = selectPurchaseViews({
+        purchases: relatedPurchases,
+        productionOrders: order ? [order] : [],
+        quotes: [quote],
+        now: referenceNow,
+      });
+      const purchaseSummary = getPurchasesSummary([
+        ...purchaseViews.active,
+        ...purchaseViews.received,
+      ]);
+      const purchaseState = getPurchaseMaterialState(relatedPurchases, order);
+      const operationalStatus = getProductionOperationalState(order, purchaseState);
+      const commercialStatus = quoteRecordStatus(quote);
+      const status = getQuoteDisplayStatus(quote, order, purchaseState);
+      const readOnly = isProjectReadOnly(order);
+      const terminal = readOnly
+        || commercialStatus === QUOTE_STATUSES.CANCELLED
+        || operationalStatus === PRODUCTION_OPERATIONAL_STATES.REJECTED;
+      const summaries = {
+        quotes: getQuotesSummary([quote]),
+        production: getProductionSummary(order ? [order] : []),
+        purchases: purchaseSummary,
+        purchaseOperations: purchaseViews.counters,
+        customers: getCustomerSummary([quote]),
+        projectOperations: getProjectStatusSummary({
+          quotes: [quote],
+          productionOrders: order ? [order] : [],
+          purchases: relatedPurchases,
+        }),
+      };
+      const risks = getBusinessRiskSummary({
+        summaries,
+        availability: { customers: true, inventory: false },
+      });
+      const pending = getBusinessPendingSummary({ summaries });
+      const pendingActions = pending.map((item) => item.label);
+      if (!order && commercialStatus === QUOTE_STATUSES.ACCEPTED) {
+        pendingActions.unshift('Crear OT');
+      } else if (!order && commercialStatus !== QUOTE_STATUSES.CANCELLED) {
+        pendingActions.unshift('Revisar cotización');
+      }
+
+      const deliveryDate = projectDeliveryDate(quote, order);
+      const delivery = deliveryPriority(deliveryDate, referenceNow, terminal);
+      const urgent = !terminal && order?.prioridad === 'Urgente';
+      const purchaseOverdue = !terminal && purchaseViews.counters.overduePurchasesCount > 0;
+      const riskReasons = [
+        ...risks.map((risk) => risk.label),
+        delivery.reason,
+        urgent ? 'OT urgente' : null,
+        purchaseOverdue ? 'Compra vencida' : null,
+      ].filter(Boolean);
+      const highRisk = delivery.overdue || urgent || purchaseOverdue;
+      const riskLevel = highRisk ? 'high' : riskReasons.length ? 'medium' : 'none';
+      const updatedAtValue = Math.max(
+        recordTimestamp(quote),
+        recordTimestamp(order),
+        ...relatedPurchases.map(recordTimestamp),
+      );
+      const riskRank = highRisk ? 3 : riskReasons.length ? 2 : 0;
+      const focusScore = projectFocusScore({
+        riskRank,
+        deliveryRank: delivery.rank,
+        operationalRank: productionPriority(order, operationalStatus, terminal),
+        purchaseRank: purchasePriority(purchaseSummary, terminal),
+        recencyRank: recencyPriority(updatedAtValue, referenceNow),
+      });
+      const projectId = text(quote.id || quote.folio);
+      const formProjectName = text(quoteForm(quote).producto);
+      const quoteProjectName = text(quote.producto || quote.product_name);
+      const formCustomerName = text(quoteForm(quote).clienteNombre);
+      const quoteCustomerName = text(quote.clienteNombre || quote.client_name);
+      const projectName = text(
+        formProjectName
+          || (quoteProjectName === 'Proyecto a medida' ? '' : quoteProjectName)
+          || order?.producto,
+        'Proyecto sin nombre',
+      );
+      const customerName = text(
+        formCustomerName
+          || (quoteCustomerName === 'Cliente' ? '' : quoteCustomerName)
+          || order?.cliente,
+        'Cliente no registrado',
+      );
+      const recentActivity = getProjectOperationalActivity({
+        quote,
+        order,
+        purchases: [...purchaseViews.active, ...purchaseViews.received],
+        projectId,
+        projectName,
+        operationalStatus,
+      });
+
+      return {
+        id: projectId,
+        quoteId: text(quote.id),
+        productionOrderId: text(order?.id) || null,
+        projectName,
+        customerName,
+        status,
+        progress: projectProgress(commercialStatus, operationalStatus),
+        deliveryDate,
+        riskLevel,
+        riskReasons,
+        pendingActions,
+        recommendedAction: pendingActions[0]
+          || (readOnly ? 'Consultar proyecto entregado' : 'Revisar proyecto'),
+        focusScore,
+        priority: !terminal && (riskLevel !== 'none' || pendingActions.length > 0),
+        updatedAt: updatedAtValue ? new Date(updatedAtValue).toISOString() : null,
+        readOnly,
+        purchasesPending: positiveCount(purchaseSummary.pending),
+        purchaseIds: relatedPurchases.map((purchase) => text(purchase?.id)).filter(Boolean),
+        production: order ? {
+          id: text(order.id),
+          status: operationalStatus,
+          updatedAt: recordTimestamp(order)
+            ? new Date(recordTimestamp(order)).toISOString()
+            : null,
+        } : null,
+        recentActivity,
+      };
+    })
+    .filter((project) => project.id)
+    .sort((left, right) => (
+      right.focusScore - left.focusScore
+      || Date.parse(right.updatedAt || '') - Date.parse(left.updatedAt || '')
+      || left.id.localeCompare(right.id)
+    ));
 }
 
 export function getBusinessRiskSummary({ summaries = {}, availability = {} } = {}) {
@@ -229,27 +672,24 @@ export function getBusinessHealthSummary({
   };
 }
 
-export function getBusinessActivitySummary(summaries = {}) {
-  const sources = [
-    ['quotes', 'Cotización', summaries.quotes],
-    ['production', 'Producción', summaries.production],
-    ['purchases', 'Compras', summaries.purchases],
-    ['inventory', 'Inventario', summaries.inventory],
-    ['customers', 'Clientes', summaries.customers],
-    ['finances', 'Finanzas', summaries.finances],
-    ['fabrication', 'Fabricación', summaries.fabrication],
-    ['history', 'Historial', summaries.history],
-  ];
+export function getBusinessActivitySummary(projects = []) {
+  const uniqueEvents = new Map();
 
-  return sources
-    .filter(([, , summary]) => summary?.updatedAt)
-    .map(([id, label, summary]) => ({
-      id,
-      label,
-      updatedAt: summary.updatedAt,
-      source: `${id}-summary`,
-    }))
-    .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt));
+  availableInput(projects).flatMap((project) => (
+    availableInput(project?.recentActivity)
+  )).forEach((event) => {
+    const signature = [
+      event.projectId,
+      event.eventType,
+      event.description,
+      event.occurredAt,
+    ].join('|');
+    if (!uniqueEvents.has(signature)) uniqueEvents.set(signature, event);
+  });
+
+  return [...uniqueEvents.values()]
+    .sort((left, right) => Date.parse(right.occurredAt) - Date.parse(left.occurredAt))
+    .slice(0, 12);
 }
 
 export function getBusinessIndicatorSummary({
@@ -265,6 +705,7 @@ export function getBusinessIndicatorSummary({
   const inventory = summaries.inventory || {};
   const customers = summaries.customers || {};
   const finances = summaries.finances || {};
+  const deliveredSales = summaries.deliveredSales || {};
 
   return {
     quotes: domainIndicator(
@@ -304,10 +745,16 @@ export function getBusinessIndicatorSummary({
       'finance-summary',
     ),
     sales: domainIndicator(
-      'Venta',
-      finances.quotedTotal,
-      availability.finances,
-      'finance-summary',
+      'Ventas entregadas',
+      deliveredSales.total,
+      availability.quotes && availability.production,
+      'delivered-sales-summary',
+    ),
+    deliveredProjects: domainIndicator(
+      'Proyectos entregados',
+      deliveredSales.projects,
+      availability.quotes && availability.production,
+      'delivered-sales-summary',
     ),
     cost: domainIndicator(
       'Costo',
@@ -361,6 +808,7 @@ export function getBusinessState({
   fabricationProjects,
   historyRecords,
   activeProductionOrder,
+  now,
 } = {}) {
   const companyName = typeof settings?.company_name === 'string'
     ? settings.company_name.trim() || null
@@ -379,6 +827,21 @@ export function getBusinessState({
     productionOrders: availableInput(productionOrders),
     purchases: availableInput(purchases),
   });
+  const projects = getBusinessProjects({
+    quotes: availableInput(quotes),
+    productionOrders: availableInput(productionOrders),
+    purchases: availableInput(purchases),
+    now,
+  });
+  const deliveredQuoteIds = new Set(projects
+    .filter((item) => (
+      item.production?.status === PRODUCTION_OPERATIONAL_STATES.DELIVERED
+      && item.status !== QUOTE_STATUSES.CANCELLED
+    ))
+    .map((item) => item.quoteId));
+  const deliveredFinance = getFinanceSummary(availableInput(quotes).filter((quote) => (
+    deliveredQuoteIds.has(text(quote?.id))
+  )));
 
   const summaries = {
     quotes: getQuotesSummary(availableInput(quotes)),
@@ -392,6 +855,11 @@ export function getBusinessState({
     inventory: getInventorySummary(availableInput(inventoryItems), inventoryAvailableById),
     customers: getCustomerSummary(customerInput),
     finances: getFinanceSummary(financeInput),
+    deliveredSales: {
+      projects: deliveredQuoteIds.size,
+      total: deliveredFinance.quotedTotal,
+      updatedAt: deliveredFinance.updatedAt,
+    },
     fabrication: getFabricationSummary(availableInput(fabricationProjects)),
     history: getHistorySummary(historyInput),
   };
@@ -418,7 +886,7 @@ export function getBusinessState({
     readOnly,
     hasData: Object.values(availability).some(Boolean),
   });
-  const activity = getBusinessActivitySummary(summaries);
+  const activity = getBusinessActivitySummary(projects);
   const updatedAt = latestTimestamp(
     settings?.updated_at,
     settings?.updatedAt,
@@ -441,6 +909,7 @@ export function getBusinessState({
     activity,
     alerts,
     indicators,
+    projects,
     updatedAt,
   };
 
@@ -470,6 +939,7 @@ export function getBusinessState({
     activity,
     alerts,
     readOnly,
+    projects,
     indicators,
     summaries: {
       ...summaries,

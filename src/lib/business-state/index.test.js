@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getBusinessState } from './index.js';
+import { getBusinessProjects, getBusinessState } from './index.js';
 
 describe('getBusinessState', () => {
   it('consume las ocho fuentes oficiales sin recalcular sus métricas', () => {
@@ -209,20 +209,26 @@ describe('getBusinessState', () => {
       source: 'business-risks',
     });
     expect(state.indicators).toMatchObject({
-      sales: { value: 2000, source: 'finance-summary' },
+      sales: { value: 0, source: 'delivered-sales-summary' },
+      deliveredProjects: { value: 0, source: 'delivered-sales-summary' },
       cost: { value: 1200, source: 'finance-summary' },
       profit: { value: 800, source: 'finance-summary' },
       progress: { value: 0, source: 'purchases-summary' },
       materialPurchased: { value: 0, source: 'purchases-summary' },
       materialPending: { value: 1, source: 'purchases-summary' },
     });
-    expect(state.activity.map((item) => item.id)).toEqual([
-      'purchases',
-      'production',
-      'quotes',
-      'finances',
-      'history',
+    expect(state.activity.map((item) => item.description)).toEqual([
+      'Compra registrada',
+      'Producción bloqueada por material',
+      'Cotización actualizada',
     ]);
+    expect(state.activity.every((item) => (
+      item.projectId
+      && item.projectName
+      && item.eventType
+      && item.occurredAt
+      && item.destination
+    ))).toBe(true);
     expect(state.lastUpdated).toBe('2026-07-24T11:00:00.000Z');
     expect(state.updatedAt).toBe(state.lastUpdated);
   });
@@ -240,5 +246,208 @@ describe('getBusinessState', () => {
     expect(state.pending).toEqual([]);
     expect(state.risks).toEqual([]);
     expect(state.health.status).toBe('healthy');
+  });
+
+  it('publica projects con foco determinista y explicable', () => {
+    const now = Date.parse('2026-07-24T12:00:00.000Z');
+    const quotes = [
+      {
+        id: 'q-priority',
+        status: 'Aceptada',
+        producto: 'Cancel de aluminio',
+        clienteNombre: 'María',
+        updatedAt: '2026-07-24T09:00:00.000Z',
+      },
+      {
+        id: 'q-commercial',
+        status: 'Aceptada',
+        producto: 'Puerta de madera',
+        clienteNombre: 'Luis',
+        updatedAt: '2026-07-24T11:00:00.000Z',
+      },
+    ];
+    const productionOrders = [{
+      id: 'ot-priority',
+      quoteId: 'q-priority',
+      estado: 'Pendiente',
+      prioridad: 'Urgente',
+      fechaCompromiso: '2026-07-23T18:00:00.000Z',
+      updatedAt: '2026-07-24T10:00:00.000Z',
+    }];
+    const purchases = [{
+      id: 'purchase-priority',
+      quoteId: 'q-priority',
+      productionOrderId: 'ot-priority',
+      active: true,
+      expectedAt: '2026-07-23T18:00:00.000Z',
+      updatedAt: '2026-07-24T10:30:00.000Z',
+      items: [{ id: 'item-1', status: 'pendiente' }],
+    }];
+
+    const projects = getBusinessProjects({
+      quotes,
+      productionOrders,
+      purchases,
+      now,
+    });
+
+    expect(projects.map((project) => project.id)).toEqual([
+      'q-priority',
+      'q-commercial',
+    ]);
+    expect(projects[0]).toMatchObject({
+      quoteId: 'q-priority',
+      productionOrderId: 'ot-priority',
+      projectName: 'Cancel de aluminio',
+      customerName: 'María',
+      status: 'Esperando materiales',
+      progress: 30,
+      deliveryDate: '2026-07-23T18:00:00.000Z',
+      riskLevel: 'high',
+      recommendedAction: 'Atender OT pendiente',
+      focusScore: 303032999,
+      priority: true,
+      readOnly: false,
+      purchasesPending: 1,
+      production: {
+        id: 'ot-priority',
+        status: 'Esperando compras',
+      },
+    });
+    expect(projects[0].riskReasons).toEqual([
+      'OT pendiente',
+      'Compras incompletas',
+      'Entrega vencida',
+      'OT urgente',
+      'Compra vencida',
+    ]);
+    expect(projects[0].pendingActions).toEqual([
+      'Atender OT pendiente',
+      'Comprar material',
+    ]);
+    expect(projects[1]).toMatchObject({
+      status: 'Aceptada',
+      progress: 10,
+      riskLevel: 'none',
+      pendingActions: ['Crear OT'],
+      recommendedAction: 'Crear OT',
+      focusScore: 10999,
+      priority: true,
+      production: null,
+    });
+  });
+
+  it('suma ventas únicamente de proyectos canónicamente entregados', () => {
+    const state = getBusinessState({
+      quotes: [
+        { id: 'delivered', status: 'Aceptada', total: 3000 },
+        { id: 'active', status: 'Aceptada', total: 2000 },
+        { id: 'cancelled', status: 'Cancelada', total: 5000 },
+      ],
+      productionOrders: [
+        { id: 'ot-delivered', quoteId: 'delivered', estado: 'Entregado' },
+        { id: 'ot-active', quoteId: 'active', estado: 'Fabricando' },
+        { id: 'ot-cancelled', quoteId: 'cancelled', estado: 'Entregado' },
+      ],
+    });
+
+    expect(state.summaries.deliveredSales).toEqual({
+      projects: 1,
+      total: 3000,
+      updatedAt: null,
+    });
+    expect(state.indicators.sales).toMatchObject({
+      label: 'Ventas entregadas',
+      value: 3000,
+      status: 'available',
+    });
+    expect(state.indicators.deliveredProjects.value).toBe(1);
+  });
+
+  it('publica solo actividad operativa real, ordenada y sin duplicados', () => {
+    const state = getBusinessState({
+      quotes: [{
+        id: 'q1',
+        status: 'Aceptada',
+        producto: 'Cancel',
+        updatedAt: '2026-07-24T08:00:00.000Z',
+      }],
+      productionOrders: [{
+        id: 'ot1',
+        quoteId: 'q1',
+        estado: 'Entregado',
+        timeline: [
+          {
+            evento: 'Orden creada',
+            fecha: '2026-07-24T09:00:00.000Z',
+          },
+          {
+            evento: 'Estado cambiado a Entregado',
+            fecha: '2026-07-24T11:00:00.000Z',
+          },
+          {
+            evento: 'Render actualizado',
+            fecha: '2026-07-24T12:00:00.000Z',
+          },
+        ],
+      }],
+      purchases: [{
+        id: 'p1',
+        quoteId: 'q1',
+        productionOrderId: 'ot1',
+        active: true,
+        updatedAt: '2026-07-24T10:00:00.000Z',
+        items: [{ id: 'item-1', status: 'comprado' }],
+      }],
+    });
+
+    expect(state.activity.map((event) => event.description)).toEqual([
+      'Proyecto entregado',
+      'Compra registrada',
+      'Orden enviada a producción',
+      'Cotización actualizada',
+    ]);
+    expect(state.activity.some((event) => event.description.includes('Render'))).toBe(false);
+    expect(new Set(state.activity.map((event) => event.id)).size).toBe(state.activity.length);
+  });
+
+  it('ignora fechas de entrega no estructuradas al priorizar', () => {
+    const [project] = getBusinessProjects({
+      quotes: [{
+        id: 'q1',
+        status: 'Pendiente',
+        producto: 'Proyecto',
+        clienteNombre: 'Cliente válido',
+        form: { entrega: 'Por definir' },
+      }],
+      now: Date.parse('2026-07-24T12:00:00.000Z'),
+    });
+
+    expect(project.deliveryDate).toBeNull();
+    expect(project.riskReasons).toEqual([]);
+    expect(project.focusScore).toBe(10000);
+  });
+
+  it('convierte fallbacks técnicos del historial en ausencias explícitas', () => {
+    const [project] = getBusinessProjects({
+      quotes: [{
+        id: 'q1',
+        status: 'Pendiente',
+        producto: 'Proyecto a medida',
+        clienteNombre: 'Cliente',
+        form: {
+          producto: '',
+          clienteNombre: '',
+          entrega: 'Entrega según agenda',
+        },
+      }],
+    });
+
+    expect(project).toMatchObject({
+      projectName: 'Proyecto sin nombre',
+      customerName: 'Cliente no registrado',
+      deliveryDate: null,
+      production: null,
+    });
   });
 });

@@ -1,4 +1,8 @@
 import { useState } from 'react';
+import {
+  applyMaterialProposal,
+  buildMaterialProposal,
+} from '../lib/material-calculator/engine.js';
 
 export default function useQuickCalculator({
   form,
@@ -155,6 +159,41 @@ export default function useQuickCalculator({
     });
   }
 
+  function createPieceGroup({ name, pieceIds = [] } = {}) {
+    const groupName = clean(name);
+    if (!groupName) return null;
+    const groupId = `group-${globalThis.crypto?.randomUUID?.() || Date.now()}`;
+    const selected = new Set(pieceIds);
+    setForm((current) => ({
+      ...current,
+      pieceGroups: [
+        ...(Array.isArray(current.pieceGroups) ? current.pieceGroups : []),
+        { id: groupId, name: groupName },
+      ],
+      measureItems: Quote.measurementItemsFromForm(current, quoteHelpers).map((piece) => (
+        selected.has(piece.id) ? { ...piece, groupId } : piece
+      )),
+    }));
+    return groupId;
+  }
+
+  function applyProfessionalMaterial({
+    material,
+    calculation,
+    selectedPieceIds,
+    replace = false,
+  } = {}) {
+    const proposal = buildMaterialProposal({
+      form,
+      material,
+      calculation,
+      selectedPieceIds,
+    });
+    const result = applyMaterialProposal(form, proposal, { replace });
+    if (result.applied) setForm(result.form);
+    return result;
+  }
+
   return {
     quickCalc,
     quickCantidad,
@@ -183,5 +222,7 @@ export default function useQuickCalculator({
     quickCalcText,
     applyQuickCalcToQuote,
     applyQuickCalcToMaterial,
+    createPieceGroup,
+    applyProfessionalMaterial,
   };
 }

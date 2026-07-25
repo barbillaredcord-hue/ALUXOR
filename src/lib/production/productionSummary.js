@@ -1,5 +1,6 @@
 import {
   PRODUCTION_STATUSES,
+  canAdvanceProductionOrder,
   normalizeProductionStatus,
 } from './productionEngine.js';
 
@@ -60,19 +61,20 @@ export function getProductionSummary(orders = []) {
     if (!order || typeof order !== 'object' || Array.isArray(order)) return;
 
     const status = normalizeProductionStatus(order.estado ?? order.status);
-const field = summaryFieldByStatus.get(status);
+    const field = summaryFieldByStatus.get(status);
 
-summary.total += 1;
+    summary.total += 1;
 
-if (status !== PRODUCTION_STATUSES.REJECTED) summary.active += 1;
+    const active = canAdvanceProductionOrder(order);
+    if (active) summary.active += 1;
 
-if (field) {
-  summary[field] += 1;
-}
+    if (field) {
+      summary[field] += 1;
+    }
 
-if (inProgressStatuses.has(status)) {
-  summary.inProcess += 1;
-}
+    if (active && inProgressStatuses.has(status)) {
+      summary.inProcess += 1;
+    }
     const orderTimestamp = timestamp(order);
     if (orderTimestamp !== null && (latestTimestamp === null || orderTimestamp > latestTimestamp)) {
       latestTimestamp = orderTimestamp;

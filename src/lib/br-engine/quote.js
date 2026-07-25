@@ -25,6 +25,8 @@ function normalizeTipoCompraQuote(tipoCompra) {
 
 export function normalizeMeasureItem(item, index = 0, data = {}, helpers = {}) {
   const { clean, positiveNumber } = withHelpers(helpers);
+  const groupId = clean(item?.groupId);
+  const materialAssignments = normalizeMaterialAssignments(item?.materialAssignments, helpers);
   return {
     id: item?.id || `med-${Date.now()}-${index}`,
     nombre: clean(item?.nombre, index === 0 ? 'Medida principal' : `Medida ${index + 1}`),
@@ -34,7 +36,55 @@ export function normalizeMeasureItem(item, index = 0, data = {}, helpers = {}) {
     grosorMaterial: positiveNumber(item?.grosorMaterial ?? data.grosorMaterial),
     cantidad: Math.max(1, positiveNumber(item?.cantidad ?? data.cantidad) || 1),
     nota: clean(item?.nota),
+    ...(groupId ? { groupId } : {}),
+    ...(materialAssignments.length ? { materialAssignments } : {}),
   };
+}
+
+export function normalizeMaterialAssignments(assignments, helpers = {}) {
+  const { clean } = withHelpers(helpers);
+  if (!Array.isArray(assignments)) return [];
+
+  const unique = new Map();
+  assignments.forEach((assignment) => {
+    const source = typeof assignment === 'string'
+      ? { materialId: assignment }
+      : assignment;
+    const materialId = clean(source?.materialId);
+    if (!materialId || unique.has(materialId)) return;
+    unique.set(materialId, { ...source, materialId });
+  });
+  return [...unique.values()];
+}
+
+export function normalizePieceGroup(group, index = 0, helpers = {}) {
+  const { clean } = withHelpers(helpers);
+  const id = clean(group?.id, `group-${index + 1}`);
+  const name = clean(group?.name ?? group?.nombre, `Conjunto ${index + 1}`);
+  return { id, name };
+}
+
+export function pieceGroupsFromForm(data, helpers = {}) {
+  if (!Array.isArray(data?.pieceGroups)) return [];
+  const unique = new Map();
+  data.pieceGroups.forEach((group, index) => {
+    const normalized = normalizePieceGroup(group, index, helpers);
+    if (!unique.has(normalized.id)) unique.set(normalized.id, normalized);
+  });
+  return [...unique.values()];
+}
+
+export function measureMaterialIds(measure, helpers = {}) {
+  return normalizeMaterialAssignments(measure?.materialAssignments, helpers)
+    .filter((assignment) => !assignment.kind || assignment.kind === 'material')
+    .map((assignment) => assignment.materialId);
+}
+
+export function measurementItemsForMaterial(measures, materialId, helpers = {}) {
+  const rows = Array.isArray(measures) ? measures : [];
+  const hasAssignments = rows.some((measure) => measureMaterialIds(measure, helpers).length > 0);
+  if (!hasAssignments) return rows;
+  return rows.filter((measure) => measureMaterialIds(measure, helpers).includes(materialId));
 }
 
 export function measurementItemsFromForm(data, helpers = {}) {
@@ -247,7 +297,16 @@ export function calculateQuote(data, helpers = {}) {
   const quoteBasis = { areaTotal, linearTotal };
 
   const materialRows = materialItemsFromForm(data, areaTotal, helpers).map((item) => {
-    const rowQuantity = materialItemQuantity(item, quoteBasis, helpers);
+    const materialMeasureRows = measurementItemsForMaterial(measureRows, item.id, helpers);
+    const materialBasis = {
+      areaTotal: materialMeasureRows.reduce((sum, measure) => sum + measure.areaTotal, 0),
+      linearTotal: materialMeasureRows.reduce((sum, measure) => sum + measure.linearTotal, 0),
+    };
+    const rowQuantity = materialItemQuantity(
+      item,
+      materialMeasureRows === measureRows ? quoteBasis : materialBasis,
+      helpers,
+    );
     const itemAreaTotal = (positiveNumber(item.ancho) / 100) * (positiveNumber(item.alto) / 100) * Math.max(1, positiveNumber(item.cantidad) || 1);
     const itemLinearTotal = (positiveNumber(item.largo) / 100) * Math.max(1, positiveNumber(item.cantidad) || 1);
     const rowMerma = percentValue(item.merma);
@@ -258,7 +317,12 @@ export function calculateQuote(data, helpers = {}) {
     const largoNecesario = tipoCompra === 'lineal' ? rowQuantity : 0;
     const cantidadNecesaria = ['pieza', 'manual'].includes(tipoCompra) ? Math.max(0, rowQuantity) : 0;
     const costoUnitario = positiveNumber(item.costoUnitario);
-    const cutOptimization = cutOptimizationForMaterial(tipoCompra, item, measureRows, helpers);
+    const cutOptimization = cutOptimizationForMaterial(
+      tipoCompra,
+      item,
+      materialMeasureRows,
+      helpers,
+    );
     const materialCalc = Materials.calcularMaterial({
       tipoCompra,
       areaNecesaria,
@@ -304,6 +368,7 @@ export function calculateQuote(data, helpers = {}) {
       : (tipoCompra === 'hoja' ? 'Pendiente de optimizar.' : '');
     return {
       ...item,
+      assignedPieceIds: materialMeasureRows.map((measure) => measure.id),
       tipoCompra,
       rowQuantity,
       rowMargin,

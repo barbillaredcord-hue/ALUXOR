@@ -1,6 +1,5 @@
 import {
   Activity,
-  Copy,
   DraftingCompass,
   Eraser,
   FileText,
@@ -16,10 +15,28 @@ import {
 import CalculationChain from '../components/CalculationChain.jsx';
 import DashboardSummary from '../components/DashboardSummary.jsx';
 import Field from '../components/Field.jsx';
-import { Quote } from '../lib/br-engine/index.js';
 import { quoteCommercialStatusOptions } from '../lib/quotes/quoteAdapter.js';
 
 const QUOTE_STATUS_OPTIONS = quoteCommercialStatusOptions();
+
+export function MaterialStudioLauncher({ onOpen }) {
+  return (
+    <button
+      type="button"
+      id="material-calculator"
+      className="quote-accordion quick-calculator material-studio-launcher"
+      onClick={onOpen}
+    >
+      <DashboardSummary
+        number="03"
+        title="BR Material Studio"
+        description="Selecciona piezas, calcula materiales y optimiza cortes."
+        status="Herramienta"
+        highlight
+      />
+    </button>
+  );
+}
 
 export function QuoteStatusControl({
   value,
@@ -84,6 +101,7 @@ export default function QuoteSection({
   copyText,
   quickCalcText,
   applyQuickCalcToMaterial,
+  onOpenMaterialStudio,
   guideFor,
   input,
   textareaInput,
@@ -258,88 +276,7 @@ export default function QuoteSection({
                 ))}
               </div>
 
-              <details className="quote-accordion quick-calculator">
-                <DashboardSummary number="03" title="Calculadora rápida de material" description="Herramienta de referencia, no suma hasta aplicar." status="Herramienta" highlight />
-                <div className="form-grid">
-                  <Field id="quickNombre" label="Nombre del material"><input id="quickNombre" disabled={readOnly} value={quickCalc.nombre} onChange={(event) => updateQuickCalc('nombre', event.target.value)} /></Field>
-                  <Field id="quickCategoria" label="Categoría">
-                    <select id="quickCategoria" disabled={readOnly} value={quickCalc.categoria} onChange={(event) => updateQuickCalc('categoria', event.target.value)}>
-                      <option>Vidrio</option>
-                      <option>Aluminio</option>
-                      <option>Madera/Melamina</option>
-                      <option>Herraje</option>
-                      <option>Otro</option>
-                    </select>
-                  </Field>
-                  <Field id="quickTipoCompra" label="Tipo de compra">
-                    <select id="quickTipoCompra" disabled={readOnly} value={quickCalc.tipoCompra} onChange={(event) => updateQuickCalc('tipoCompra', event.target.value)}>
-                      <option value="hoja">Hoja / placa</option>
-                      <option value="pieza">Pieza</option>
-                      <option value="area">Metro cuadrado</option>
-                      <option value="lineal">Metro lineal</option>
-                      <option value="manual">Manual</option>
-                    </select>
-                  </Field>
-                  <Field id="quickMaterialId" label="Material destino">
-                    <select id="quickMaterialId" disabled={readOnly} value={quickCalc.materialId} onChange={(event) => updateQuickCalc('materialId', event.target.value)}>
-                      <option value="">Crear nuevo</option>
-                      {Quote.materialItemsFromForm(form, quote.areaTotal, quoteHelpers).map((item) => <option key={item.id} value={item.id}>{item.nombre}</option>)}
-                    </select>
-                  </Field>
-                  <Field id="quickBaseUso" label="Usar base">
-                    <select id="quickBaseUso" disabled={readOnly} value={quickCalc.baseUso} onChange={(event) => updateQuickCalc('baseUso', event.target.value)}>
-                      <option value="medidas">Automático de medidas</option>
-                      <option value="manual">Captura manual</option>
-                    </select>
-                  </Field>
-                  <Field id="quickAncho" label="Ancho cm"><input id="quickAncho" disabled={readOnly} type="number" value={quickCalc.ancho} onChange={(event) => updateQuickCalc('ancho', event.target.value)} /></Field>
-                  <Field id="quickAlto" label="Alto cm"><input id="quickAlto" disabled={readOnly} type="number" value={quickCalc.alto} onChange={(event) => updateQuickCalc('alto', event.target.value)} /></Field>
-                  <Field id="quickLargo" label="Largo cm"><input id="quickLargo" disabled={readOnly} type="number" value={quickCalc.largo} onChange={(event) => updateQuickCalc('largo', event.target.value)} /></Field>
-                  <Field id="quickCantidad" label="Cantidad comprada"><input id="quickCantidad" disabled={readOnly} type="number" value={quickCalc.cantidad} onChange={(event) => updateQuickCalc('cantidad', event.target.value)} /></Field>
-                  <Field id="quickPrecioTotal" label="Precio total de compra"><input id="quickPrecioTotal" disabled={readOnly} type="number" value={quickCalc.precioTotal} onChange={(event) => updateQuickCalc('precioTotal', event.target.value)} /></Field>
-                  <Field id="quickAreaManual" label="Área necesaria manual"><input id="quickAreaManual" disabled={readOnly} type="number" value={quickCalc.areaManual} onChange={(event) => updateQuickCalc('areaManual', event.target.value)} /></Field>
-                  <Field id="quickLinealManual" label="ML necesarios manual"><input id="quickLinealManual" disabled={readOnly} type="number" value={quickCalc.linealManual} onChange={(event) => updateQuickCalc('linealManual', event.target.value)} /></Field>
-                  <Field id="quickCantidadManual" label="Cantidad necesaria manual"><input id="quickCantidadManual" disabled={readOnly} type="number" value={quickCalc.cantidadManual} onChange={(event) => updateQuickCalc('cantidadManual', event.target.value)} /></Field>
-                  <Field id="quickMerma" label="Merma %"><input id="quickMerma" disabled={readOnly} type="number" value={quickCalc.merma} onChange={(event) => updateQuickCalc('merma', event.target.value)} /></Field>
-                  <Field id="quickMargen" label="Margen %"><input id="quickMargen" disabled={readOnly} type="number" value={quickCalc.margen} onChange={(event) => updateQuickCalc('margen', event.target.value)} /></Field>
-                </div>
-                <div className="quick-result-groups">
-                  <section>
-                    <h3>Costo interno sin venta</h3>
-                    <div className="quick-results">
-                      <div><span>Área por hoja/pieza</span><strong>{decimal(quickAreaPorPieza)} m²</strong></div>
-                      <div><span>Costo real por m²</span><strong>{money(quickCostoM2)}</strong></div>
-                      <div><span>Costo real por ML</span><strong>{money(quickCostoLineal)}</strong></div>
-                      <div><span>Hojas/piezas a comprar</span><strong>{quickCalc.tipoCompra === 'hoja' ? quickHojasComprar : quickPiezasComprar}</strong></div>
-                      <div><span>Total sin merma</span><strong>{money(quickCompraSinMerma)}</strong></div>
-                      <div><span>Total con merma</span><strong>{money(quickCompraConMerma)}</strong></div>
-                    </div>
-                  </section>
-                  <section>
-                    <h3>Precio sugerido al cliente</h3>
-                    <div className="quick-results">
-                      <div><span>Precio m² sin margen</span><strong>{money(quickPricing.costoConMerma)}</strong></div>
-                      <div><span>Precio m² con margen</span><strong>{money(quickPricing.precioCliente)}</strong></div>
-                      <div><span>Precio ML con margen</span><strong>{money(quickCalc.tipoCompra === 'lineal' ? quickPricing.precioCliente : 0)}</strong></div>
-                      <div><span>Total sin margen</span><strong>{money(quickTotalClienteSinMargen)}</strong></div>
-                      <div><span>Total con margen</span><strong>{money(quickTotalClienteConMargen)}</strong></div>
-                      <div><span>Utilidad</span><strong>{money(quickProfit)} ({decimal(quickProfitPercent, 1)}%)</strong></div>
-                    </div>
-                  </section>
-                </div>
-                <details className="field-help calc-help">
-                  <summary>¿Cómo se calculó?</summary>
-                  <span>Se multiplica ancho x alto para obtener m² por hoja.</span>
-                  <span>Se multiplica por cantidad comprada.</span>
-                  <span>Se divide precio total entre m² totales.</span>
-                  <span>Se aplica merma.</span>
-                  <span>Se aplica margen para obtener precio al cliente.</span>
-                </details>
-                <div className="actions compact">
-                  <button type="button" className="ghost" onClick={() => copyText(quickCalcText(), 'Calculadora de costo')}><Copy size={18} /> Copiar</button>
-                  {!readOnly && <button type="button" className="ghost" onClick={applyQuickCalcToMaterial}>Aplicar a material</button>}
-                </div>
-              </details>
+              <MaterialStudioLauncher onOpen={onOpenMaterialStudio} />
 
               <div className="quote-accordion-list">
                 <details className="quote-accordion">
@@ -413,6 +350,11 @@ export default function QuoteSection({
 
                 <details className="quote-accordion">
                   <DashboardSummary number="04" icon={Layers} title="Materiales de cotización" description="Compra, merma, margen y utilidad por material." status={quote.material > 0 ? 'Completo' : 'Revisar'} highlight />
+                  <div className="actions compact">
+                    <button type="button" className="ghost" onClick={onOpenMaterialStudio}>
+                      Abrir BR Material Studio
+                    </button>
+                  </div>
                   <div className="form-grid material-base-grid">
                     <Field id="materialCotizacion" label="Material cotización" {...guideFor('materialCotizacion')}>{input('materialCotizacion')}</Field>
                     <Field id="precioM2" label="Precio m²" {...guideFor('precioM2')}>{input('precioM2', 'number')}</Field>

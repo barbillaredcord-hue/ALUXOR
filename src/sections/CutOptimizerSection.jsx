@@ -1,28 +1,66 @@
-import { RefreshCw, Scissors } from 'lucide-react';
+import { Calculator, RefreshCw, Scissors } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { optimizeCuts } from '../lib/cut-optimizer/optimizer.js';
+import { convertLength } from '../lib/material-calculator/engine.js';
 
 const strategyLabels = {
   'largest-first': 'Largest First / Mayor área',
   'input-order': 'Orden capturado',
 };
 
-export default function CutOptimizerSection({ quote, decimal, readOnly = false }) {
+export default function CutOptimizerSection({
+  quote,
+  decimal,
+  readOnly = false,
+  calculatorTransfer = null,
+  contextQuoteId = null,
+  onCalculateMaterial,
+}) {
   const [run, setRun] = useState(0);
   const [config, setConfig] = useState({
-    allowRotation: true,
-    kerf: 0.3,
+    allowRotation: calculatorTransfer?.config?.allowRotation ?? true,
+    kerf: calculatorTransfer?.config
+      ? convertLength(
+        calculatorTransfer.config.kerf,
+        calculatorTransfer.config.unit,
+        'cm',
+      ) || 0
+      : 0.3,
     strategy: 'largest-first',
   });
-  const material = quote.materialRows?.[0];
-  const sheetWidth = material?.ancho || 122;
-  const sheetHeight = material?.alto || 244;
-  const piezas = useMemo(() => quote.measureRows.map((item) => ({
+  const transferActive = Boolean(
+    calculatorTransfer
+    && (!calculatorTransfer.quoteId || calculatorTransfer.quoteId === contextQuoteId),
+  );
+  const selectedIds = useMemo(() => new Set(
+    transferActive ? calculatorTransfer.selectedPieceIds : [],
+  ), [calculatorTransfer, transferActive]);
+  const material = transferActive ? calculatorTransfer.material : quote.materialRows?.[0];
+  const sheetWidth = transferActive
+    ? convertLength(
+      calculatorTransfer.config.formatWidth,
+      calculatorTransfer.config.unit,
+      'cm',
+    )
+    : material?.ancho || 122;
+  const sheetHeight = transferActive
+    ? convertLength(
+      calculatorTransfer.config.formatHeight,
+      calculatorTransfer.config.unit,
+      'cm',
+    )
+    : material?.alto || 244;
+  const piezas = useMemo(() => quote.measureRows
+    .filter((item) => !transferActive || selectedIds.has(item.id))
+    .map((item) => ({
+      id: item.id,
     name: item.nombre,
     width: item.ancho,
     height: item.alto,
     quantity: item.cantidad,
-  })).filter((piece) => piece.width > 0 && piece.height > 0 && piece.quantity > 0), [quote.measureRows]);
+    }))
+    .filter((piece) => piece.width > 0 && piece.height > 0 && piece.quantity > 0),
+  [quote.measureRows, selectedIds, transferActive]);
   const result = useMemo(() => optimizeCuts({
     sheetWidth,
     sheetHeight,
@@ -45,7 +83,18 @@ export default function CutOptimizerSection({ quote, decimal, readOnly = false }
           <h2>Optimizador inteligente de corte</h2>
           <p>Primera versión visual con algoritmo shelf simple.</p>
         </div>
-        <Scissors size={38} />
+        <div className="actions compact">
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => onCalculateMaterial?.({
+              selectedPieceIds: piezas.map((piece) => piece.id),
+            })}
+          >
+            <Calculator size={16} /> Abrir BR Material Studio
+          </button>
+          <Scissors size={38} />
+        </div>
       </header>
 
       <div className="cut-stats">
@@ -54,6 +103,12 @@ export default function CutOptimizerSection({ quote, decimal, readOnly = false }
         <div><span>Área utilizada</span><strong>{hasPieces ? `${decimal(summary.usedArea / 10000)} m²` : 'Sin calcular'}</strong></div>
         <div><span>Aprovechamiento</span><strong>{hasPieces ? `${decimal(summary.utilization, 0)}%` : '—'}</strong></div>
       </div>
+
+      {transferActive && (
+        <p className="cut-alert is-clear" role="status">
+          Calculando únicamente {piezas.length} pieza(s) enviadas desde la Calculadora de Materiales.
+        </p>
+      )}
 
       <div className="cut-controls">
         <div className="cut-controls-head">

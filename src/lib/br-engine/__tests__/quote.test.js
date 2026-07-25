@@ -216,4 +216,97 @@ describe('quote.js', () => {
     expect(quote.materialRows[0].optimizationStatus).toBe('pending');
     expect(quote.materialRows[0].optimizationLabel).toBe('Pendiente de optimizar.');
   });
+
+  it('conserva conjuntos y asignaciones opcionales sin romper medidas legacy', () => {
+    const legacy = Quote.normalizeMeasureItem({
+      id: 'legacy',
+      nombre: 'Puerta',
+      ancho: 45,
+      alto: 70,
+      cantidad: 1,
+    }, 0, {}, helpers);
+    const assigned = Quote.normalizeMeasureItem({
+      ...legacy,
+      groupId: 'group-1',
+      materialAssignments: [
+        'mat-a',
+        { materialId: 'mat-a' },
+        { materialId: 'mat-b', usage: 'respaldo' },
+      ],
+    }, 0, {}, helpers);
+
+    expect(legacy).not.toHaveProperty('groupId');
+    expect(legacy).not.toHaveProperty('materialAssignments');
+    expect(assigned).toMatchObject({
+      groupId: 'group-1',
+      materialAssignments: [
+        { materialId: 'mat-a' },
+        { materialId: 'mat-b', usage: 'respaldo' },
+      ],
+    });
+    expect(Quote.pieceGroupsFromForm({
+      pieceGroups: [{ id: 'group-1', name: 'Mueble bajo' }],
+    }, helpers)).toEqual([{ id: 'group-1', name: 'Mueble bajo' }]);
+  });
+
+  it('calcula cada material únicamente con sus piezas asignadas', () => {
+    const quote = Quote.calculateQuote({
+      giro: 'Carpintería',
+      measureItems: [
+        {
+          id: 'costado',
+          nombre: 'Costado',
+          ancho: 50,
+          alto: 100,
+          cantidad: 2,
+          groupId: 'mueble-bajo',
+          materialAssignments: [{ materialId: 'melamina' }],
+        },
+        {
+          id: 'respaldo',
+          nombre: 'Respaldo',
+          ancho: 50,
+          alto: 100,
+          cantidad: 1,
+          groupId: 'mueble-bajo',
+          materialAssignments: [{ materialId: 'mdf' }],
+        },
+      ],
+      pieceGroups: [{ id: 'mueble-bajo', name: 'Mueble bajo' }],
+      materialItems: [
+        {
+          id: 'melamina',
+          nombre: 'Melamina',
+          tipoCompra: 'area',
+          baseCalculo: 'medidas_area',
+          costoUnitario: 100,
+          margen: 0,
+          merma: 0,
+        },
+        {
+          id: 'mdf',
+          nombre: 'MDF',
+          tipoCompra: 'area',
+          baseCalculo: 'medidas_area',
+          costoUnitario: 50,
+          margen: 0,
+          merma: 0,
+        },
+      ],
+      accessoryItems: [],
+    }, helpers);
+
+    expect(quote.materialRows[0]).toMatchObject({
+      id: 'melamina',
+      rowQuantity: 1,
+      assignedPieceIds: ['costado'],
+      costTotal: 100,
+    });
+    expect(quote.materialRows[1]).toMatchObject({
+      id: 'mdf',
+      rowQuantity: 0.5,
+      assignedPieceIds: ['respaldo'],
+      costTotal: 25,
+    });
+  });
 });

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ClipboardList, ExternalLink, ShoppingCart } from 'lucide-react';
+import { Calculator, ClipboardList, ExternalLink, ShoppingCart } from 'lucide-react';
 import {
   PRODUCTION_STATUSES,
   canAdvanceProductionOrder,
@@ -132,6 +132,7 @@ export default function ProductionSection({
   productionLoading = false,
   productionError = '',
   productionSyncStatus = '',
+  onCalculateMaterial,
 }) {
   const sortedOrders = [...productionOrders].sort((a, b) => (
     dateTimestamp(b.updatedAt || b.fechaCreacion)
@@ -257,6 +258,9 @@ export default function ProductionSection({
             <h2>Producción</h2>
           </div>
           <div className="production-header-status" aria-live="polite">
+            <button type="button" className="ghost" onClick={() => onCalculateMaterial?.()}>
+              <Calculator size={16} /> Abrir BR Material Studio
+            </button>
             {productionLoading && (
               <p className="production-cloud-status" role="status">
                 Cargando órdenes de producción…
@@ -293,6 +297,9 @@ export default function ProductionSection({
           <p>Consulta las órdenes generadas desde cotizaciones aceptadas.</p>
         </div>
         <div className="production-header-status" aria-live="polite">
+          <button type="button" className="ghost" onClick={() => onCalculateMaterial?.()}>
+            <Calculator size={16} /> Abrir BR Material Studio
+          </button>
           {productionLoading && (
             <p className="production-cloud-status" role="status">
               Cargando órdenes de producción…
