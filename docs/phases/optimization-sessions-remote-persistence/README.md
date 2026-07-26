@@ -11,8 +11,9 @@ Esta fase:
 - propone una fila remota en `snake_case`;
 - incorpora un adapter remoto puro;
 - incorpora un Remote Repository con cliente abstracto inyectado;
+- implementa el Supabase Client Adapter para ese contrato abstracto;
 - conserva compatibilidad con la migración local v1 → v2;
-- no conecta Supabase;
+- no conecta todavía el cliente compartido ni un backend real;
 - no crea SQL, sincronización ni Realtime.
 
 ## Arquitectura
@@ -26,9 +27,11 @@ Fila remota propuesta
 ↓
 Remote Repository
 ↓
-Cliente abstracto inyectado
+Supabase Client Adapter
 ↓
-Supabase / RLS / Realtime (pendientes)
+Supabase SDK inyectado
+↓
+Tabla / RLS / Realtime (pendientes)
 ```
 
 El Adapter remoto reutiliza el Adapter durable existente. No replica validación,
@@ -369,14 +372,152 @@ del cliente, nunca como escritura incondicional.
 | `OPTIMIZATION_SESSION_REMOTE_RESPONSE_INVALID` | Respuesta o fila inválida |
 | `OPTIMIZATION_SESSION_REMOTE_VERSION_CONFLICT` | El avance local no coincide con `expectedVersion` |
 
+## Supabase Client Adapter
+
+Archivo:
+
+`src/lib/optimization-sessions/supabaseClient.js`
+
+Fábrica:
+
+```text
+createOptimizationSessionSupabaseClient({
+  supabase,
+  workspaceId,
+  tableName = 'optimization_sessions',
+})
+```
+
+La dependencia Supabase se inyecta. El Adapter no importa ni crea el cliente
+global, no depende de React y no conoce el modelo local de Optimization
+Session.
+
+Flujo:
+
+```text
+Remote Repository
+↓
+Supabase Client Adapter
+↓
+Supabase SDK
+```
+
+### Contrato implementado
+
+La fábrica devuelve un objeto congelado con:
+
+```text
+insert(row)
+update(row, expectedVersion)
+selectOne(sessionId)
+selectMany(filters)
+delete(sessionId)
+```
+
+Cada operación devuelve exactamente:
+
+```text
+{ data, error }
+```
+
+Las filas permanecen en `snake_case`. La conversión entre fila y dominio
+continúa perteneciendo exclusivamente al Remote Adapter.
+
+### Aislamiento por workspace
+
+El `workspaceId` se fija al construir el Adapter.
+
+- toda consulta aplica `workspace_id = workspaceId`;
+- `insert` y `update` rechazan filas sin `workspace_id`;
+- una fila o filtro de otro workspace se rechaza antes de consultar;
+- `selectOne`, `update` y `delete` usan `workspace_id + id`;
+- las respuestas también se verifican contra el workspace inyectado;
+- el Adapter nunca corrige ni sustituye un workspace recibido.
+
+Este control es defensa en profundidad de aplicación. No sustituye RLS.
+
+### Versionado optimista
+
+`update(row, expectedVersion)` exige:
+
+```text
+row.version === expectedVersion + 1
+```
+
+La escritura se limita en una sola consulta mediante:
+
+```text
+id
+workspace_id
+version = expectedVersion
+```
+
+Cero filas actualizadas se interpreta como conflicto de versión. No se ejecuta
+un `SELECT` previo y no se realiza una escritura incondicional.
+
+### Filtros y orden
+
+`selectMany()` admite:
+
+- `quote_id`;
+- `material_id`;
+- `execution_id`;
+- `status`;
+- `created_by`;
+- `last_modified_by`;
+- `contract_version`;
+- `version`;
+- aliases camelCase equivalentes requeridos por el Remote Repository.
+
+Los filtros desconocidos y los aliases contradictorios se rechazan. El orden
+es determinista:
+
+```text
+updated_at DESC
+id ASC
+```
+
+### Errores normalizados
+
+| Código | Significado |
+|---|---|
+| `OPTIMIZATION_SESSION_SUPABASE_CLIENT_INVALID` | Configuración inyectada inválida |
+| `OPTIMIZATION_SESSION_SUPABASE_INPUT_INVALID` | Fila, ID, filtro o versión inválidos |
+| `OPTIMIZATION_SESSION_SUPABASE_QUERY_FAILED` | Fallo devuelto o lanzado por el SDK |
+| `OPTIMIZATION_SESSION_SUPABASE_VERSION_CONFLICT` | La escritura condicionada no actualizó una fila |
+| `OPTIMIZATION_SESSION_SUPABASE_NOT_FOUND` | La sesión no existe en el workspace |
+| `OPTIMIZATION_SESSION_SUPABASE_WORKSPACE_MISMATCH` | Workspace cruzado |
+| `OPTIMIZATION_SESSION_SUPABASE_RESPONSE_INVALID` | Cardinalidad o forma de respuesta inválida |
+
+Los errores del SDK conservan código, mensaje, detalles y hint útiles dentro
+del error normalizado.
+
+### Estado de la infraestructura
+
+La tabla prevista es:
+
+```text
+optimization_sessions
+```
+
+En esta fase:
+
+- no existe migración SQL;
+- no existe la tabla remota;
+- no se implementa RLS;
+- no se conecta el cliente compartido a hooks o UI;
+- no existe Sync Engine;
+- no existe Realtime;
+- no existe historial remoto.
+
 ## Límites
 
 Esta fase no:
 
 - crea ni modifica tablas;
-- conecta Supabase;
-- implementa un cliente de transporte;
-- ejecuta queries reales;
+- conecta el Adapter a la aplicación o a un proyecto Supabase real;
+- crea un segundo cliente global;
+- ejecuta queries contra un backend durante las pruebas;
 - cambia el Repository local;
 - procesa Offline Queue;
 - implementa sincronización;
@@ -389,12 +530,9 @@ Esta fase no:
 
 ## Pendientes para implementación Supabase
 
-- implementar las cinco operaciones del cliente abstracto;
-- seleccionar explícitamente la tabla o schema remoto;
-- devolver siempre `{ data, error }`;
-- enviar la condición `expectedVersion` en updates;
-- distinguir conflicto de versión, ausencia y fallo de red;
-- filtrar siempre por `workspace_id`;
+- crear y validar la tabla `optimization_sessions`;
+- conectar la fábrica mediante el cliente compartido existente;
+- integrar el cliente concreto detrás del Remote Repository;
 - conservar el adapter remoto como único traductor;
 - definir paginación y orden estable;
 - definir recuperación y retry sin duplicar sesiones;
