@@ -2,7 +2,7 @@
 
 ## Proyecto
 
-BRTuNegocio  
+BRTuNegocio
 Workspace operativo: ALUXOR / BosqueReal
 
 ## Objetivo
