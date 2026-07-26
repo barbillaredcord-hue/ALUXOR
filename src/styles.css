@@ -5,6 +5,7 @@
 @import "./styles/brand-print.css";
 @import "./styles/operational-center.css";
 @import "./styles/material-calculator.css";
+@import "./styles/smart-cut.css";
 
 :root {
   font-family: var(--br-font-sans);

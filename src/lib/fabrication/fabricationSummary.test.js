@@ -1,10 +1,70 @@
 import { describe, expect, it } from 'vitest';
 import {
+  getFabricationCutPlan,
   getFabricationSummary,
   normalizeFabricationCount,
 } from './fabricationSummary.js';
 
 describe('getFabricationSummary', () => {
+  it('mantiene Fabricación en Legacy por defecto', () => {
+    const optimization = {
+      id: 'shelf-id',
+      summary: { requiredSheets: 2 },
+      placedPieces: [{ id: 'p1' }],
+      unplacedPieces: [],
+      validation: { isPhysicallyValid: true },
+    };
+    const plan = getFabricationCutPlan({ cutOptimization: optimization });
+
+    expect(plan.mode).toBe('legacy');
+    expect(plan.optimization).toBe(optimization);
+    expect(plan.summary).toBe(optimization.summary);
+  });
+
+  it('consume el summary Smart Cut activo sin cambiar su flujo', () => {
+    const optimization = {
+      id: 'best-fit-id',
+      summary: { requiredSheets: 1 },
+      placedPieces: [{ id: 'p1' }],
+      unplacedPieces: [],
+      validation: { isPhysicallyValid: true },
+    };
+    const plan = getFabricationCutPlan({
+      optimization: {
+        mode: 'smart-cut',
+        activeCandidateId: 'best-fit-id',
+        proposalId: 'proposal-1',
+        engineVersion: 1,
+        status: 'valid',
+      },
+      cutOptimization: optimization,
+    });
+
+    expect(plan.mode).toBe('smart-cut');
+    expect(plan.summary).toBe(optimization.summary);
+    expect(plan.placedPieces).toBe(optimization.placedPieces);
+    expect(plan.status).toBe('ready');
+  });
+
+  it('usa Legacy si el estado Smart Cut no es válido', () => {
+    const optimization = {
+      summary: { requiredSheets: 2 },
+      placedPieces: [],
+      unplacedPieces: [],
+    };
+    const plan = getFabricationCutPlan({
+      optimization: {
+        mode: 'smart-cut',
+        activeCandidateId: 'obsolete-id',
+        status: 'obsolete',
+      },
+      cutOptimization: optimization,
+    });
+
+    expect(plan.mode).toBe('legacy');
+    expect(plan.summary).toBe(optimization.summary);
+  });
+
   it('devuelve un resumen vacío sin inventar procesos', () => {
     expect(getFabricationSummary()).toEqual({
       projects: 0,

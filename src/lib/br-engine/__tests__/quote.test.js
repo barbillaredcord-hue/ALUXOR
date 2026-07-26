@@ -66,6 +66,47 @@ const simpleQuote = {
   }],
 };
 
+function smartCutQuoteInput(overrides = {}) {
+  const base = {
+    giro: 'Carpintería',
+    producto: 'Conjunto Smart Cut',
+    margenMaterial: 0,
+    manoObra: 0,
+    extras: 0,
+    descuento: 0,
+    anticipo: 0,
+    measureItems: [
+      { id: 'first', nombre: 'Primera', ancho: 70, alto: 40, cantidad: 1 },
+      { id: 'tall', nombre: 'Alta', ancho: 30, alto: 100, cantidad: 1 },
+      { id: 'large', nombre: 'Grande', ancho: 70, alto: 60, cantidad: 1 },
+    ],
+    materialItems: [{
+      id: 'mat-smart',
+      nombre: 'MDF',
+      tipoCompra: 'hoja',
+      baseCalculo: 'medidas_area',
+      ancho: 100,
+      alto: 100,
+      costoUnitario: 100,
+      merma: 0,
+      margen: 0,
+      cutConfig: {
+        strategy: 'input-order',
+        allowRotation: false,
+        kerf: 0,
+        margins: { top: 0, right: 0, bottom: 0, left: 0 },
+      },
+    }],
+    accessoryItems: [],
+  };
+  return {
+    ...base,
+    ...overrides,
+    materialItems: overrides.materialItems || base.materialItems,
+    measureItems: overrides.measureItems || base.measureItems,
+  };
+}
+
 describe('quote.js', () => {
   it('produce una cotizacion simple con total mayor a cero', () => {
     const quote = Quote.calculateQuote(simpleQuote, helpers);
@@ -215,6 +256,199 @@ describe('quote.js', () => {
     expect(quote.materialRows[0].optimizationSummary).toBeNull();
     expect(quote.materialRows[0].optimizationStatus).toBe('pending');
     expect(quote.materialRows[0].optimizationLabel).toBe('Pendiente de optimizar.');
+  });
+
+  it('mantiene Legacy como predeterminado y conserva su costo actual', () => {
+    const quote = Quote.calculateQuote(smartCutQuoteInput(), helpers);
+    const material = quote.materialRows[0];
+
+    expect(material.optimization).toMatchObject({
+      mode: 'legacy',
+      activeCandidateId: null,
+      proposalId: null,
+      engineVersion: null,
+      status: 'valid',
+    });
+    expect(material.optimization.inputSignature)
+      .toMatch(/^quote-cut-input-v1-[0-9a-f]{8}$/);
+    const shelf = material.cutOptimization.candidates
+      .find((candidate) => candidate.strategy === 'shelf');
+    expect(material.cutOptimization.sheets).toBe(shelf.sheets);
+    expect(material.hojasNecesarias).toBe(2);
+    expect(material.costTotal).toBe(200);
+  });
+
+  it('usa el summary del candidato Smart Cut activo con las mismas reglas de costo', () => {
+    const input = smartCutQuoteInput();
+    const legacy = Quote.calculateQuote(input, helpers);
+    const bestFit = legacy.materialRows[0].cutOptimization.candidates
+      .find((candidate) => candidate.strategy === 'best-fit');
+    const activeInput = smartCutQuoteInput({
+      materialItems: [{
+        ...input.materialItems[0],
+        optimization: {
+          mode: 'smart-cut',
+          activeCandidateId: bestFit.id,
+          proposalId: 'proposal-best-fit',
+          engineVersion: bestFit.metadata.contractVersion,
+          inputSignature: legacy.materialRows[0].optimization.inputSignature,
+          status: 'valid',
+        },
+      }],
+    });
+    const active = Quote.calculateQuote(activeInput, helpers);
+    const material = active.materialRows[0];
+
+    expect(material.optimization.status).toBe('valid');
+    expect(material.cutOptimization.id).toBe(bestFit.id);
+    expect(material.cutOptimization.strategy).toBe('best-fit');
+    expect(material.optimizationSummary).toEqual(bestFit.summary);
+    expect(material.hojasNecesarias).toBe(1);
+    expect(material.costTotal).toBe(
+      material.hojasNecesarias * input.materialItems[0].costoUnitario,
+    );
+    expect(legacy.materialRows[0].costTotal).toBe(
+      legacy.materialRows[0].hojasNecesarias * input.materialItems[0].costoUnitario,
+    );
+  });
+
+  it.each([
+    ['piezas', (input) => ({
+      ...input,
+      measureItems: input.measureItems.map((piece, index) => (
+        index === 0 ? { ...piece, cantidad: 2 } : piece
+      )),
+    })],
+    ['dimensiones', (input) => ({
+      ...input,
+      measureItems: input.measureItems.map((piece, index) => (
+        index === 0 ? { ...piece, ancho: 69 } : piece
+      )),
+    })],
+    ['configuración', (input) => ({
+      ...input,
+      materialItems: [{
+        ...input.materialItems[0],
+        cutConfig: { ...input.materialItems[0].cutConfig, allowRotation: true },
+      }],
+    })],
+    ['orden de estrategia', (input) => ({
+      ...input,
+      materialItems: [{
+        ...input.materialItems[0],
+        cutConfig: { ...input.materialItems[0].cutConfig, strategy: 'largest-first' },
+      }],
+    })],
+    ['kerf', (input) => ({
+      ...input,
+      materialItems: [{
+        ...input.materialItems[0],
+        cutConfig: { ...input.materialItems[0].cutConfig, kerf: 0.3 },
+      }],
+    })],
+    ['márgenes', (input) => ({
+      ...input,
+      materialItems: [{
+        ...input.materialItems[0],
+        cutConfig: {
+          ...input.materialItems[0].cutConfig,
+          margins: { top: 1, right: 0, bottom: 0, left: 0 },
+        },
+      }],
+    })],
+    ['regiones', (input) => ({
+      ...input,
+      materialItems: [{
+        ...input.materialItems[0],
+        cutConfig: {
+          ...input.materialItems[0].cutConfig,
+          blockedRegions: [{ id: 'damage', x: 90, y: 90, width: 5, height: 5 }],
+        },
+      }],
+    })],
+  ])('marca obsolete y vuelve a Legacy cuando cambian %s', (_label, change) => {
+    const initial = smartCutQuoteInput();
+    const firstQuote = Quote.calculateQuote(initial, helpers);
+    const bestFit = firstQuote.materialRows[0].cutOptimization.candidates
+      .find((candidate) => candidate.strategy === 'best-fit');
+    const activeInput = smartCutQuoteInput({
+      materialItems: [{
+        ...initial.materialItems[0],
+        optimization: {
+          mode: 'smart-cut',
+          activeCandidateId: bestFit.id,
+          proposalId: 'proposal-best-fit',
+          engineVersion: 1,
+          inputSignature: firstQuote.materialRows[0].optimization.inputSignature,
+          status: 'valid',
+        },
+      }],
+    });
+    const changed = change(activeInput);
+    const quote = Quote.calculateQuote(changed, helpers);
+    const material = quote.materialRows[0];
+
+    expect(material.optimization.status).toBe('obsolete');
+    const shelf = material.cutOptimization.candidates
+      .find((candidate) => candidate.strategy === 'shelf');
+    expect(material.cutOptimization.sheets).toBe(shelf.sheets);
+    expect(material.cutOptimization.id).toBeUndefined();
+    expect(material.optimization.activeCandidateId).toBe(bestFit.id);
+    expect(material.costTotal).toBe(
+      material.hojasNecesarias * changed.materialItems[0].costoUnitario,
+    );
+  });
+
+  it('es determinista en Legacy y Smart Cut activo', () => {
+    const input = smartCutQuoteInput();
+    const legacy = Quote.calculateQuote(input, helpers);
+    const candidate = legacy.materialRows[0].cutOptimization.candidates[1];
+    const activeInput = smartCutQuoteInput({
+      materialItems: [{
+        ...input.materialItems[0],
+        optimization: {
+          mode: 'smart-cut',
+          activeCandidateId: candidate.id,
+          proposalId: 'proposal-1',
+          engineVersion: 1,
+          inputSignature: legacy.materialRows[0].optimization.inputSignature,
+          status: 'valid',
+        },
+      }],
+    });
+
+    expect(Quote.calculateQuote(input, helpers))
+      .toEqual(Quote.calculateQuote(input, helpers));
+    expect(Quote.calculateQuote(activeInput, helpers))
+      .toEqual(Quote.calculateQuote(activeInput, helpers));
+  });
+
+  it('mantiene costos idénticos cuando Legacy y Smart Cut requieren las mismas hojas', () => {
+    const input = smartCutQuoteInput({
+      measureItems: [{ id: 'single', nombre: 'Panel', ancho: 40, alto: 40, cantidad: 1 }],
+    });
+    const legacy = Quote.calculateQuote(input, helpers);
+    const bestFit = legacy.materialRows[0].cutOptimization.candidates
+      .find((candidate) => candidate.strategy === 'best-fit');
+    const active = Quote.calculateQuote(smartCutQuoteInput({
+      measureItems: input.measureItems,
+      materialItems: [{
+        ...input.materialItems[0],
+        optimization: {
+          mode: 'smart-cut',
+          activeCandidateId: bestFit.id,
+          proposalId: 'proposal-equal-cost',
+          engineVersion: 1,
+          inputSignature: legacy.materialRows[0].optimization.inputSignature,
+          status: 'valid',
+        },
+      }],
+    }), helpers);
+
+    expect(legacy.materialRows[0].hojasNecesarias)
+      .toBe(active.materialRows[0].hojasNecesarias);
+    expect(legacy.materialRows[0].costTotal)
+      .toBe(active.materialRows[0].costTotal);
   });
 
   it('conserva conjuntos y asignaciones opcionales sin romper medidas legacy', () => {

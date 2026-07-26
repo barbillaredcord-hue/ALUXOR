@@ -26,9 +26,15 @@ export function normalizeFabricationCount(value) {
 
 export function getFabricationCutPlan(material) {
   const optimization = material?.cutOptimization || null;
+  const optimizationState = normalizeMaterialOptimizationState(material?.optimization);
+  const smartCutActive = optimizationState.mode === OPTIMIZATION_MODES.SMART_CUT
+    && optimizationState.status === OPTIMIZATION_STATE_STATUSES.VALID
+    && optimization?.id === optimizationState.activeCandidateId;
 
   return {
     optimization,
+    optimizationState,
+    mode: smartCutActive ? OPTIMIZATION_MODES.SMART_CUT : OPTIMIZATION_MODES.LEGACY,
     summary: optimization?.summary || null,
     validation: optimization?.validation || null,
     placedPieces: Array.isArray(optimization?.placedPieces)
@@ -96,3 +102,8 @@ export function getFabricationSummary(projects = []) {
 
   return summary;
 }
+import {
+  normalizeMaterialOptimizationState,
+  OPTIMIZATION_MODES,
+  OPTIMIZATION_STATE_STATUSES,
+} from '../smart-cut-application/active-mode.js';

@@ -23,6 +23,7 @@ import {
   pieceIdsForGroups,
   pieceIdsForMaterial,
 } from '../../lib/material-calculator/engine.js';
+import SmartCutComparison from '../smart-cut/SmartCutComparison.jsx';
 
 const TYPE_OPTIONS = [
   {
@@ -1041,20 +1042,12 @@ export default function MaterialCalculator({
                     <div><span>Precio propuesto</span><strong>{money(calculation.proposedPrice)}</strong></div>
                   </div> : (
                     <div id="calculator-result-optimization" className="calculator-optimization-panel" role="tabpanel" aria-labelledby="calculator-tab-optimization">
-                      <div><span>Hojas necesarias</span><strong>{calculation.optimization.summary.requiredSheets}</strong></div>
-                      <div><span>Aprovechamiento</span><strong>{display(calculation.optimization.summary.utilization, 1)}%</strong></div>
-                      <div><span>Merma física</span><strong>{display(calculation.optimization.summary.wasteArea / 10000)} m²</strong></div>
-                      <div><span>Estado físico</span><strong>{calculation.optimization.validation.isPhysicallyValid ? 'Válido' : 'Requiere revisión'}</strong></div>
-                      <div className="calculator-optimization-sheets">
-                        {calculation.optimization.sheets
-                          .filter((sheet) => sheet.pieces.length > 0)
-                          .map((sheet) => (
-                            <article key={sheet.index}>
-                              <strong>Hoja {sheet.index}</strong>
-                              <span>{sheet.pieces.length} corte(s) · {display(sheet.efficiencyPercent, 1)}% aprovechado</span>
-                            </article>
-                          ))}
-                      </div>
+                      <SmartCutComparison
+                        candidates={calculation.optimization.candidates}
+                        recommendedCandidateId={calculation.optimization.recommendedCandidateId}
+                        selectionReason={calculation.optimization.selectionReason}
+                        candidateRanking={calculation.optimization.candidateRanking}
+                      />
                       <button type="button" className="ghost" onClick={() => setResultView('calculation')}>
                         Volver al cálculo
                       </button>

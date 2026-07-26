@@ -4,8 +4,8 @@
 
 - **Workspace operativo actual:** ALUXOR / BosqueReal
 - **Etapa activa:** Etapa III — ERP operativo
-- **Fase oficial:** 25.3 — Business State 2.0
-- **Última actualización:** 24/07/2026
+- **Fase oficial:** cierre técnico de Smart Cut Engine — Etapas 1–7, previo a la Fase 25.4
+- **Última actualización:** 26/07/2026
 
 ## 1. Identidad del proyecto
 
@@ -30,7 +30,7 @@ No solo cotizará y administrará. También deberá preservar conocimiento, docu
 
 El flujo integral esperado es:
 
-Cliente → Cotización → Producción → Compras → Recepción → Inventario → Fabricación → Cut Optimizer → Instalación → Entrega → Cobranza → Garantía → Historial → Análisis e IA
+Cliente → Cotización → Optimización de corte (Legacy / Smart Cut) → Producción → Compras → Recepción → Inventario → Fabricación → Instalación → Entrega → Cobranza → Garantía → Historial → Análisis e IA
 
 La meta no es acumular pantallas, sino conectar los dominios para que cada dato tenga propietario, identidad, historial y consumidores definidos.
 
@@ -57,6 +57,11 @@ La meta no es acumular pantallas, sino conectar los dominios para que cada dato 
 - `Entregado` es un estado terminal de Producción y activa el modo de solo lectura del proyecto.
 - El modo de solo lectura debe bloquear comandos de escritura; deshabilitar controles es únicamente su representación visual.
 - Business State es un adapter derivado; no es una fuente persistente ni contiene reglas del dominio.
+- Quote continúa siendo la fuente de verdad persistente de la optimización.
+- Smart Cut calcula, compara, recomienda y propone; nunca aplica una optimización sin confirmación explícita.
+- Shelf permanece como fallback oficial y garantiza continuidad Legacy.
+- Fabricación consume el summary oficial de optimización; nunca recalcula geometría ni candidatos.
+- Smart Cut permanece desacoplado de React, Supabase y los dominios del ERP.
 - Las pantallas consumen información; no son fuentes de verdad.
 - Cada sprint deja una mejora real y una actualización breve de continuidad.
 - Ninguna función importante se considera cerrada sin funcionamiento, documentación, roadmap y pendientes derivados.
@@ -90,7 +95,7 @@ Componentes verificados:
 - **Identity:** normalización, comparación y preservación canónica por UUID y workspace. `createUuid.js` es el generador seguro compartido por Cotizaciones y colas, pero Producción y Compras todavía conservan puntos de generación directa o inyectable que deben converger.
 - **Integrity:** `runIntegrityAudit()` es la entrada pública explícita; combina auditor local estricto, auditor remoto autenticado de solo lectura, comparación local/remota, reporte consolidado, recomendaciones y readiness conservador.
 - **Read Only:** `isProjectReadOnly()` pertenece al Production Engine y deriva únicamente de `Entregado`; los hooks de Cotización, Producción, Compras y Workspace rechazan mutaciones y las secciones existentes reflejan el mismo contrato sin duplicar pantallas.
-- **Cut Optimizer:** motor determinista, validación física y salida consumida por BR Engine y Fabricación; su persistencia operacional sigue pendiente.
+- **Smart Cut Engine / Cut Optimizer:** motor físico determinista con normalización, validación, geometría, estrategias Shelf y Best Fit, generación de candidatos, evaluación, ranking, selección y recomendación. `optimizeCuts()` conserva el contrato Legacy y Shelf como fallback. La UI comparativa, Proposal Application Layer y Active Mode están implementados; Optimization Sessions y persistencia durable siguen pendientes.
 - **Business State:** adapter central derivado y sin persistencia. Agrega summaries existentes y expone proyecto, cliente, cotización, producción, compras, workflow, salud, riesgos, pendientes, actividad, alertas, indicadores, última actualización y read only sin apropiarse de los dominios.
 - **Workspace:** aislamiento y permisos como contexto empresarial; el indicador permanente de workspace del sistema sigue pendiente.
 - **Brand System:** infraestructura visual consolidada en 25.2E con tokens JavaScript y CSS, tema funcional, helpers, componentes `BR*`, clases de layout y capas separadas de accesibilidad e impresión.
@@ -108,7 +113,9 @@ Componentes verificados:
 | Identidad técnica | UUID de `entity.id` dentro de `workspace_id` | Adapters, repositories, storage, relaciones y auditoría. El folio no participa como identidad. |
 | Integridad | Colecciones locales reales y lecturas Supabase bajo RLS | `runIntegrityAudit()` y su reporte; Business State no es fuente de auditoría. |
 | Estado empresarial transversal | Summaries de cada dominio agregados por `getBusinessState()` | FLDSMDFR y consumidores futuros; nunca se persiste como verdad paralela. |
-| Branding activo | Recursos de `public/branding`, manifest, favicons y CSS actualmente importado | Login, shell, encabezado, PWA y documentos. Los tokens de Design System todavía no son fuente activa de la UI. |
+| Entrada persistente de optimización | Quote y su configuración de material | Smart Cut consume una copia normalizada, no muta la entrada y devuelve candidatos, diagnósticos y propuestas. |
+| Resultado activo de optimización | Estado oficial `optimization` de Quote y candidato válido referenciado | Quote, BR Engine y Fabricación consumen el summary oficial; una referencia inexistente u obsoleta activa el fallback Legacy. |
+| Branding activo | Recursos de `public/branding`, manifest, favicons, tokens y capas CSS oficiales | Login, shell, encabezado, PWA, documentos y adopción incremental de superficies. Los tokens del Design System son la referencia visual oficial desde 25.2E. |
 
 Contrato de solo lectura:
 
@@ -118,7 +125,7 @@ No existe una pantalla alternativa ni un flag persistido de read only. La protec
 
 ## 6. Flujo operativo canónico
 
-Cotización → Producción → Compras → Recepción → Inventario → Fabricación → Cut Optimizer → Instalación → Entrega
+Cotización → Optimización de corte (Legacy / Smart Cut) → Producción → Compras → Recepción → Inventario → Fabricación → Instalación → Entrega
 
 Reglas oficiales:
 
@@ -128,9 +135,33 @@ Reglas oficiales:
 - Recepción debe originarse en partidas de Compras.
 - Inventario se construirá sobre movimientos, no sobre cantidades editadas únicamente en pantalla.
 - Fabricación consume la orden y el plan de corte; no recalcula la optimización.
+- Smart Cut no persiste por sí mismo, no modifica Quote directamente y no aplica propuestas automáticamente.
+- El modo Legacy usa Shelf. El modo Smart Cut usa únicamente un candidato activo y válido; ante obsolescencia o ausencia vuelve temporalmente a Legacy.
 - Una orden con estado `Entregado` permanece consultable, pero no admite actualizaciones, nuevas compras, cambios de historial ni configuración del workspace desde el proyecto activo.
 - Los summaries y fuentes reutilizables alimentan Business State.
 - Dashboard, Inspector Inteligente y Project Companion consumirán Business State en fases posteriores; el Centro del Proyecto mantiene su consumo parcial existente.
+
+Flujo arquitectónico de optimización:
+
+```text
+Quote
+↓
+Optimization Session (pendiente; todavía no existe)
+↓
+Candidates
+↓
+Recommendation
+↓
+Proposal
+↓
+Quote
+↓
+Production
+↓
+Fabrication
+```
+
+La ausencia actual de Optimization Sessions no se oculta con persistencia paralela: los candidatos y el historial de optimizaciones permanecen temporales y locales a la interfaz. Quote continúa siendo la única fuente de verdad persistente.
 
 ## 7. Roadmap maestro por etapas
 
@@ -138,9 +169,9 @@ Reglas oficiales:
 |---|---|---|---|
 | I — Fundación | Establecer aplicación, workspace, diseño, motores y pruebas base. | Completada | Base React/Vite, BR Engine, estructura por proyecto y pruebas. |
 | II — Cotizador profesional | Operar cotizaciones reales con cálculo, historial, colaboración y persistencia. | Completada con evolución continua | Cotización durable, PDF, catálogo, offline, Realtime e identidad canónica. |
-| III — ERP operativo | Conectar el flujo desde Cotización hasta Entrega. | En desarrollo | Producción y Compras tienen base durable; Brand System y Business State 2.0 están consolidados. Faltan completar Recepción, Inventario, Fabricación, Instalación y Entrega. Cierra funcionalmente en Fase 26.0. |
+| III — ERP operativo | Conectar el flujo desde Cotización hasta Entrega. | En desarrollo | Producción y Compras tienen base durable; Brand System, Business State 2.0 y Smart Cut Etapas 1–7 están consolidados. Smart Cut es técnicamente maduro, pero no durable. Faltan Operational Center, Recepción, Inventario, persistencia de optimizaciones y remanentes, Fabricación durable, Instalación y Entrega. |
 | IV — Inteligencia operativa | Convertir datos operativos en alertas, prioridades y decisiones. | Planeada | Business State 2.0 disponible; faltan consumidores dinámicos completos y trazabilidad de los dominios aún no durables. |
-| V — Optimización industrial | Optimizar materiales, capacidad, tiempos y fabricación. | Planeada | Cut Optimizer persistente e integrado al flujo real del taller. |
+| V — Optimización industrial | Optimizar materiales, capacidad, tiempos y fabricación. | En desarrollo técnico adelantado | Smart Cut Engine, UI, Proposal y Active Mode completos. Faltan Optimization Sessions, persistencia, historial, sincronización, Realtime, Supabase, remanentes e integración definitiva con Inventario. |
 | VI — IA empresarial | Asistencia contextual basada en fuentes confiables. | Planeada | Datos durables, auditables y aislados por workspace. |
 | VII — CRM | Administrar relación y seguimiento de clientes. | Planeada | Identidad de clientes, historial y comunicación conectados. |
 | VIII — Comercial | Gestionar oportunidades, ventas y desempeño comercial. | Planeada | CRM y estados comerciales consolidados. |
@@ -401,33 +432,152 @@ No se migraron estas pantallas en 25.3. El Centro del Proyecto conserva su consu
 - `git diff --check`: correcto.
 - Warning conocido: chunk de Vite superior a 500 kB; es informativo y no bloquea el cierre.
 
+### Smart Cut Engine — cierre técnico de las Etapas 1–7
+
+**Estado:** implementación técnica completada y motor congelado.
+
+**Fecha de cierre técnico:** 26/07/2026.
+
+**Relación con el roadmap funcional:**
+
+Este trabajo es un adelanto técnico de optimización industrial. No renumera ni desplaza las fases funcionales: 25.4 continúa siendo Operational Center, 25.5 continúa siendo Recepción Durable y 25.6 continúa siendo Inventario por Movimientos. La carpeta documental `docs/phases/phase-25.6-smart-cut-engine/` fue la especificación operativa de esta implementación, pero su nombre no sustituye la numeración funcional oficial de este documento.
+
+**Objetivo alcanzado:**
+
+El Cut Optimizer evolucionó a un motor profesional de optimización física capaz de normalizar y validar entradas, respetar restricciones reales, producir candidatos deterministas, evaluarlos, recomendar una solución, presentarla para revisión y activar de forma reversible un candidato confirmado. La solución no crea un optimizador paralelo y conserva `optimizeCuts()` como fachada pública compatible.
+
+#### Etapa 1 — Contrato Legacy protegido
+
+- Se congeló mediante pruebas el contrato existente de `optimizeCuts()`.
+- Se conservaron campos, aliases y comportamiento Legacy.
+- Se protegió la inmutabilidad de objetos y arreglos de entrada.
+- Se estableció el determinismo físico como requisito: misma entrada y configuración producen las mismas hojas, posiciones, rotaciones, piezas colocadas, piezas no colocadas, estrategia y métricas.
+- `durationMs` permanece únicamente como telemetría y no participa en comparaciones ni selección.
+
+#### Etapa 2 — Normalización, validación y geometría
+
+- Se separaron módulos puros de normalización, validación y primitivas geométricas.
+- La normalización expande cantidades de forma determinista, conserva trazabilidad mediante `sourceId` y aplica valores predeterminados compatibles.
+- La validación clasifica errores y advertencias estructurados sin corregir silenciosamente errores físicos.
+- La geometría comprueba límites, intersecciones, colisiones, separación por kerf, márgenes, regiones bloqueadas y reservadas, rotación, veta y encaje físico.
+- Las entradas continúan siendo inmutables y los campos nuevos son aditivos.
+
+#### Etapa 3 — Estrategias y candidatos
+
+- Shelf fue extraída como estrategia independiente sin alterar su salida Legacy.
+- Best Fit rectangular fue incorporada como segunda estrategia determinista.
+- Un registro común ejecuta las estrategias en orden estable.
+- El generador produce candidatos completos con `id`, estrategia, hojas, piezas colocadas, piezas no colocadas, validación, diagnósticos, summary, metadata, `valid` y `complete`.
+- Toda pieza queda contabilizada exactamente una vez; ninguna desaparece ni se duplica.
+
+#### Etapa 4 — Evaluación y selección
+
+- Los candidatos se evalúan mediante métricas físicas deterministas.
+- El ranking usa criterios estables y desempates explícitos.
+- La selección distingue candidato ganador y recomendación sin alterar los candidatos.
+- El resultado público incorpora ranking, recomendación y explicaciones de forma aditiva.
+- Shelf continúa siendo la solución principal Legacy y el fallback oficial.
+
+#### Etapa 5 — Comparación visual
+
+- `SmartCutComparison` ofrece una UI reutilizable para revisar soluciones.
+- La interfaz compara candidatos, diagnósticos, métricas y configuración física.
+- La visualización de hojas y piezas permite verificar la propuesta sin modificar el motor.
+- Material Calculator consume el mismo componente y el mismo resultado del motor.
+- La comparación es una capa de presentación: no recalcula, no persiste y no aplica resultados.
+
+#### Etapa 6 — Proposal Application Layer
+
+- Proposal transforma una selección en una propuesta explícita e inmutable.
+- Validator verifica identidad, coherencia, vigencia y forma de los cambios propuestos.
+- Summary concentra el efecto operativo y económico sin reconstruir geometría.
+- Transaction aplica cambios únicamente después de confirmación explícita.
+- La aplicación es segura, atómica y basada en APIs oficiales de Quote.
+- Smart Cut propone; Quote decide y conserva la propiedad persistente del dato.
+
+#### Etapa 7 — Active Mode
+
+- Se formalizó el estado de optimización del material:
+
+```text
+optimization:
+  mode
+  activeCandidateId
+  proposalId
+  engineVersion
+  inputSignature
+  status
+```
+
+- Legacy es el modo predeterminado y utiliza Shelf.
+- Smart Cut consume un candidato previamente aplicado, existente, válido y compatible con la firma de entrada.
+- El estado solo conserva `mode`, referencias, versión, firma y status; no duplica geometría, hojas ni candidatos.
+- Los status oficiales son `pending`, `valid`, `obsolete` y `recalculation-required`.
+- La firma determinista detecta cambios en piezas, dimensiones, kerf, márgenes, regiones o configuración.
+- Un candidato inválido, inexistente u obsoleto nunca se reutiliza automáticamente.
+- Quote vuelve temporalmente a Legacy hasta disponer de un candidato válido nuevo.
+- Fabricación puede consumir el summary activo mediante APIs oficiales y mantiene Legacy por defecto.
+- Los costos continúan usando las reglas actuales; únicamente cambia la fuente del summary cuando el candidato activo es válido.
+
+#### Estado verificable del módulo
+
+| Capacidad | Estado |
+|---|---|
+| Motor físico | Completo |
+| UI comparativa | Completa |
+| Proposal Application Layer | Completa |
+| Active Mode | Completo |
+| Persistencia | Pendiente |
+| Optimization Sessions | Pendientes |
+| Remanentes reutilizables | Pendientes |
+| Historial de optimizaciones | Pendiente |
+| Sincronización | Pendiente |
+| Realtime | Pendiente |
+| Supabase | Pendiente |
+| Integración definitiva con Inventario | Pendiente |
+
+Smart Cut es actualmente uno de los módulos técnicamente más maduros del proyecto, pero todavía **no es un dominio durable**. No posee repository, persistencia remota, sincronización, Realtime, Supabase ni historial durable propios.
+
+#### Validación del cierre técnico
+
+- `npm test`: 66 archivos y 508 pruebas aprobadas.
+- `npm run build`: correcto.
+- `git diff --check`: correcto, sin errores de whitespace.
+- Sin regresiones identificadas en compatibilidad Legacy, Quote, Material Calculator ni Fabricación.
+- El Smart Cut Engine queda congelado después de las Etapas 1–7. Las siguientes fases deberán consumir sus APIs públicas sin modificar geometría, estrategias, evaluación o selección salvo una revisión arquitectónica explícita.
+
 ### Transición y fases posteriores de la Etapa III
 
-| Fase | Estado |
-|---|---|
-| 25.2C — Auditoría real de integridad | Completada |
-| 25.2D — Hardening Operativo | Completada |
-| 25.2E — Brand System e infraestructura visual | Completada |
-| 25.3 — Business State 2.0 | Cerrada e integrada en `main` mediante `660a217ba73f4845f68047d88ec551663f22d5cd` |
-| 25.4 — Operational Center | Siguiente fase |
-| 25.5 — Recepción | Pendiente |
-| 25.6 — Inventario | Pendiente |
-| 25.7 — Cut Optimizer persistente | Pendiente |
-| 25.8 — Fabricación | Pendiente |
-| 25.9 — Instalación y Entrega | Pendiente |
-| 26.0 — ERP operativo completo | Meta de cierre de la Etapa III |
+| Orden | Fase o hito | Estado |
+|---:|---|---|
+| Histórico | 25.2C — Auditoría real de integridad | Completada |
+| Histórico | 25.2D — Hardening Operativo | Completada |
+| Histórico | 25.2E — Brand System e infraestructura visual | Completada |
+| Histórico | 25.3 — Business State 2.0 | Cerrada e integrada en `main` mediante `660a217ba73f4845f68047d88ec551663f22d5cd` |
+| 1 | Revisión final de Smart Cut, documentación, commit y push | En curso; código y validación de Etapas 1–7 completos, cierre de Git pendiente |
+| 2 | 25.4 — Operational Center | Siguiente fase funcional |
+| 3 | 25.5 — Recepción Durable | Pendiente |
+| 4 | 25.6 — Inventario por Movimientos | Pendiente |
+| 5 | Optimization Sessions — nueva fase de Smart Cut | Pendiente |
+| 6 | Persistencia de Smart Cut | Pendiente |
+| 7 | Remanentes reutilizables | Pendiente; depende de Sessions e Inventario |
+| 8 | Fabricación Durable | Pendiente |
+| 9 | Instalación y Entrega | Pendiente |
+| 10 | ERP Operativo | Meta de cierre de la Etapa III |
+
+Este orden es oficial. El adelanto técnico de Smart Cut no mueve Operational Center, Recepción Durable ni Inventario por Movimientos.
 
 ## 9. Estado real de los módulos
 
 | Módulo | Clasificación verificable | Estado y límite actual |
 |---|---|---|
-| Cotización | Operativo y durable | Repository, offline queue, versionado, Realtime, Presence, historial e identidad canónica. Sus comandos de edición, guardado, estado, eliminación e importación se bloquean cuando la OT relacionada está entregada. `useQuotes.js` y `QuoteSection.jsx` requieren reducción progresiva. |
+| Cotización | Operativo y durable | Repository, offline queue, versionado, Realtime, Presence, historial e identidad canónica. Continúa como fuente de verdad persistente de la optimización y admite de forma aditiva el estado oficial Legacy/Smart Cut. Sus comandos de edición, guardado, estado, eliminación e importación se bloquean cuando la OT relacionada está entregada. `useQuotes.js` y `QuoteSection.jsx` requieren reducción progresiva. |
 | Producción | Operativo y durable, con evolución pendiente | Motor, storage, repository, Supabase, sincronización, Realtime, versionado y summary. `Entregado` es terminal mediante `isProjectReadOnly()` y `canAdvanceProductionOrder()`. Falta completar evidencia operacional e historial transversal. |
 | Compras | Operativo y durable | Persistencia local/remota, partidas, offline, Realtime, versionado y relaciones UUID con Producción y Cotización. La edición, autosave, sincronización pendiente y creación se bloquean para la OT entregada. |
 | Recepción | Interfaz existente y fuente reutilizable; dominio incompleto | La pantalla deriva partidas y conserva cambios en estado React. Respeta el modo de solo lectura, pero no tiene todavía modelo durable, repository, storage ni movimientos propios. |
 | Inventario | Interfaz existente y fuente reutilizable; dominio incompleto | Summary puro disponible; la pantalla calcula sobre datos de cotización y estado React y deshabilita edición en proyectos entregados. Falta modelo por movimientos y persistencia. |
-| Fabricación | Interfaz existente y fuente reutilizable; dominio incompleto | Consume el plan del Cut Optimizer y respeta el modo de solo lectura; checklist, progreso y notas no son todavía un dominio durable. |
-| Cut Optimizer | Motor operativo y fuente reutilizable | Calcula, valida y expone summary; sus controles quedan bloqueados en proyectos entregados. Falta persistir ejecuciones y conectarlas al proyecto operativo. |
+| Fabricación | Interfaz existente y fuente reutilizable; dominio incompleto | Consume el summary oficial Legacy o Smart Cut activo y válido sin recalcular geometría, candidatos ni costos. Respeta el modo de solo lectura; checklist, progreso y notas no son todavía un dominio durable. |
+| Smart Cut Engine / Cut Optimizer | Motor técnicamente maduro; no durable | Motor, Shelf, Best Fit, candidatos, evaluación, ranking, selección, recomendación, UI comparativa, Proposal Application Layer y Active Mode completos. Conserva `optimizeCuts()` y compatibilidad Legacy. Faltan Optimization Sessions, persistencia, historial, sincronización, Realtime, Supabase, remanentes e integración definitiva con Inventario. |
 | Instalación | Pendiente como dominio | Existe como etapa, permiso y estado de workflow; no existe aún un dominio durable independiente. |
 | Entrega | Estado terminal implementado; dominio de evidencia pendiente | `Entregado` existe en Producción, activa read only y se refleja como `Terminada` en Cotización. Faltan evidencia, firma y un dominio de cierre operacional independiente. |
 | Historial | Operativo parcialmente | Cuenta con motor, summary, respaldo local y fundamentos remotos. Los proyectos entregados pueden abrirse y consultarse sin permitir cancelación, cambio de estado o eliminación. No equivale todavía a un historial transversal completo de todos los dominios. |
@@ -464,7 +614,22 @@ Deben mostrar estados y conteos reales, abrir o filtrar el dominio correspondien
 
 ### Panel izquierdo
 
-Compras ya tiene una base durable. Recepción, Inventario, Fabricación y Cut Optimizer deben completar, según corresponda: modelo canónico, UUID, workspace, storage local, repository, Supabase, RLS, offline, sincronización, Realtime, versionado, summary, Business State y actualización de Inicio e Inspector.
+Compras ya tiene una base durable. Recepción, Inventario y Fabricación deben completar, según corresponda: modelo canónico, UUID, workspace, storage local, repository, Supabase, RLS, offline, sincronización, Realtime, versionado, summary, Business State y actualización de Inicio e Inspector. Smart Cut ya completó motor, UI, Proposal y Active Mode; su evolución durable conserva el orden específico documentado a continuación.
+
+### Smart Cut
+
+Pendientes oficiales del módulo después de las Etapas 1–7:
+
+1. Optimization Sessions.
+2. Persistencia.
+3. Historial.
+4. Sincronización.
+5. Realtime.
+6. Supabase.
+7. Remanentes reutilizables.
+8. Integración definitiva con Inventario.
+
+No se mantienen como pendientes del Smart Cut capacidades ya completadas de motor, geometría, estrategias, candidatos, evaluación, selección, UI, Proposal o Active Mode.
 
 ### Nueva cotización limpia
 
@@ -504,6 +669,10 @@ La sincronización bidireccional entre **Notas internas** y **Observaciones** pu
 - Impedir escrituras provocadas por eventos remotos.
 - Conservar merge por UUID, `updatedAt` y `version`.
 - Completar el contrato arquitectónico por dominio sin rediseñar módulos que puedan evolucionar incrementalmente.
+- Crear Optimization Sessions antes de persistir remanentes, sin duplicar candidatos ni geometría.
+- Diseñar la persistencia de Smart Cut sobre referencias y sesiones, manteniendo Quote como fuente de verdad.
+- Incorporar historial, sincronización, Realtime y Supabase únicamente después de definir el contrato de sesión.
+- Delegar la propiedad durable de remanentes a Inventario; Smart Cut solo podrá consumirlos y proponer su uso.
 
 ### Evolución pendiente de infraestructura visual
 
@@ -534,9 +703,10 @@ Las fuentes reutilizables no dependen de React, JSX, DOM ni componentes. Los cá
 | 4 | Inventario | Summary implementado; dominio durable pendiente. |
 | 5 | Clientes | Summary derivado disponible; dominio propio pendiente. |
 | 6 | Finanzas | Summary derivado disponible; dominio administrativo pendiente. |
-| 7 | Fabricación | Summary y lectura del plan de corte disponibles; persistencia pendiente. |
+| 7 | Fabricación | Summary y lectura del plan Legacy o del candidato Smart Cut activo y válido disponibles; Fabricación no recalcula la optimización. Persistencia operacional propia pendiente. |
 | 8 | Recepción e Historial | Summaries disponibles; dominios transversales completos pendientes. |
 | 9 | Integración con Business State | Adapter 2.0 implementado con salud, riesgos, pendientes, actividad, alertas, indicadores, última actualización y read only. Consumidores completos pendientes. |
+| 10 | Smart Cut | Summary físico, candidatos, ranking, recomendación, Proposal y resolución de Active Mode disponibles como fuentes puras. Sessions y persistencia durable pendientes. |
 
 ## 13. Centro del Proyecto
 
@@ -626,7 +796,14 @@ Este cambio no forma parte de la actualización documental actual.
 | 22/07/2026 | Producción es autoridad operacional después de crear una OT. | Separar el estado comercial del estado operativo. | Implementada |
 | Pendiente de validación | Recepción depende de partidas de Compras. | Preservar trazabilidad y evitar reconstrucciones. | Vigente; implementación pendiente |
 | Pendiente de validación | Inventario se basará en movimientos. | Garantizar trazabilidad de existencias. | Pendiente |
-| Pendiente de validación | Cut Optimizer será persistente y conectado al flujo. | Conservar planes de corte como evidencia operacional. | Pendiente |
+| 26/07/2026 | Shelf seguirá siendo el fallback oficial. | Mantener continuidad total con cotizaciones Legacy y garantizar una optimización disponible ante candidatos ausentes u obsoletos. | Implementada |
+| 26/07/2026 | No duplicar geometría. | El motor es la única autoridad del cálculo físico; UI, Proposal, Quote y Fabricación solo consumen sus resultados. | Vigente |
+| 26/07/2026 | No duplicar candidatos. | Active Mode y persistencia futura guardarán referencias y estado, no copias paralelas de soluciones. | Vigente |
+| 26/07/2026 | Quote sigue siendo la fuente de verdad persistente de la optimización. | Smart Cut calcula y propone sin convertirse en dominio propietario ni aplicar resultados automáticamente. | Vigente |
+| 26/07/2026 | Optimization Sessions existirán antes que los remanentes reutilizables. | Dar identidad, trazabilidad y ciclo de vida a cada ejecución antes de relacionar sobrantes. | Pendiente de implementación |
+| 26/07/2026 | Inventario será propietario de los remanentes. | Evitar un inventario paralelo dentro de Smart Cut y conservar la arquitectura por movimientos. | Pendiente de implementación |
+| 26/07/2026 | Fabricación nunca recalculará la optimización. | Consumir el summary oficial evita divergencias físicas y económicas. | Implementada en el consumo actual |
+| 26/07/2026 | Smart Cut permanecerá desacoplado del ERP. | El motor no conoce React, Quote, Fabricación, Supabase ni persistencia y solo expone resultados deterministas. | Vigente |
 | 24/07/2026 | Business State es el adapter central de lectura y solo agrega summaries existentes. | Ofrecer una vista empresarial única sin apropiarse de datos, persistencia ni reglas de dominio. | Implementada en 25.3 |
 | Pendiente de validación | FLDSMDFR empresarial y del Sistema nunca se mezclan. | Separar negocio y desarrollo interno. | Vigente |
 | 22/07/2026 | UUID es identidad y folio es referencia comercial. | Evitar colisiones y merges incorrectos. | Implementada |
@@ -653,9 +830,25 @@ Las fechas no verificables se mantienen como **Pendiente de validación**; no se
 
 ## 16. Próximo sprint oficial
 
+### Cierre de Smart Cut — revisión final, documentación, commit y push
+
+**Estado:** EN CURSO.
+
+**Propósito:** revisar el conjunto completo de las Etapas 1–7, mantener el motor congelado, confirmar la documentación oficial y cerrar el trabajo en Git únicamente después de autorización expresa.
+
+**Condición técnica satisfecha:**
+
+- Motor, UI comparativa, Proposal Application Layer y Active Mode completos.
+- Compatibilidad Legacy y fallback Shelf preservados.
+- Quote y Fabricación integrados mediante APIs oficiales.
+- 66 archivos de pruebas y 508 pruebas aprobadas.
+- Build correcto y `git diff --check` correcto.
+
+**Pendiente de cierre:** revisión final del diff, commit y push. Esta actualización documental no realiza commit ni push.
+
 ### Fase 25.4 — Operational Center
 
-**Estado:** SIGUIENTE FASE.
+**Estado:** SIGUIENTE FASE FUNCIONAL DESPUÉS DEL CIERRE DE SMART CUT.
 
 **Propósito:** comenzar la adopción controlada de Business State 2.0 en el centro operativo sin crear una segunda fuente de verdad.
 
@@ -666,6 +859,8 @@ Las fechas no verificables se mantienen como **Pendiente de validación**; no se
 - Los dominios continúan siendo propietarios de sus datos y reglas.
 
 La migración deberá ser incremental. Dashboard, Inspector Inteligente, Project Companion y Centro del Proyecto consumirán el mismo contrato, sin consultas cruzadas entre componentes ni cálculos empresariales locales.
+
+El adelanto técnico de Smart Cut no modifica esta prioridad ni mueve 25.4, 25.5 o 25.6.
 
 ## Infraestructura visual y Brand System
 
@@ -728,10 +923,10 @@ Ambos contratos son independientes:
 | Centro del Proyecto | Media | Bajo | Componentes |
 | Recepción | Baja | Media | Fase 25.5 |
 | Inventario | Baja | Media | Fase 25.6 |
-| Cut Optimizer | Baja | Media | Fase 25.7 |
-| Fabricación | Baja | Media | Fase 25.8 |
-| Instalación | Baja | Media | Fase 25.9 |
-| Entrega | Baja | Media | Fase 25.9 |
+| Smart Cut | Baja | Bajo | UI comparativa completada; futuras superficies dependen de Optimization Sessions |
+| Fabricación | Baja | Media | Hito 8 — Fabricación Durable |
+| Instalación | Baja | Media | Hito 9 — Instalación y Entrega |
+| Entrega | Baja | Media | Hito 9 — Instalación y Entrega |
 
 La prioridad visual nunca modifica la prioridad funcional del roadmap. Una superficie puede tener prioridad visual alta y permanecer bloqueada por una fase funcional todavía pendiente.
 
@@ -769,7 +964,9 @@ El congelamiento aplica únicamente a la infraestructura visual. No limita la ev
 | 23/07/2026 | 25.2D | Hardening operativo del núcleo completado. |
 | 23/07/2026 | 25.2E | Brand System e infraestructura visual completados. |
 | 24/07/2026 | 25.3 | Cerrada e integrada en `main` mediante `660a217ba73f4845f68047d88ec551663f22d5cd` (`feat(business-state): complete Phase 25.3 Business State 2.0`). |
-| Próxima | 25.4 | Operational Center. |
+| 26/07/2026 | Smart Cut — Etapas 1–7 | Cierre técnico completado: contratos Legacy, normalización, validación, geometría, Shelf, Best Fit, candidatos, evaluación, selección, UI comparativa, Proposal y Active Mode. Motor congelado; 508 pruebas, build correcto, `git diff --check` correcto y sin regresiones identificadas. |
+| En curso | Cierre Smart Cut | Revisión final, documentación y cierre de Git; commit y push pendientes de autorización. |
+| Próxima fase funcional | 25.4 | Operational Center, sin desplazamiento por el adelanto técnico de Smart Cut. |
 
 ## Estado del núcleo del ERP
 
@@ -782,3 +979,9 @@ Integrity Audit ....... Certificada
 Hardening ............. Completado
 Brand System .......... Consolidado
 Business State 2.0 .... Implementado
+Smart Cut Engine ...... Técnicamente completo y congelado
+Smart Cut UI .......... Completa
+Smart Cut Proposal .... Completa
+Smart Cut Active Mode . Completo
+Smart Cut Durable ..... Pendiente
+ERP Operativo ......... En desarrollo

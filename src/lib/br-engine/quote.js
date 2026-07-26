@@ -1,8 +1,141 @@
 import { Areas, Materials, Pricing, Summary } from './index.js';
 import { optimizeCuts } from '../cut-optimizer/optimizer.js';
+import {
+  normalizeMaterialOptimizationState,
+  resolveMaterialOptimizationMode,
+} from '../smart-cut-application/active-mode.js';
+import {
+  normalizeOptimizationSessionReference,
+} from '../optimization-session/index.js';
 
 function withHelpers(helpers = {}) {
   return helpers;
+}
+
+const QUOTE_MATERIAL_OPTIMIZATION_FIELDS = Object.freeze([
+  'cutOptimization',
+  'optimizationSummary',
+  'optimizationStatus',
+  'optimizationLabel',
+  'hojasNecesarias',
+  'optimization',
+]);
+
+function cloneOptimizationValue(value) {
+  if (Array.isArray(value)) return value.map(cloneOptimizationValue);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entry]) => [key, cloneOptimizationValue(entry)]),
+  );
+}
+
+function normalizeQuoteMaterialOptimizationState(value, {
+  fallbackActiveSessionId,
+} = {}) {
+  const normalized = normalizeMaterialOptimizationState(value);
+  const source = value && typeof value === 'object' && !Array.isArray(value)
+    ? value
+    : {};
+  const hasExplicitReference = Object.prototype.hasOwnProperty.call(
+    source,
+    'activeSessionId',
+  );
+  if (!hasExplicitReference && fallbackActiveSessionId === undefined) {
+    return normalized;
+  }
+  return {
+    ...normalized,
+    activeSessionId: normalizeOptimizationSessionReference(
+      hasExplicitReference ? source.activeSessionId : fallbackActiveSessionId,
+    ),
+  };
+}
+
+export function applyQuoteMaterialOptimization(quote = {}, {
+  materialId,
+  changes = {},
+} = {}) {
+  const collectionKey = Array.isArray(quote?.materialRows)
+    ? 'materialRows'
+    : Array.isArray(quote?.materialItems) ? 'materialItems' : null;
+  if (!materialId || !collectionKey) {
+    return {
+      success: false,
+      quote,
+      changedFields: [],
+      errors: ['Quote o material objetivo inválido.'],
+    };
+  }
+
+  const collection = quote[collectionKey];
+  const targetIndex = collection.findIndex((row) => row?.id === materialId);
+  if (targetIndex < 0) {
+    return {
+      success: false,
+      quote,
+      changedFields: [],
+      errors: [`No existe el material ${materialId} en Quote.`],
+    };
+  }
+
+  const authorizedChanges = {};
+  QUOTE_MATERIAL_OPTIMIZATION_FIELDS.forEach((field) => {
+    if (collectionKey === 'materialItems' && field !== 'optimization') return;
+    if (Object.prototype.hasOwnProperty.call(changes, field)) {
+      authorizedChanges[field] = field === 'optimization'
+        ? normalizeQuoteMaterialOptimizationState(changes[field], {
+          fallbackActiveSessionId: collection[targetIndex]?.optimization?.activeSessionId,
+        })
+        : cloneOptimizationValue(changes[field]);
+    }
+  });
+  const changedFields = Object.keys(authorizedChanges)
+    .map((field) => `${collectionKey}.${materialId}.${field}`);
+  if (!changedFields.length) {
+    return {
+      success: false,
+      quote,
+      changedFields: [],
+      errors: ['No existen cambios de optimización autorizados.'],
+    };
+  }
+
+  const nextCollection = collection.map((row, index) => (
+    index === targetIndex ? { ...row, ...authorizedChanges } : row
+  ));
+  return {
+    success: true,
+    quote: { ...quote, [collectionKey]: nextCollection },
+    changedFields,
+    errors: [],
+  };
+}
+
+export function applyQuoteMaterialOptimizationSessionReference(quote = {}, {
+  materialId,
+  activeSessionId,
+} = {}) {
+  const collection = Array.isArray(quote?.materialRows)
+    ? quote.materialRows
+    : Array.isArray(quote?.materialItems) ? quote.materialItems : [];
+  const material = collection.find((row) => row?.id === materialId);
+  if (!material) {
+    return {
+      success: false,
+      quote,
+      changedFields: [],
+      errors: [`No existe el material ${materialId || ''} en Quote.`],
+    };
+  }
+  return applyQuoteMaterialOptimization(quote, {
+    materialId,
+    changes: {
+      optimization: {
+        ...(material.optimization || {}),
+        activeSessionId,
+      },
+    },
+  });
 }
 
 function normalizeTipoCompraQuote(tipoCompra) {
@@ -160,6 +293,8 @@ export function normalizeMaterialItem(item, index = 0, data = {}, helpers = {}) 
     margen: item?.margen === '' ? '' : positiveNumber(item?.margen ?? data.margenMaterial),
     precioManual: Boolean(item?.precioManual),
     nota: clean(item?.nota),
+    optimization: normalizeQuoteMaterialOptimizationState(item?.optimization),
+    cutConfig: cloneOptimizationValue(item?.cutConfig || {}),
   };
 }
 
@@ -242,28 +377,76 @@ export function materialCalcLabel(item, helpers = {}) {
 }
 
 function cutOptimizationForMaterial(tipoCompra, item, measureRows, helpers = {}) {
-  if (tipoCompra !== 'hoja') return null;
+  if (tipoCompra !== 'hoja') return { optimization: null, inputSignature: null };
   const { positiveNumber } = withHelpers(helpers);
   const sheetWidth = positiveNumber(item.ancho);
   const sheetHeight = positiveNumber(item.alto);
-  if (sheetWidth <= 0 || sheetHeight <= 0) return null;
+  if (sheetWidth <= 0 || sheetHeight <= 0) {
+    return { optimization: null, inputSignature: null };
+  }
   const pieces = measureRows
     .map((measure) => ({
+      id: measure.id,
       name: measure.nombre,
       width: positiveNumber(measure.ancho),
       height: positiveNumber(measure.alto),
       quantity: measure.cantidad,
     }))
     .filter((piece) => piece.width > 0 && piece.height > 0 && piece.quantity > 0);
-  if (!pieces.length) return null;
-  return optimizeCuts({
+  if (!pieces.length) return { optimization: null, inputSignature: null };
+  const cutConfig = item.cutConfig && typeof item.cutConfig === 'object'
+    ? item.cutConfig
+    : {};
+  const input = {
     sheetWidth,
     sheetHeight,
-    allowRotation: true,
-    kerf: 0.3,
-    strategy: 'largest-first',
+    allowRotation: cutConfig.allowRotation ?? true,
+    kerf: cutConfig.kerf ?? 0.3,
+    strategy: cutConfig.strategy || 'largest-first',
+    margins: cutConfig.margins,
+    blockedRegions: cutConfig.blockedRegions,
+    reservedRegions: cutConfig.reservedRegions,
     pieces,
-  });
+  };
+  const margins = input.margins || {};
+  const signatureRegions = (regions) => (Array.isArray(regions) ? regions : []).map((region) => [
+    region?.id ?? region?.sourceId ?? null,
+    region?.x ?? null,
+    region?.y ?? null,
+    region?.width ?? region?.ancho ?? null,
+    region?.height ?? region?.alto ?? null,
+  ]);
+  const signatureSource = JSON.stringify([
+    input.sheetWidth,
+    input.sheetHeight,
+    input.allowRotation,
+    input.kerf,
+    input.strategy,
+    [
+      margins.top ?? margins.superior ?? 0,
+      margins.right ?? margins.derecho ?? 0,
+      margins.bottom ?? margins.inferior ?? 0,
+      margins.left ?? margins.izquierdo ?? 0,
+    ],
+    signatureRegions(input.blockedRegions),
+    signatureRegions(input.reservedRegions),
+    input.pieces.map((piece) => [
+      piece.id,
+      piece.name,
+      piece.width,
+      piece.height,
+      piece.quantity,
+    ]),
+  ]);
+  let hash = 2166136261;
+  for (let index = 0; index < signatureSource.length; index += 1) {
+    hash ^= signatureSource.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return {
+    optimization: optimizeCuts(input),
+    inputSignature: `quote-cut-input-v1-${(hash >>> 0).toString(16).padStart(8, '0')}`,
+  };
 }
 
 export function calculateQuote(data, helpers = {}) {
@@ -317,12 +500,19 @@ export function calculateQuote(data, helpers = {}) {
     const largoNecesario = tipoCompra === 'lineal' ? rowQuantity : 0;
     const cantidadNecesaria = ['pieza', 'manual'].includes(tipoCompra) ? Math.max(0, rowQuantity) : 0;
     const costoUnitario = positiveNumber(item.costoUnitario);
-    const cutOptimization = cutOptimizationForMaterial(
+    const cutOptimizationInput = cutOptimizationForMaterial(
       tipoCompra,
       item,
       materialMeasureRows,
       helpers,
     );
+    const legacyCutOptimization = cutOptimizationInput.optimization;
+    const optimizationResolution = resolveMaterialOptimizationMode({
+      legacyOptimization: legacyCutOptimization,
+      state: item.optimization,
+      inputSignature: cutOptimizationInput.inputSignature,
+    });
+    const cutOptimization = optimizationResolution.optimization;
     const materialCalc = Materials.calcularMaterial({
       tipoCompra,
       areaNecesaria,
@@ -385,6 +575,10 @@ export function calculateQuote(data, helpers = {}) {
       cantidadNecesaria,
       cantidadConMerma,
       piezasNecesarias,
+      optimization: normalizeQuoteMaterialOptimizationState(
+        optimizationResolution.state,
+        { fallbackActiveSessionId: item.optimization?.activeSessionId },
+      ),
       cutOptimization,
       optimizationSummary,
       optimizationStatus,
