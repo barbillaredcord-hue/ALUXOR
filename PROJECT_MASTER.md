@@ -102,6 +102,22 @@ Componentes verificados:
 - **Storage, Offline y Realtime:** implementados en los dominios durables, no todavía en todo el ERP.
 - **Supabase:** persistencia remota de los dominios habilitados, bajo sesión y RLS existentes.
 
+Infraestructura remota implementada para Optimization Sessions:
+
+```text
+Optimization Session
+↓
+Remote Adapter
+↓
+Remote Repository
+↓
+Supabase Client Adapter
+↓
+Supabase SDK
+```
+
+El dominio continúa dependiendo únicamente del contrato abstracto del Remote Repository. Supabase es una implementación concreta, inyectable y sustituible. El Supabase Client Adapter no crea un cliente global, no modifica el Remote Repository y todavía no está conectado desde la aplicación.
+
 ### Fuentes oficiales de verdad verificadas
 
 | Contrato | Fuente oficial | Consumidores o representación |
@@ -533,10 +549,12 @@ optimization:
 | Historial de optimizaciones | Pendiente |
 | Sincronización | Pendiente |
 | Realtime | Pendiente |
-| Supabase | Pendiente |
+| Supabase | Client Adapter completado; tabla, RLS y conexión desde la aplicación pendientes |
 | Integración definitiva con Inventario | Pendiente |
 
 Smart Cut es actualmente uno de los módulos técnicamente más maduros del proyecto. Optimization Sessions ya es un dominio durable local con Remote Adapter, Remote Repository abstracto y Supabase Client Adapter inyectable; el motor físico permanece desacoplado y congelado. La tabla `optimization_sessions`, RLS, conexión desde la aplicación, sincronización, Realtime, historial remoto e integración completa con Workspace siguen pendientes.
+
+La implementación del Supabase Client Adapter no modificó Smart Cut Engine, geometría, estrategias, candidatos, evaluación, selección, Proposal, Active Mode, Quote ni Remote Repository.
 
 #### Validación del cierre técnico
 
@@ -559,7 +577,7 @@ Smart Cut es actualmente uno de los módulos técnicamente más maduros del proy
 | 3 | 25.5 — Recepción Durable | Pendiente |
 | 4 | 25.6 — Inventario por Movimientos | Pendiente |
 | 5 | Optimization Sessions — nueva fase de Smart Cut | Completada |
-| 6 | Persistencia de Smart Cut | Fase activa; dominio durable local implementado, conexión remota pendiente |
+| 6 | Persistencia de Smart Cut | Fase activa; infraestructura remota hasta Supabase Client Adapter implementada, tabla y RLS pendientes |
 | 7 | Remanentes reutilizables | Pendiente; depende de Sessions e Inventario |
 | 8 | Fabricación Durable | Pendiente |
 | 9 | Instalación y Entrega | Pendiente |
@@ -623,11 +641,18 @@ Orden oficial de evolución del módulo:
 ```text
 Optimization Sessions
 ↓
-Supabase Client Adapter
+Remote Adapter
 ↓
+Remote Repository
+↓
+Supabase Client Adapter
+✓ COMPLETADO
+
 Tabla optimization_sessions
 ↓
 RLS
+↓
+Conexión desde la aplicación
 ↓
 Sync Engine
 ↓
@@ -711,6 +736,7 @@ La sincronización bidireccional entre **Notas internas** y **Observaciones** pu
 - Conservar merge por UUID, `updatedAt` y `version`.
 - Completar el contrato arquitectónico por dominio sin rediseñar módulos que puedan evolucionar incrementalmente.
 - Crear la tabla `optimization_sessions`.
+- Crear la migración SQL de `optimization_sessions`.
 - Implementar RLS para Optimization Sessions.
 - Conectar el Remote Repository y el Supabase Client Adapter desde la aplicación mediante dependencias inyectadas.
 - Implementar Sync Engine.
@@ -751,7 +777,7 @@ Las fuentes reutilizables no dependen de React, JSX, DOM ni componentes. Los cá
 | 7 | Fabricación | Summary y lectura del plan Legacy o del candidato Smart Cut activo y válido disponibles; Fabricación no recalcula la optimización. Persistencia operacional propia pendiente. |
 | 8 | Recepción e Historial | Summaries disponibles; dominios transversales completos pendientes. |
 | 9 | Integración con Business State | Adapter 2.0 implementado con salud, riesgos, pendientes, actividad, alertas, indicadores, última actualización y read only. Consumidores completos pendientes. |
-| 10 | Smart Cut | Summary físico, candidatos, ranking, recomendación, Proposal y resolución de Active Mode disponibles como fuentes puras. Sessions y persistencia durable pendientes. |
+| 10 | Smart Cut | Summary físico, candidatos, ranking, recomendación, Proposal y resolución de Active Mode disponibles como fuentes puras. Optimization Sessions es durable local y dispone de Remote Adapter, Remote Repository y Supabase Client Adapter; tabla, RLS, conexión, sincronización y Realtime pendientes. |
 
 ## 13. Centro del Proyecto
 
@@ -877,11 +903,11 @@ Las fechas no verificables se mantienen como **Pendiente de validación**; no se
 
 ## 16. Próximo sprint oficial
 
-### Persistencia de Optimization Sessions
+### Tabla `optimization_sessions`
 
-**Estado:** FASE ACTIVA.
+**Estado:** SIGUIENTE FASE TÉCNICA OFICIAL.
 
-**Propósito:** consolidar Optimization Sessions como dominio durable del ERP sin modificar el Smart Cut Engine ni duplicar candidatos o geometría.
+**Propósito:** crear la persistencia remota física de Optimization Sessions sin modificar el Smart Cut Engine, el dominio, Quote, Remote Repository ni Supabase Client Adapter.
 
 **Estado alcanzado:**
 
@@ -896,9 +922,10 @@ Las fechas no verificables se mantienen como **Pendiente de validación**; no se
 - Selectors, Summary, Hook y Section reutilizables.
 - Quote conserva únicamente `optimization.activeSessionId`.
 
-**Pendientes de la fase activa:**
+**Alcance pendiente de la siguiente fase:**
 
 - Tabla `optimization_sessions`.
+- Migración SQL.
 - RLS para Optimization Sessions.
 - Conexión del Remote Repository y el Supabase Client Adapter desde la aplicación.
 - Sync Engine.
@@ -906,7 +933,7 @@ Las fechas no verificables se mantienen como **Pendiente de validación**; no se
 - Historial remoto.
 - Integración completa con Workspace.
 
-El Remote Repository no importa Supabase ni asume SQL, tabla física, React o Realtime. El Supabase Client Adapter recibe el SDK y workspace mediante inyección, sin crear un segundo cliente global. Quote continúa siendo la única fuente de verdad. Esta actualización documental no crea tabla, RLS, conexión desde la aplicación, commit ni push.
+El Remote Repository no importa Supabase ni asume SQL, tabla física, React o Realtime. El Supabase Client Adapter recibe el SDK y workspace mediante inyección, sin crear un segundo cliente global. Quote continúa siendo la única fuente de verdad. El commit `d31df14` (`feat(optimization-sessions): add Supabase client adapter`) quedó integrado en `main`. Esta actualización documental no crea tabla, RLS, conexión desde la aplicación, commit ni push.
 
 ### Fase 25.4 — Operational Center
 
@@ -985,7 +1012,7 @@ Ambos contratos son independientes:
 | Centro del Proyecto | Media | Bajo | Componentes |
 | Recepción | Baja | Media | Fase 25.5 |
 | Inventario | Baja | Media | Fase 25.6 |
-| Smart Cut | Baja | Bajo | UI y Optimization Sessions completados; persistencia remota activa como siguiente integración |
+| Smart Cut | Baja | Bajo | UI, Optimization Sessions y Supabase Client Adapter completados; tabla `optimization_sessions` como siguiente integración técnica |
 | Fabricación | Baja | Media | Hito 8 — Fabricación Durable |
 | Instalación | Baja | Media | Hito 9 — Instalación y Entrega |
 | Entrega | Baja | Media | Hito 9 — Instalación y Entrega |
@@ -1031,7 +1058,7 @@ El congelamiento aplica únicamente a la infraestructura visual. No limita la ev
 | 26/07/2026 | Persistencia de Optimization Sessions | Fase activa: contrato durable v2, migración, Adapter, Repository local, Versioning, Storage, Offline Queue, Selectors, Summary, Hook y Section implementados; 73 archivos y 551 pruebas aprobadas, build y `git diff --check` correctos; conexión remota pendiente. |
 | 26/07/2026 | Optimization Sessions — Remote Adapter | Adapter remoto implementado y probado. |
 | 26/07/2026 | Optimization Sessions — Remote Repository | Repository remoto desacoplado implementado mediante cliente abstracto, sin dependencia directa de Supabase. |
-| 26/07/2026 | Optimization Sessions — Supabase Client Adapter | Cliente Supabase inyectable implementado y probado con aislamiento por workspace, versionado optimista y contrato completo del Remote Repository, sin tabla, SQL ni conexión desde la aplicación. |
+| 26/07/2026 | Optimization Sessions — Supabase Client Adapter | Implementación completa del cliente Supabase inyectable compatible con el contrato del Remote Repository, con aislamiento por workspace, versionado optimista y pruebas unitarias. Integrado en `main` mediante `d31df14` (`feat(optimization-sessions): add Supabase client adapter`). |
 | Próxima fase funcional | 25.4 | Operational Center, sin desplazamiento por el adelanto técnico de Smart Cut. |
 
 ## Estado del núcleo del ERP
@@ -1050,8 +1077,11 @@ Smart Cut UI .......... Completa
 Smart Cut Proposal .... Completa
 Smart Cut Active Mode . Completo
 Optimization Sessions . Durable local + infraestructura remota preparada
+Remote Adapter ........ Implementado
 Remote Repository ..... Implementado
-Supabase Adapter ...... Implementado; conexión pendiente
+Supabase Adapter ...... Implementado
+Tabla .................. Pendiente
+RLS .................... Pendiente
 Sync Engine ........... Pendiente
 Realtime .............. Pendiente
 Persistencia Sessions . Activa; tabla y RLS pendientes
