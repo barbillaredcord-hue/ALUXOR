@@ -27,6 +27,7 @@ const CHANGED_AT = '2026-07-26T08:05:00.000Z';
 function createInput(overrides = {}) {
   return {
     executionId: 'execution-001',
+    workspaceId: 'workspace-001',
     quoteId: 'quote-001',
     materialId: 'material-001',
     createdAt: CREATED_AT,
@@ -112,9 +113,10 @@ describe('Optimization Session contract', () => {
     expect(first).toEqual(second);
     expect(first.session).toMatchObject({
       type: 'optimization-session',
-      contractVersion: 1,
+      contractVersion: 2,
       id: expect.stringMatching(/^optimization-session:[0-9a-f]{8}$/),
       executionId: 'execution-001',
+      workspaceId: 'workspace-001',
       quoteId: 'quote-001',
       materialId: 'material-001',
       createdAt: CREATED_AT,
@@ -127,6 +129,8 @@ describe('Optimization Session contract', () => {
       recommendedCandidateId: 'best-fit-bbb',
       selectedCandidateId: null,
       proposalId: null,
+      version: 1,
+      lastModifiedBy: 'user-001',
       revision: 1,
     });
     expect(first.session).not.toHaveProperty('candidates');
@@ -209,10 +213,12 @@ describe('Optimization Session contract', () => {
     const session = createSession();
 
     expect(validateOptimizationSessionReference(session, {
+      workspaceId: 'workspace-001',
       quoteId: 'quote-001',
       materialId: 'material-001',
     }).valid).toBe(true);
     expect(validateOptimizationSessionReference(session, {
+      workspaceId: 'workspace-001',
       quoteId: 'quote-other',
       materialId: 'material-001',
     })).toMatchObject({

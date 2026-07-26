@@ -4,7 +4,7 @@
 
 - **Workspace operativo actual:** ALUXOR / BosqueReal
 - **Etapa activa:** Etapa III — ERP operativo
-- **Fase oficial:** cierre técnico de Smart Cut Engine — Etapas 1–7, previo a la Fase 25.4
+- **Fase oficial:** Persistencia de Optimization Sessions — activa
 - **Última actualización:** 26/07/2026
 
 ## 1. Identidad del proyecto
@@ -95,7 +95,7 @@ Componentes verificados:
 - **Identity:** normalización, comparación y preservación canónica por UUID y workspace. `createUuid.js` es el generador seguro compartido por Cotizaciones y colas, pero Producción y Compras todavía conservan puntos de generación directa o inyectable que deben converger.
 - **Integrity:** `runIntegrityAudit()` es la entrada pública explícita; combina auditor local estricto, auditor remoto autenticado de solo lectura, comparación local/remota, reporte consolidado, recomendaciones y readiness conservador.
 - **Read Only:** `isProjectReadOnly()` pertenece al Production Engine y deriva únicamente de `Entregado`; los hooks de Cotización, Producción, Compras y Workspace rechazan mutaciones y las secciones existentes reflejan el mismo contrato sin duplicar pantallas.
-- **Smart Cut Engine / Cut Optimizer:** motor físico determinista con normalización, validación, geometría, estrategias Shelf y Best Fit, generación de candidatos, evaluación, ranking, selección y recomendación. `optimizeCuts()` conserva el contrato Legacy y Shelf como fallback. La UI comparativa, Proposal Application Layer y Active Mode están implementados; Optimization Sessions y persistencia durable siguen pendientes.
+- **Smart Cut Engine / Cut Optimizer:** motor físico determinista, congelado y compatible con Legacy. La UI comparativa, Proposal Application Layer y Active Mode están implementados. Optimization Sessions está completado como dominio durable local con Source, Adapter, Repository, Versioning, Storage, Offline Queue, Hook, Section, Summary y Selectors; la conexión remota de Repository con Supabase, Realtime y Workspace permanece pendiente.
 - **Business State:** adapter central derivado y sin persistencia. Agrega summaries existentes y expone proyecto, cliente, cotización, producción, compras, workflow, salud, riesgos, pendientes, actividad, alertas, indicadores, última actualización y read only sin apropiarse de los dominios.
 - **Workspace:** aislamiento y permisos como contexto empresarial; el indicador permanente de workspace del sistema sigue pendiente.
 - **Brand System:** infraestructura visual consolidada en 25.2E con tokens JavaScript y CSS, tema funcional, helpers, componentes `BR*`, clases de layout y capas separadas de accesibilidad e impresión.
@@ -146,7 +146,7 @@ Flujo arquitectónico de optimización:
 ```text
 Quote
 ↓
-Optimization Session (pendiente; todavía no existe)
+Optimization Session (dominio durable local implementado)
 ↓
 Candidates
 ↓
@@ -161,7 +161,7 @@ Production
 Fabrication
 ```
 
-La ausencia actual de Optimization Sessions no se oculta con persistencia paralela: los candidatos y el historial de optimizaciones permanecen temporales y locales a la interfaz. Quote continúa siendo la única fuente de verdad persistente.
+Optimization Sessions ya existe como dominio durable local y conserva únicamente referencias. No duplica candidatos ni geometría. Quote continúa siendo la única fuente de verdad que mantiene `optimization.activeSessionId`; Supabase, Realtime y sincronización de sesiones permanecen pendientes.
 
 ## 7. Roadmap maestro por etapas
 
@@ -171,7 +171,7 @@ La ausencia actual de Optimization Sessions no se oculta con persistencia parale
 | II — Cotizador profesional | Operar cotizaciones reales con cálculo, historial, colaboración y persistencia. | Completada con evolución continua | Cotización durable, PDF, catálogo, offline, Realtime e identidad canónica. |
 | III — ERP operativo | Conectar el flujo desde Cotización hasta Entrega. | En desarrollo | Producción y Compras tienen base durable; Brand System, Business State 2.0 y Smart Cut Etapas 1–7 están consolidados. Smart Cut es técnicamente maduro, pero no durable. Faltan Operational Center, Recepción, Inventario, persistencia de optimizaciones y remanentes, Fabricación durable, Instalación y Entrega. |
 | IV — Inteligencia operativa | Convertir datos operativos en alertas, prioridades y decisiones. | Planeada | Business State 2.0 disponible; faltan consumidores dinámicos completos y trazabilidad de los dominios aún no durables. |
-| V — Optimización industrial | Optimizar materiales, capacidad, tiempos y fabricación. | En desarrollo técnico adelantado | Smart Cut Engine, UI, Proposal y Active Mode completos. Faltan Optimization Sessions, persistencia, historial, sincronización, Realtime, Supabase, remanentes e integración definitiva con Inventario. |
+| V — Optimización industrial | Optimizar materiales, capacidad, tiempos y fabricación. | En desarrollo técnico adelantado | Smart Cut Engine, UI, Proposal, Active Mode y Optimization Sessions completos; persistencia local activa. Faltan conexión remota, historial remoto, sincronización, Realtime, Supabase, remanentes e integración definitiva con Inventario. |
 | VI — IA empresarial | Asistencia contextual basada en fuentes confiables. | Planeada | Datos durables, auditables y aislados por workspace. |
 | VII — CRM | Administrar relación y seguimiento de clientes. | Planeada | Identidad de clientes, historial y comunicación conectados. |
 | VIII — Comercial | Gestionar oportunidades, ventas y desempeño comercial. | Planeada | CRM y estados comerciales consolidados. |
@@ -527,8 +527,8 @@ optimization:
 | UI comparativa | Completa |
 | Proposal Application Layer | Completa |
 | Active Mode | Completo |
-| Persistencia | Pendiente |
-| Optimization Sessions | Pendientes |
+| Persistencia | Fase activa; Storage local, versionado y Offline Queue implementados. Supabase, Realtime y sincronización pendientes |
+| Optimization Sessions | Completado como dominio durable local |
 | Remanentes reutilizables | Pendientes |
 | Historial de optimizaciones | Pendiente |
 | Sincronización | Pendiente |
@@ -536,7 +536,7 @@ optimization:
 | Supabase | Pendiente |
 | Integración definitiva con Inventario | Pendiente |
 
-Smart Cut es actualmente uno de los módulos técnicamente más maduros del proyecto, pero todavía **no es un dominio durable**. No posee repository, persistencia remota, sincronización, Realtime, Supabase ni historial durable propios.
+Smart Cut es actualmente uno de los módulos técnicamente más maduros del proyecto. Optimization Sessions ya es un dominio durable local; el motor físico permanece desacoplado y congelado. La persistencia remota, sincronización, Realtime, Supabase e historial remoto siguen pendientes.
 
 #### Validación del cierre técnico
 
@@ -558,8 +558,8 @@ Smart Cut es actualmente uno de los módulos técnicamente más maduros del proy
 | 2 | 25.4 — Operational Center | Siguiente fase funcional |
 | 3 | 25.5 — Recepción Durable | Pendiente |
 | 4 | 25.6 — Inventario por Movimientos | Pendiente |
-| 5 | Optimization Sessions — nueva fase de Smart Cut | Pendiente |
-| 6 | Persistencia de Smart Cut | Pendiente |
+| 5 | Optimization Sessions — nueva fase de Smart Cut | Completada |
+| 6 | Persistencia de Smart Cut | Fase activa; dominio durable local implementado, conexión remota pendiente |
 | 7 | Remanentes reutilizables | Pendiente; depende de Sessions e Inventario |
 | 8 | Fabricación Durable | Pendiente |
 | 9 | Instalación y Entrega | Pendiente |
@@ -577,7 +577,7 @@ Este orden es oficial. El adelanto técnico de Smart Cut no mueve Operational Ce
 | Recepción | Interfaz existente y fuente reutilizable; dominio incompleto | La pantalla deriva partidas y conserva cambios en estado React. Respeta el modo de solo lectura, pero no tiene todavía modelo durable, repository, storage ni movimientos propios. |
 | Inventario | Interfaz existente y fuente reutilizable; dominio incompleto | Summary puro disponible; la pantalla calcula sobre datos de cotización y estado React y deshabilita edición en proyectos entregados. Falta modelo por movimientos y persistencia. |
 | Fabricación | Interfaz existente y fuente reutilizable; dominio incompleto | Consume el summary oficial Legacy o Smart Cut activo y válido sin recalcular geometría, candidatos ni costos. Respeta el modo de solo lectura; checklist, progreso y notas no son todavía un dominio durable. |
-| Smart Cut Engine / Cut Optimizer | Motor técnicamente maduro; no durable | Motor, Shelf, Best Fit, candidatos, evaluación, ranking, selección, recomendación, UI comparativa, Proposal Application Layer y Active Mode completos. Conserva `optimizeCuts()` y compatibilidad Legacy. Faltan Optimization Sessions, persistencia, historial, sincronización, Realtime, Supabase, remanentes e integración definitiva con Inventario. |
+| Smart Cut Engine / Cut Optimizer | Motor congelado y dominio de sesiones durable local | Motor, Shelf, Best Fit, candidatos, evaluación, ranking, selección, recomendación, UI comparativa, Proposal y Active Mode completos. Optimization Sessions añade adapter, repository local, versionado, storage, cola offline, hook, section, selectors y summary sin duplicar geometría. Faltan persistencia remota, historial remoto, sincronización, Realtime, Supabase, remanentes e integración definitiva con Inventario. |
 | Instalación | Pendiente como dominio | Existe como etapa, permiso y estado de workflow; no existe aún un dominio durable independiente. |
 | Entrega | Estado terminal implementado; dominio de evidencia pendiente | `Entregado` existe en Producción, activa read only y se refleja como `Terminada` en Cotización. Faltan evidencia, firma y un dominio de cierre operacional independiente. |
 | Historial | Operativo parcialmente | Cuenta con motor, summary, respaldo local y fundamentos remotos. Los proyectos entregados pueden abrirse y consultarse sin permitir cancelación, cambio de estado o eliminación. No equivale todavía a un historial transversal completo de todos los dominios. |
@@ -618,16 +618,15 @@ Compras ya tiene una base durable. Recepción, Inventario y Fabricación deben c
 
 ### Smart Cut
 
-Pendientes oficiales del módulo después de las Etapas 1–7:
+Pendientes oficiales del módulo después de completar Optimization Sessions:
 
-1. Optimization Sessions.
-2. Persistencia.
-3. Historial.
-4. Sincronización.
-5. Realtime.
-6. Supabase.
-7. Remanentes reutilizables.
-8. Integración definitiva con Inventario.
+1. Conexión remota de la persistencia activa.
+2. Historial remoto.
+3. Sincronización.
+4. Realtime.
+5. Supabase.
+6. Remanentes reutilizables.
+7. Integración definitiva con Inventario.
 
 No se mantienen como pendientes del Smart Cut capacidades ya completadas de motor, geometría, estrategias, candidatos, evaluación, selección, UI, Proposal o Active Mode.
 
@@ -669,7 +668,7 @@ La sincronización bidireccional entre **Notas internas** y **Observaciones** pu
 - Impedir escrituras provocadas por eventos remotos.
 - Conservar merge por UUID, `updatedAt` y `version`.
 - Completar el contrato arquitectónico por dominio sin rediseñar módulos que puedan evolucionar incrementalmente.
-- Crear Optimization Sessions antes de persistir remanentes, sin duplicar candidatos ni geometría.
+- Conectar el Repository de Optimization Sessions con infraestructura remota sin duplicar candidatos ni geometría.
 - Diseñar la persistencia de Smart Cut sobre referencias y sesiones, manteniendo Quote como fuente de verdad.
 - Incorporar historial, sincronización, Realtime y Supabase únicamente después de definir el contrato de sesión.
 - Delegar la propiedad durable de remanentes a Inventario; Smart Cut solo podrá consumirlos y proponer su uso.
@@ -800,7 +799,7 @@ Este cambio no forma parte de la actualización documental actual.
 | 26/07/2026 | No duplicar geometría. | El motor es la única autoridad del cálculo físico; UI, Proposal, Quote y Fabricación solo consumen sus resultados. | Vigente |
 | 26/07/2026 | No duplicar candidatos. | Active Mode y persistencia futura guardarán referencias y estado, no copias paralelas de soluciones. | Vigente |
 | 26/07/2026 | Quote sigue siendo la fuente de verdad persistente de la optimización. | Smart Cut calcula y propone sin convertirse en dominio propietario ni aplicar resultados automáticamente. | Vigente |
-| 26/07/2026 | Optimization Sessions existirán antes que los remanentes reutilizables. | Dar identidad, trazabilidad y ciclo de vida a cada ejecución antes de relacionar sobrantes. | Pendiente de implementación |
+| 26/07/2026 | Optimization Sessions existirán antes que los remanentes reutilizables. | Dar identidad, trazabilidad y ciclo de vida a cada ejecución antes de relacionar sobrantes. | Implementada como dominio durable local |
 | 26/07/2026 | Inventario será propietario de los remanentes. | Evitar un inventario paralelo dentro de Smart Cut y conservar la arquitectura por movimientos. | Pendiente de implementación |
 | 26/07/2026 | Fabricación nunca recalculará la optimización. | Consumir el summary oficial evita divergencias físicas y económicas. | Implementada en el consumo actual |
 | 26/07/2026 | Smart Cut permanecerá desacoplado del ERP. | El motor no conoce React, Quote, Fabricación, Supabase ni persistencia y solo expone resultados deterministas. | Vigente |
@@ -830,21 +829,22 @@ Las fechas no verificables se mantienen como **Pendiente de validación**; no se
 
 ## 16. Próximo sprint oficial
 
-### Cierre de Smart Cut — revisión final, documentación, commit y push
+### Persistencia de Optimization Sessions
 
-**Estado:** EN CURSO.
+**Estado:** FASE ACTIVA.
 
-**Propósito:** revisar el conjunto completo de las Etapas 1–7, mantener el motor congelado, confirmar la documentación oficial y cerrar el trabajo en Git únicamente después de autorización expresa.
+**Propósito:** consolidar Optimization Sessions como dominio durable del ERP sin modificar el Smart Cut Engine ni duplicar candidatos o geometría.
 
-**Condición técnica satisfecha:**
+**Estado alcanzado:**
 
-- Motor, UI comparativa, Proposal Application Layer y Active Mode completos.
-- Compatibilidad Legacy y fallback Shelf preservados.
-- Quote y Fabricación integrados mediante APIs oficiales.
-- 66 archivos de pruebas y 508 pruebas aprobadas.
-- Build correcto y `git diff --check` correcto.
+- Contrato durable v2 y migración desde v1.
+- Adapter, Repository local y versionado optimista.
+- Storage local aislado por workspace y recuperación segura.
+- Offline Queue preparada sin sincronización.
+- Selectors, Summary, Hook y Section reutilizables.
+- Quote conserva únicamente `optimization.activeSessionId`.
 
-**Pendiente de cierre:** revisión final del diff, commit y push. Esta actualización documental no realiza commit ni push.
+**Pendiente de la fase activa:** conectar posteriormente Repository con Supabase, Realtime y Workspace. Esta actualización no implementa conexión remota, commit ni push.
 
 ### Fase 25.4 — Operational Center
 
@@ -923,7 +923,7 @@ Ambos contratos son independientes:
 | Centro del Proyecto | Media | Bajo | Componentes |
 | Recepción | Baja | Media | Fase 25.5 |
 | Inventario | Baja | Media | Fase 25.6 |
-| Smart Cut | Baja | Bajo | UI comparativa completada; futuras superficies dependen de Optimization Sessions |
+| Smart Cut | Baja | Bajo | UI y Optimization Sessions completados; persistencia remota activa como siguiente integración |
 | Fabricación | Baja | Media | Hito 8 — Fabricación Durable |
 | Instalación | Baja | Media | Hito 9 — Instalación y Entrega |
 | Entrega | Baja | Media | Hito 9 — Instalación y Entrega |
@@ -965,7 +965,8 @@ El congelamiento aplica únicamente a la infraestructura visual. No limita la ev
 | 23/07/2026 | 25.2E | Brand System e infraestructura visual completados. |
 | 24/07/2026 | 25.3 | Cerrada e integrada en `main` mediante `660a217ba73f4845f68047d88ec551663f22d5cd` (`feat(business-state): complete Phase 25.3 Business State 2.0`). |
 | 26/07/2026 | Smart Cut — Etapas 1–7 | Cierre técnico completado: contratos Legacy, normalización, validación, geometría, Shelf, Best Fit, candidatos, evaluación, selección, UI comparativa, Proposal y Active Mode. Motor congelado; 508 pruebas, build correcto, `git diff --check` correcto y sin regresiones identificadas. |
-| En curso | Cierre Smart Cut | Revisión final, documentación y cierre de Git; commit y push pendientes de autorización. |
+| 26/07/2026 | Optimization Sessions | Dominio implementado con identidad, referencias, selección, Proposal, auditoría, reapertura, comparación, serialización determinista e integración aditiva con Quote. |
+| 26/07/2026 | Persistencia de Optimization Sessions | Fase activa: contrato durable v2, migración, Adapter, Repository local, Versioning, Storage, Offline Queue, Selectors, Summary, Hook y Section implementados; 73 archivos y 551 pruebas aprobadas, build y `git diff --check` correctos; conexión remota pendiente. |
 | Próxima fase funcional | 25.4 | Operational Center, sin desplazamiento por el adelanto técnico de Smart Cut. |
 
 ## Estado del núcleo del ERP
@@ -983,5 +984,6 @@ Smart Cut Engine ...... Técnicamente completo y congelado
 Smart Cut UI .......... Completa
 Smart Cut Proposal .... Completa
 Smart Cut Active Mode . Completo
-Smart Cut Durable ..... Pendiente
+Optimization Sessions . Durable local
+Persistencia Sessions . Activa; conexión remota pendiente
 ERP Operativo ......... En desarrollo

@@ -1,5 +1,5 @@
 export const OPTIMIZATION_SESSION_TYPE = 'optimization-session';
-export const OPTIMIZATION_SESSION_CONTRACT_VERSION = 1;
+export const OPTIMIZATION_SESSION_CONTRACT_VERSION = 2;
 
 export const OPTIMIZATION_SESSION_STATUSES = Object.freeze({
   OPEN: 'open',
@@ -36,6 +36,7 @@ const SESSION_FIELDS = Object.freeze([
   'contractVersion',
   'id',
   'executionId',
+  'workspaceId',
   'quoteId',
   'materialId',
   'createdAt',
@@ -51,6 +52,8 @@ const SESSION_FIELDS = Object.freeze([
   'proposalId',
   'summary',
   'metadata',
+  'version',
+  'lastModifiedBy',
   'revision',
   'audit',
 ]);
@@ -116,6 +119,7 @@ function stableHash(value) {
 }
 
 export function createOptimizationSessionId({
+  workspaceId,
   quoteId,
   materialId,
   executionId,
@@ -123,6 +127,7 @@ export function createOptimizationSessionId({
   createdAt,
 } = {}) {
   const signature = JSON.stringify([
+    text(workspaceId),
     text(quoteId),
     text(materialId),
     text(executionId),
@@ -184,6 +189,7 @@ function canonicalSession(session) {
     contractVersion: source.contractVersion,
     id: source.id,
     executionId: source.executionId,
+    workspaceId: source.workspaceId,
     quoteId: source.quoteId,
     materialId: source.materialId,
     createdAt: source.createdAt,
@@ -199,6 +205,8 @@ function canonicalSession(session) {
     proposalId: source.proposalId,
     summary: createSummary(source),
     metadata: normalizeScalarRecord(source.metadata),
+    version: source.version,
+    lastModifiedBy: source.lastModifiedBy,
     revision: source.revision,
     audit: Array.isArray(source.audit) ? source.audit.map((entry) => event(entry)) : [],
   };
@@ -237,12 +245,20 @@ export function validateOptimizationSession(session) {
   ) {
     errors.push(error(
       OPTIMIZATION_SESSION_ERROR_CODES.INVALID_CONTRACT,
-      'El contrato o sus campos no corresponden a Optimization Session v1.',
+      'El contrato o sus campos no corresponden a Optimization Session v2.',
       'session',
     ));
   }
 
-  ['id', 'executionId', 'quoteId', 'materialId', 'createdBy'].forEach((field) => {
+  [
+    'id',
+    'executionId',
+    'workspaceId',
+    'quoteId',
+    'materialId',
+    'createdBy',
+    'lastModifiedBy',
+  ].forEach((field) => {
     if (!text(session[field])) {
       errors.push(error(
         OPTIMIZATION_SESSION_ERROR_CODES.INVALID_IDENTITY,
@@ -281,6 +297,14 @@ export function validateOptimizationSession(session) {
       OPTIMIZATION_SESSION_ERROR_CODES.INVALID_INPUT_SIGNATURE,
       'inputSignature es obligatoria para la trazabilidad.',
       'inputSignature',
+    ));
+  }
+
+  if (!Number.isInteger(session.version) || session.version < 1) {
+    errors.push(error(
+      OPTIMIZATION_SESSION_ERROR_CODES.INVALID_CONTRACT,
+      'version debe ser un entero positivo.',
+      'version',
     ));
   }
 
@@ -413,6 +437,7 @@ export function validateOptimizationSession(session) {
 export function createOptimizationSession({
   id = null,
   executionId,
+  workspaceId,
   quoteId,
   materialId,
   createdAt,
@@ -425,6 +450,8 @@ export function createOptimizationSession({
   selectedCandidateId = null,
   proposalId = null,
   metadata = {},
+  version = 1,
+  lastModifiedBy = createdBy,
 } = {}) {
   const normalizedCreatedAt = canonicalTimestamp(createdAt);
   const normalizedCandidateIds = normalizeCandidateIds(candidateIds);
@@ -453,6 +480,7 @@ export function createOptimizationSession({
     type: OPTIMIZATION_SESSION_TYPE,
     contractVersion: OPTIMIZATION_SESSION_CONTRACT_VERSION,
     id: optionalText(id) || createOptimizationSessionId({
+      workspaceId,
       quoteId,
       materialId,
       executionId,
@@ -460,6 +488,7 @@ export function createOptimizationSession({
       createdAt: normalizedCreatedAt,
     }),
     executionId: text(executionId),
+    workspaceId: text(workspaceId),
     quoteId: text(quoteId),
     materialId: text(materialId),
     createdAt: normalizedCreatedAt,
@@ -475,6 +504,8 @@ export function createOptimizationSession({
     proposalId: normalizedProposalId,
     summary: null,
     metadata: normalizedMetadata,
+    version: Number(version),
+    lastModifiedBy: text(lastModifiedBy),
     revision: 1,
     audit: [event({
       sequence: 1,
@@ -537,6 +568,7 @@ function transition(session, {
     ...canonicalSession(session),
     ...changes,
     updatedAt: at,
+    lastModifiedBy: by,
     revision: session.revision + 1,
     audit: [
       ...session.audit.map(clone),
@@ -711,7 +743,45 @@ export function serializeOptimizationSession(session) {
   };
 }
 
-export function deserializeOptimizationSession(serialized) {
+export function migrateOptimizationSessionContract(value, {
+  workspaceId,
+} = {}) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  if (
+    value.type === OPTIMIZATION_SESSION_TYPE
+    && value.contractVersion === OPTIMIZATION_SESSION_CONTRACT_VERSION
+  ) {
+    return canonicalSession(value);
+  }
+  if (
+    value.type !== OPTIMIZATION_SESSION_TYPE
+    || value.contractVersion !== 1
+  ) return null;
+  const migrated = {
+    ...clone(value),
+    contractVersion: OPTIMIZATION_SESSION_CONTRACT_VERSION,
+    workspaceId: text(value.workspaceId || workspaceId),
+    version: Number.isInteger(Number(value.version)) && Number(value.version) >= 1
+      ? Number(value.version)
+      : 1,
+    lastModifiedBy: text(value.lastModifiedBy || value.createdBy),
+  };
+  migrated.summary = createSummary(migrated);
+  return canonicalSession(migrated);
+}
+
+export function hydrateOptimizationSession(value, options = {}) {
+  const migrated = migrateOptimizationSessionContract(value, options);
+  const validation = validateOptimizationSession(migrated);
+  return operationResult({
+    success: validation.valid,
+    session: validation.valid ? deepFreeze(canonicalSession(migrated)) : null,
+    errors: validation.errors,
+    warnings: validation.warnings,
+  });
+}
+
+export function deserializeOptimizationSession(serialized, options = {}) {
   let parsed;
   try {
     parsed = JSON.parse(serialized);
@@ -724,16 +794,11 @@ export function deserializeOptimizationSession(serialized) {
       )],
     });
   }
-  const validation = validateOptimizationSession(parsed);
-  return operationResult({
-    success: validation.valid,
-    session: validation.valid ? deepFreeze(canonicalSession(parsed)) : null,
-    errors: validation.errors,
-    warnings: validation.warnings,
-  });
+  return hydrateOptimizationSession(parsed, options);
 }
 
 export function validateOptimizationSessionReference(session, {
+  workspaceId = session?.workspaceId,
   quoteId,
   materialId,
 } = {}) {
@@ -742,7 +807,8 @@ export function validateOptimizationSessionReference(session, {
   if (
     validation.valid
     && (
-      session.quoteId !== text(quoteId)
+      session.workspaceId !== text(workspaceId)
+      || session.quoteId !== text(quoteId)
       || session.materialId !== text(materialId)
     )
   ) {

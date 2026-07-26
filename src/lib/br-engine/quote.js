@@ -6,7 +6,7 @@ import {
 } from '../smart-cut-application/active-mode.js';
 import {
   normalizeOptimizationSessionReference,
-} from '../optimization-session/index.js';
+} from '../optimization-session/session.js';
 
 function withHelpers(helpers = {}) {
   return helpers;
