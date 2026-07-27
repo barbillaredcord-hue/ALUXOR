@@ -48,6 +48,7 @@ import { productionOrderMatchesQuote } from '../lib/quotes/quoteReference.js';
 import useAuth from '../hooks/useAuth.js';
 import useWorkspace from '../hooks/useWorkspace.js';
 import useQuotes from '../hooks/useQuotes.js';
+import useOptimizationSessions from '../hooks/useOptimizationSessions.js';
 import useProduction from '../hooks/useProduction.js';
 import usePurchases from '../hooks/usePurchases.js';
 import useQuickCalculator from '../hooks/useQuickCalculator.js';
@@ -284,6 +285,10 @@ function App() {
     isQuoteReadOnly: (quoteRecord) => projectProductionRef.current.orders.some((order) => (
       isProjectReadOnly(order) && productionOrderMatchesQuote(order, quoteRecord)
     )),
+  });
+  useOptimizationSessions({
+    workspaceId: activeWorkspace?.id || null,
+    quoteId: activeQuoteIdentity?.id || null,
   });
   productionQuoteNoteSyncRef.current = syncQuoteNoteFromProduction;
   const setProjectForm = (updater) => {

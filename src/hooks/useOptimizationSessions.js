@@ -2,29 +2,36 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import {
   getOptimizationSessionsSummary,
-  OptimizationSessionRepository,
 } from '../lib/optimization-session/index.js';
+import {
+  OptimizationSessionApplicationRepository,
+} from '../lib/optimization-sessions/repositoryProvider.js';
 
 export default function useOptimizationSessions({
   workspaceId,
   quoteId,
   materialId,
-  repository = OptimizationSessionRepository,
+  repository = OptimizationSessionApplicationRepository,
 } = {}) {
   const [sessions, setSessions] = useState([]);
   const [error, setError] = useState(null);
+  const requestIdRef = useRef(0);
 
-  const reload = useCallback(() => {
+  const reload = useCallback(async () => {
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
     if (!workspaceId || !quoteId) {
       setSessions([]);
       setError(null);
       return [];
     }
-    const result = repository.getSessionsByQuote(workspaceId, quoteId);
+    const result = await repository.getSessionsByQuote(workspaceId, quoteId);
+    if (requestId !== requestIdRef.current) return [];
     if (result.error) {
       setError(result.error);
       return [];
@@ -38,15 +45,18 @@ export default function useOptimizationSessions({
   }, [materialId, quoteId, repository, workspaceId]);
 
   useEffect(() => {
-    reload();
+    void reload();
+    return () => {
+      requestIdRef.current += 1;
+    };
   }, [reload]);
 
-  const run = useCallback((operation) => {
-    const result = operation();
+  const run = useCallback(async (operation) => {
+    const result = await operation();
     if (result.error) setError(result.error);
     else {
       setError(null);
-      reload();
+      await reload();
     }
     return result;
   }, [reload]);

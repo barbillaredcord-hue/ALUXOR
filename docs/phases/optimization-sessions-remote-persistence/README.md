@@ -14,8 +14,8 @@ Esta fase:
 - implementa el Supabase Client Adapter para ese contrato abstracto;
 - define la tabla remota `optimization_sessions` mediante una migración SQL;
 - implementa RLS por membresía activa de workspace;
+- conecta React mediante Hook y Repository con el cliente compartido;
 - conserva compatibilidad con la migración local v1 → v2;
-- no conecta todavía el cliente compartido ni un backend real;
 - no implementa sincronización ni Realtime.
 
 ## Arquitectura
@@ -37,7 +37,9 @@ Tabla definida por migración
 ↓
 RLS por workspace
 ↓
-Conexión / Sync Engine / Realtime (pendientes)
+Conexión React por Repository
+↓
+Sync Engine / Realtime (pendientes)
 ```
 
 El Adapter remoto reutiliza el Adapter durable existente. No replica validación,
@@ -567,7 +569,7 @@ La migración:
 
 - define la tabla, pero no se aplicó a un backend real;
 - dispone de una migración posterior que habilita RLS;
-- no se conecta el cliente compartido a hooks o UI;
+- es consumida por la conexión React mediante el Repository remoto;
 - no existe Sync Engine;
 - no existe Realtime;
 - no existe historial remoto.
@@ -577,7 +579,6 @@ La migración:
 Esta fase no:
 
 - aplica la migración a un proyecto Supabase;
-- conecta el Adapter a la aplicación o a un proyecto Supabase real;
 - crea un segundo cliente global;
 - ejecuta queries contra un backend durante las pruebas;
 - cambia el Repository local;
@@ -592,8 +593,6 @@ Esta fase no:
 ## Pendientes para implementación Supabase
 
 - validar y aplicar la migración en un entorno controlado;
-- conectar la fábrica mediante el cliente compartido existente;
-- integrar el cliente concreto detrás del Remote Repository;
 - conservar el adapter remoto como único traductor;
 - definir paginación y orden estable;
 - definir recuperación y retry sin duplicar sesiones;
@@ -636,6 +635,67 @@ versiones, timestamps ni datos de negocio. Así impide mover una sesión incluso
 cuando el actor tiene permisos en ambos workspaces.
 
 No se acepta identidad enviada por el frontend como prueba de autorización.
+
+## Conexión desde React
+
+La aplicación monta `useOptimizationSessions` con el `workspaceId` y
+`quoteId` activos. El Hook conserva su contrato público y depende únicamente
+del Application Repository; no importa Supabase ni conoce filas remotas.
+
+Composición:
+
+```text
+App
+↓
+useOptimizationSessions
+↓
+Application Repository
+↓
+Remote Repository
+↓
+Remote Adapter
+↓
+Supabase Client Adapter
+↓
+cliente Supabase compartido
+```
+
+### Flujo de lectura
+
+Al abrir una Quote:
+
+1. el Hook llama `getSessionsByQuote(workspaceId, quoteId)`;
+2. el Application Repository ejecuta `remote.list({ quoteId })`;
+3. el Remote Repository convierte las filas mediante el Remote Adapter;
+4. si existen sesiones remotas, el Hook recibe exclusivamente esas sesiones;
+5. si el resultado remoto está vacío, se conserva la lectura local anterior;
+6. un error remoto se devuelve explícitamente y no activa merge ni
+   sincronización silenciosa.
+
+### Flujo de escritura
+
+Las operaciones `createSession`, `updateSession` y `deleteSession` del Hook
+terminan respectivamente en `remote.create`, `remote.update` y
+`remote.remove`. La versión se prepara mediante la API oficial antes del
+update. No se escriben copias locales, no se encola ninguna operación y no se
+generan identidades nuevas.
+
+El proveedor es la única capa que importa el cliente Supabase compartido.
+Construye el Supabase Client Adapter por workspace y lo inyecta en el Remote
+Repository. React y la UI permanecen desacoplados del proveedor remoto.
+
+### Limitaciones actuales
+
+- las operaciones remotas son asíncronas;
+- la Section conserva su contrato, pero no añade controles nuevos;
+- no hay retries ni recuperación automática;
+- no hay escritura local paralela;
+- no hay cola offline;
+- no hay merge;
+- no hay resolución de conflictos;
+- no hay Sync Engine;
+- no hay Realtime;
+- no hay historial remoto.
 
 ## Pendientes para sincronización
 
