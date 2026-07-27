@@ -12,9 +12,10 @@ Esta fase:
 - incorpora un adapter remoto puro;
 - incorpora un Remote Repository con cliente abstracto inyectado;
 - implementa el Supabase Client Adapter para ese contrato abstracto;
+- define la tabla remota `optimization_sessions` mediante una migración SQL;
 - conserva compatibilidad con la migración local v1 → v2;
 - no conecta todavía el cliente compartido ni un backend real;
-- no crea SQL, sincronización ni Realtime.
+- no implementa RLS, sincronización ni Realtime.
 
 ## Arquitectura
 
@@ -31,7 +32,9 @@ Supabase Client Adapter
 ↓
 Supabase SDK inyectado
 ↓
-Tabla / RLS / Realtime (pendientes)
+Tabla definida por migración
+↓
+RLS / Realtime (pendientes)
 ```
 
 El Adapter remoto reutiliza el Adapter durable existente. No replica validación,
@@ -159,12 +162,15 @@ físicos. El Adapter remoto rechaza cualquier columna ajena a su allowlist.
 
 ## Contrato remoto propuesto
 
-Tabla futura sugerida:
+Tabla definida:
 
 `optimization_sessions`
 
-Esta tabla aún no existe. Los tipos siguientes son una propuesta contractual,
-no una migración SQL.
+La definición física vive en:
+
+`supabase/migrations/20260726171722_create_optimization_sessions.sql`
+
+La migración no se aplicó a un backend durante esta fase.
 
 | Columna | Tipo PostgreSQL propuesto | Nulable | Origen local |
 |---|---|---:|---|
@@ -180,7 +186,7 @@ no una migración SQL.
 | `input_signature` | `text` | No | `inputSignature` |
 | `status` | `text` | No | `status` |
 | `configuration` | `jsonb` | No | `configuration` |
-| `candidate_ids` | `text[]` | No | `candidateIds` |
+| `candidate_ids` | `jsonb` | No | `candidateIds` |
 | `recommended_candidate_id` | `text` | Sí | `recommendedCandidateId` |
 | `selected_candidate_id` | `text` | Sí | `selectedCandidateId` |
 | `proposal_id` | `text` | Sí | `proposalId` |
@@ -194,9 +200,9 @@ no una migración SQL.
 
 `type` no se copia: la tabla fija el tipo de entidad.
 
-`engine_version` se propone como `jsonb` porque el contrato local admite número
-o texto y el round trip debe conservar su tipo. Esta decisión debe confirmarse
-en la fase SQL.
+`engine_version` usa `jsonb` porque el contrato local admite número o texto y
+el round trip debe conservar su tipo. `candidate_ids` usa `jsonb` para mantener
+el arreglo remoto sin coerciones y validarlo estructuralmente.
 
 ## Remote Adapter
 
@@ -492,18 +498,71 @@ id ASC
 Los errores del SDK conservan código, mensaje, detalles y hint útiles dentro
 del error normalizado.
 
-### Estado de la infraestructura
+## Tabla `optimization_sessions`
 
-La tabla prevista es:
+Propósito: materializar exclusivamente el contrato de fila remota de
+Optimization Sessions, sin almacenar candidatos, hojas, piezas ni geometría.
 
-```text
-optimization_sessions
-```
+Archivo:
 
-En esta fase:
+`supabase/migrations/20260726171722_create_optimization_sessions.sql`
 
-- no existe migración SQL;
-- no existe la tabla remota;
+La migración crea `public.optimization_sessions` con las 23 columnas exactas
+de `OPTIMIZATION_SESSION_REMOTE_FIELDS`. No agrega columnas auxiliares, por lo
+que `select('*')` continúa siendo aceptado por el Remote Adapter estricto.
+
+### Tipos y defaults
+
+- las identidades y referencias usan `text` opaco para preservar UUIDs y IDs
+  legacy deterministas sin coerción;
+- los timestamps usan `timestamptz` y no tienen default: los envía el dominio;
+- `engine_version`, `configuration`, `candidate_ids`, `summary`, `metadata` y
+  `audit` usan `jsonb`;
+- `version`, `revision` y `contract_version` usan `integer`;
+- solo `configuration`, `candidate_ids`, `metadata`, `version` y
+  `contract_version` tienen defaults estructurales seguros;
+- los tres IDs de Recommendation, Selection y Proposal son anulables.
+
+### Constraints
+
+- `id` es primary key global;
+- identidades, actores e `input_signature` obligatorios no pueden estar vacíos;
+- `engine_version` conserva exclusivamente número o texto JSON;
+- `status` admite `open`, `selected`, `proposed` y `closed`;
+- `configuration`, `summary` y `metadata` deben ser objetos;
+- `candidate_ids` y `audit` deben ser arreglos;
+- `version >= 1`, `revision >= 1` y `contract_version in (1, 2)`;
+- `revision` debe coincidir con `jsonb_array_length(audit)`.
+
+No se añadieron Foreign Keys. El contrato durable admite identidades opacas,
+mientras las tablas actuales de Workspace, Quote y Auth usan UUID. Forzar esas
+relaciones en esta fase rompería compatibilidad. La integridad referencial
+física debe resolverse en una migración explícita posterior, si el contrato de
+identidad se restringe sin perder sesiones legacy.
+
+### Índices y workspace
+
+Todos los índices secundarios comienzan por `workspace_id`:
+
+- `(workspace_id, updated_at desc, id asc)`;
+- `(workspace_id, id, version)`;
+- `(workspace_id, quote_id)`;
+- `(workspace_id, material_id)`;
+- `(workspace_id, execution_id)`;
+- `(workspace_id, status)`;
+- `(workspace_id, created_by)`;
+- `(workspace_id, last_modified_by)`.
+
+Los prefijos existentes cubren las búsquedas por workspace y
+`workspace_id + id`; no se duplicaron con índices equivalentes. El índice
+`workspace_id + id + version` soporta el update optimista condicionado sin
+incrementos automáticos.
+
+### Límites de esta entrega
+
+La migración:
+
+- define la tabla, pero no se aplicó a un backend real;
 - no se implementa RLS;
 - no se conecta el cliente compartido a hooks o UI;
 - no existe Sync Engine;
@@ -514,7 +573,7 @@ En esta fase:
 
 Esta fase no:
 
-- crea ni modifica tablas;
+- aplica la migración a un proyecto Supabase;
 - conecta el Adapter a la aplicación o a un proyecto Supabase real;
 - crea un segundo cliente global;
 - ejecuta queries contra un backend durante las pruebas;
@@ -530,7 +589,7 @@ Esta fase no:
 
 ## Pendientes para implementación Supabase
 
-- crear y validar la tabla `optimization_sessions`;
+- validar y aplicar la migración en un entorno controlado;
 - conectar la fábrica mediante el cliente compartido existente;
 - integrar el cliente concreto detrás del Remote Repository;
 - conservar el adapter remoto como único traductor;
@@ -541,13 +600,9 @@ Esta fase no:
 
 ## Pendientes para SQL
 
-- confirmar nombre de tabla y tipos con datos reales;
-- decidir si las identidades legacy continúan como `text`;
-- definir primary key e índices;
-- definir foreign keys solo cuando las tablas propietarias estén confirmadas;
-- crear checks para status, versiones y revisión;
-- definir defaults únicamente cuando no inventen datos de dominio;
-- decidir si `summary` y `audit` se conservan como `jsonb`;
+- validar la migración contra una base local sin modificar datos reales;
+- revisar Foreign Keys solo si el contrato de identidad deja de admitir texto
+  legacy;
 - habilitar RLS explícitamente;
 - verificar grants de Data API independientemente de RLS.
 
