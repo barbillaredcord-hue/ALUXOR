@@ -13,9 +13,10 @@ Esta fase:
 - incorpora un Remote Repository con cliente abstracto inyectado;
 - implementa el Supabase Client Adapter para ese contrato abstracto;
 - define la tabla remota `optimization_sessions` mediante una migración SQL;
+- implementa RLS por membresía activa de workspace;
 - conserva compatibilidad con la migración local v1 → v2;
 - no conecta todavía el cliente compartido ni un backend real;
-- no implementa RLS, sincronización ni Realtime.
+- no implementa sincronización ni Realtime.
 
 ## Arquitectura
 
@@ -34,7 +35,9 @@ Supabase SDK inyectado
 ↓
 Tabla definida por migración
 ↓
-RLS / Realtime (pendientes)
+RLS por workspace
+↓
+Conexión / Sync Engine / Realtime (pendientes)
 ```
 
 El Adapter remoto reutiliza el Adapter durable existente. No replica validación,
@@ -563,7 +566,7 @@ incrementos automáticos.
 La migración:
 
 - define la tabla, pero no se aplicó a un backend real;
-- no se implementa RLS;
+- dispone de una migración posterior que habilita RLS;
 - no se conecta el cliente compartido a hooks o UI;
 - no existe Sync Engine;
 - no existe Realtime;
@@ -582,7 +585,6 @@ Esta fase no:
 - implementa sincronización;
 - resuelve conflictos remotos;
 - implementa Realtime;
-- define políticas RLS;
 - modifica Quote;
 - modifica Smart Cut Engine;
 - modifica Fabricación.
@@ -603,18 +605,35 @@ Esta fase no:
 - validar la migración contra una base local sin modificar datos reales;
 - revisar Foreign Keys solo si el contrato de identidad deja de admitir texto
   legacy;
-- habilitar RLS explícitamente;
 - verificar grants de Data API independientemente de RLS.
 
-## Pendientes para RLS
+## RLS implementado
 
-- derivar la identidad del usuario desde `auth.uid()`;
-- validar membresía real del usuario en `workspace_id`;
-- aplicar políticas de `select`, `insert`, `update` y `delete`;
-- impedir cambiar `workspace_id` mediante update;
-- impedir acceso cruzado entre workspaces;
-- crear índices para columnas usadas por las políticas;
-- probar usuarios autenticados, no miembros y sesiones expiradas.
+Archivo:
+
+`supabase/migrations/20260726193125_secure_optimization_sessions_rls.sql`
+
+La autorización reutiliza el contrato canónico
+`private.has_workspace_permission(workspace_id, permission)`, respaldado por
+`workspace_members`, membresías `active`, roles oficiales y `auth.uid()`.
+
+Políticas:
+
+- `optimization_sessions_select_member`: lectura con `view_workspace`;
+- `optimization_sessions_insert_editor`: inserción con `manage_quotes`;
+- `optimization_sessions_update_editor`: actualización con `manage_quotes`,
+  protegida mediante `USING` y `WITH CHECK`;
+- `optimization_sessions_delete_editor`: eliminación con `manage_quotes`.
+
+Todas se limitan al rol `authenticated`. No existen políticas para `anon` ni
+predicados globales `true`. Como `workspace_id` conserva el tipo remoto `text`,
+las políticas validan primero su forma UUID y rechazan valores no canónicos
+antes de invocar el helper UUID.
+
+El trigger `optimization_sessions_prepare_update`, ejecutado antes de UPDATE,
+rechaza exclusivamente cambios de `workspace_id`. No modifica columnas,
+versiones, timestamps ni datos de negocio. Así impide mover una sesión incluso
+cuando el actor tiene permisos en ambos workspaces.
 
 No se acepta identidad enviada por el frontend como prueba de autorización.
 
