@@ -15,6 +15,9 @@ import {
   createRemoteOptimizationRepository,
 } from './remoteRepository.js';
 import {
+  createOptimizationSessionRealtimeSubscription,
+} from './realtimeSubscription.js';
+import {
   createOptimizationSessionSupabaseClient,
 } from './supabaseClient.js';
 import {
@@ -22,6 +25,9 @@ import {
 } from './syncEngine.js';
 
 const remoteRepositories = new Map();
+const realtimeSubscription = createOptimizationSessionRealtimeSubscription({
+  supabase,
+});
 
 function remoteRepositoryForWorkspace(workspaceId) {
   if (!remoteRepositories.has(workspaceId)) {
@@ -45,5 +51,6 @@ export const OptimizationSessionApplicationRepository =
         OptimizationSessionPendingOperationsRepository,
       createRemoteRepository: remoteRepositoryForWorkspace,
       isOnline: createBrowserConnectivityProvider().isOnline,
+      subscribeToRemoteEvents: realtimeSubscription.subscribe,
     }),
   });

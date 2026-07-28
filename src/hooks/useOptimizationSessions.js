@@ -20,7 +20,9 @@ export default function useOptimizationSessions({
 } = {}) {
   const [sessions, setSessions] = useState([]);
   const [error, setError] = useState(null);
+  const [realtimeStatus, setRealtimeStatus] = useState('inactive');
   const requestIdRef = useRef(0);
+  const reloadRef = useRef(null);
 
   const reload = useCallback(async () => {
     const requestId = requestIdRef.current + 1;
@@ -43,6 +45,7 @@ export default function useOptimizationSessions({
     setError(null);
     return next;
   }, [materialId, quoteId, repository, workspaceId]);
+  reloadRef.current = reload;
 
   useEffect(() => {
     void reload();
@@ -50,6 +53,31 @@ export default function useOptimizationSessions({
       requestIdRef.current += 1;
     };
   }, [reload]);
+
+  useEffect(() => {
+    if (!workspaceId || typeof repository.subscribeToChanges !== 'function') {
+      setRealtimeStatus('inactive');
+      return undefined;
+    }
+    const unsubscribe = repository.subscribeToChanges(
+      workspaceId,
+      (result) => {
+        if (result?.error) {
+          setError(result.error);
+          return;
+        }
+        if (result?.data?.changed) {
+          void reloadRef.current?.();
+        } else if (result?.data?.status === 'conflict') {
+          setRealtimeStatus('CONFLICT');
+        }
+      },
+      (status) => setRealtimeStatus(status),
+    );
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
+  }, [repository, workspaceId]);
 
   const run = useCallback(async (operation) => {
     const result = await operation();
@@ -66,6 +94,7 @@ export default function useOptimizationSessions({
     summary: useMemo(() => getOptimizationSessionsSummary(sessions), [sessions]),
     latestSession: sessions[0] || null,
     error,
+    realtimeStatus,
     reload,
     createSession: (input) => run(() => repository.createSession(workspaceId, input)),
     updateSession: (session, expectedVersion) => run(() => (

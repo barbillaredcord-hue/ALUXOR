@@ -16,6 +16,7 @@ const METHODS = [
   'compareSessions',
   'syncPendingOperations',
   'getPendingOperations',
+  'subscribeToChanges',
 ];
 
 function setup() {
@@ -43,6 +44,7 @@ describe('Optimization Sessions Application Repository', () => {
       'getSessionsByQuote',
       'reopenSession',
       'setActiveSession',
+      'subscribeToChanges',
       'syncPendingOperations',
       'updateSession',
     ]);
@@ -62,6 +64,7 @@ describe('Optimization Sessions Application Repository', () => {
     ['compareSessions', 'compareSessions'],
     ['syncPendingOperations', 'syncPendingOperations'],
     ['getPendingOperations', 'getPendingOperations'],
+    ['subscribeToChanges', 'subscribeToChanges'],
   ])('delega %s exclusivamente al Sync Engine', (publicMethod, engineMethod) => {
     const { repository, syncEngine } = setup();
     const result = repository[publicMethod]('workspace-001', 'value');

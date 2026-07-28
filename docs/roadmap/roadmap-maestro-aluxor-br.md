@@ -664,11 +664,11 @@ Antes de iniciar cualquier tarea se debe responder:
 
 # Próxima Sesión de Desarrollo
 
-- **Objetivo:** preparar Fase 25.4 — Operational Center.
-- **Consumidores previstos:** Dashboard, Inspector Inteligente, Project Companion y Centro del Proyecto.
-- **Motores afectados:** ninguno; los consumidores deberán leer Business State.
-- **Validaciones esperadas:** misma información derivada en todos los consumidores, sin cálculos locales ni fuentes paralelas.
-- **Resultado esperado:** primera adopción controlada del adapter central.
+- **Objetivo funcional:** preparar Fase 25.5 — Recepción Durable.
+- **Hito técnico posterior de Smart Cut:** remanentes reutilizables con Inventario como propietario durable.
+- **Motores afectados:** ninguno durante el cierre Realtime; Smart Cut permanece congelado.
+- **Estado técnico verificado:** Optimization Sessions dispone de persistencia remota, Sync Engine manual y Realtime por workspace en código y migración.
+- **Validación pendiente:** aplicar y comprobar operacionalmente la migración Realtime en el backend externo.
 
 ---
 
@@ -690,4 +690,4 @@ La plataforma se expande más allá de carpintería, vidrio y aluminio hacia mú
 
 # 18. Próximo Objetivo Inmediato
 
-Preparar Fase 25.4 — Operational Center mediante adopción incremental de Business State 2.0, sin mover reglas ni datos fuera de sus dominios.
+Preparar Fase 25.5 — Recepción Durable sin adelantar Inventario, y validar operacionalmente Realtime de Optimization Sessions antes de declararlo disponible en el backend externo.

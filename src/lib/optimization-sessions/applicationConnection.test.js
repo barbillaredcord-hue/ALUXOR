@@ -58,6 +58,12 @@ describe('conexión React de Optimization Sessions', () => {
       'OptimizationSessionPendingOperationsRepository',
     );
     expect(providerSource).toContain('createBrowserConnectivityProvider()');
+    expect(providerSource).toContain(
+      'createOptimizationSessionRealtimeSubscription({',
+    );
+    expect(providerSource).toContain(
+      'subscribeToRemoteEvents: realtimeSubscription.subscribe',
+    );
   });
 
   it('Application Repository delega en Sync Engine', () => {
@@ -66,7 +72,7 @@ describe('conexión React de Optimization Sessions', () => {
     expect(repositorySource).not.toContain('localRepository');
   });
 
-  it('no incorpora Realtime, polling ni sincronización automática', () => {
+  it('incorpora Realtime sin polling ni sincronización automática', () => {
     const connectionSource = [
       hookSource,
       providerSource,
@@ -74,7 +80,9 @@ describe('conexión React de Optimization Sessions', () => {
       syncEngineSource,
     ].join('\n');
 
-    expect(connectionSource).not.toMatch(/\brealtime\b/i);
+    expect(hookSource).toContain('repository.subscribeToChanges(');
+    expect(hookSource).not.toMatch(/supabase/i);
+    expect(repositorySource).not.toMatch(/supabase/i);
     expect(connectionSource).not.toContain('setInterval');
     expect(connectionSource).not.toContain('addEventListener');
     expect(connectionSource).not.toMatch(/serviceWorker|BackgroundSync/i);
@@ -95,8 +103,19 @@ describe('conexión React de Optimization Sessions', () => {
       'closeSession',
       'reopenSession',
       'compareSessions',
+      'realtimeStatus',
     ].forEach((field) => {
       expect(hookSource).toMatch(new RegExp(`\\b${field}\\b`));
     });
+  });
+
+  it('el Hook limpia Realtime y conserva una suscripción al cambiar workspace', () => {
+    expect(hookSource).toMatch(
+      /const unsubscribe = repository\.subscribeToChanges\([\s\S]*?workspaceId/,
+    );
+    expect(hookSource).toContain(
+      "if (typeof unsubscribe === 'function') unsubscribe();",
+    );
+    expect(hookSource).toContain('}, [repository, workspaceId]);');
   });
 });

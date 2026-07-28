@@ -20,6 +20,7 @@ const REQUIRED_METHODS = Object.freeze([
   'compareSessions',
   'syncPendingOperations',
   'getPendingOperations',
+  'subscribeToChanges',
 ]);
 
 function invalidEngine() {
@@ -58,5 +59,6 @@ export function createOptimizationSessionApplicationRepository({
       delegate('syncPendingOperations', ...args)
     ),
     getPendingOperations: (...args) => delegate('getPendingOperations', ...args),
+    subscribeToChanges: (...args) => delegate('subscribeToChanges', ...args),
   });
 }

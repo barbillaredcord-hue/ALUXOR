@@ -1,5 +1,26 @@
 # Continuidad para ChatGPT / Codex
 
+## Actualización canónica — 28/07/2026
+
+`PROJECT_MASTER.md` es la fuente documental vigente. Optimization Sessions
+Remote Persistence está completada y Realtime quedó implementado en código y
+migración mediante Broadcast privado por workspace, Remote Adapter,
+reconciliación segura, caché local y Pending Operations Repository. INSERT,
+UPDATE y DELETE están cubiertos sin crear operaciones pendientes ni escrituras
+remotas originadas por eventos.
+
+Validación local actual:
+
+- 86 archivos y 676 pruebas aprobadas;
+- build correcto;
+- Smart Cut Engine congelado y sin cambios;
+- validación operacional de la migración Realtime en el backend externo aún
+  pendiente.
+
+El siguiente hito técnico de Smart Cut es Remanentes reutilizables con
+Inventario como propietario durable. La siguiente fase funcional registrada es
+25.5 — Recepción Durable.
+
 ALUXOR / BR es un ERP operativo centrado en proyectos, no en módulos aislados.
 
 ## Estado real

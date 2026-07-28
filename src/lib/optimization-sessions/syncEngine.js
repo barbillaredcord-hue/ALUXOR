@@ -23,6 +23,9 @@ import {
   OPTIMIZATION_SESSION_PENDING_OPERATION_TYPES,
   OPTIMIZATION_SESSION_PENDING_STATUSES,
 } from './pendingOperationsRepository.js';
+import {
+  createOptimizationSessionRealtimeReconciler,
+} from './realtimeReconciliation.js';
 
 export const OPTIMIZATION_SESSION_SYNC_ERRORS = Object.freeze({
   INVALID_INPUT: 'OPTIMIZATION_SESSION_SYNC_INPUT_INVALID',
@@ -95,7 +98,12 @@ export function createOptimizationSessionSyncEngine({
   pendingOperationsRepository,
   createRemoteRepository,
   isOnline,
+  subscribeToRemoteEvents,
 } = {}) {
+  const realtimeReconciler = createOptimizationSessionRealtimeReconciler({
+    localRepository,
+    pendingOperationsRepository,
+  });
   function infrastructure() {
     if (
       !validLocalRepository(localRepository)
@@ -701,6 +709,37 @@ export function createOptimizationSessionSyncEngine({
     return optimizationSessionResult(summary, null);
   }
 
+  function subscribeToChanges(workspaceId, onChange, onStatus) {
+    const normalizedWorkspaceId = optimizationSessionText(workspaceId);
+    if (
+      !normalizedWorkspaceId
+      || typeof onChange !== 'function'
+      || typeof subscribeToRemoteEvents !== 'function'
+    ) {
+      const error = optimizationSessionError(
+        'La infraestructura Realtime es inválida.',
+        OPTIMIZATION_SESSION_SYNC_ERRORS.INVALID_INFRASTRUCTURE,
+      );
+      onStatus?.('CHANNEL_ERROR', error);
+      return function unsubscribe() {};
+    }
+    try {
+      return subscribeToRemoteEvents(
+        normalizedWorkspaceId,
+        (event) => {
+          onChange(realtimeReconciler.reconcile(
+            normalizedWorkspaceId,
+            event,
+          ));
+        },
+        onStatus,
+      );
+    } catch (error) {
+      onStatus?.('CHANNEL_ERROR', error);
+      return function unsubscribe() {};
+    }
+  }
+
   return Object.freeze({
     getSessionsByQuote,
     getSession,
@@ -714,5 +753,6 @@ export function createOptimizationSessionSyncEngine({
     compareSessions,
     syncPendingOperations,
     getPendingOperations,
+    subscribeToChanges,
   });
 }

@@ -17,6 +17,9 @@ import {
   createPendingOperationsRepository,
 } from './pendingOperationsRepository.js';
 import {
+  optimizationSessionToRemoteRow,
+} from './remoteAdapter.js';
+import {
   createOptimizationSessionSyncEngine,
 } from './syncEngine.js';
 
@@ -156,11 +159,24 @@ function setup({ online = true, remoteSessions = [] } = {}) {
       return { data: clone(session), error: null };
     }),
   };
+  let realtimeCallback = null;
+  let realtimeStatusCallback = null;
+  const unsubscribeRealtime = vi.fn();
+  const subscribeToRemoteEvents = vi.fn((
+    workspaceId,
+    onEvent,
+    onStatus,
+  ) => {
+    realtimeCallback = onEvent;
+    realtimeStatusCallback = onStatus;
+    return unsubscribeRealtime;
+  });
   const engine = createOptimizationSessionSyncEngine({
     localRepository: local,
     pendingOperationsRepository: pending,
     createRemoteRepository: vi.fn(() => remote),
     isOnline: () => state.online,
+    subscribeToRemoteEvents,
   });
   return {
     engine,
@@ -172,6 +188,14 @@ function setup({ online = true, remoteSessions = [] } = {}) {
     storage,
     behavior,
     order,
+    subscribeToRemoteEvents,
+    unsubscribeRealtime,
+    emitRealtime(event) {
+      realtimeCallback?.(event);
+    },
+    emitRealtimeStatus(status, error = null) {
+      realtimeStatusCallback?.(status, error);
+    },
   };
 }
 
@@ -203,12 +227,39 @@ describe('Optimization Sessions Sync Engine', () => {
       'removeSession',
       'reopenSession',
       'setActiveSession',
+      'subscribeToChanges',
       'syncPendingOperations',
       'updateSession',
     ]);
     expect(Object.isFrozen(engine)).toBe(true);
     expect(remote.list).not.toHaveBeenCalled();
     expect(remote.create).not.toHaveBeenCalled();
+  });
+
+  it('Realtime coexiste sin invocar remoto ni syncPendingOperations', () => {
+    const value = session();
+    const context = setup();
+    const onChange = vi.fn();
+    const onStatus = vi.fn();
+    const unsubscribe = context.engine.subscribeToChanges(
+      WORKSPACE_ID,
+      onChange,
+      onStatus,
+    );
+    context.emitRealtime({
+      eventType: 'INSERT',
+      workspaceId: WORKSPACE_ID,
+      new: optimizationSessionToRemoteRow(value).data,
+      old: null,
+    });
+    context.emitRealtimeStatus('SUBSCRIBED');
+    expect(context.subscribeToRemoteEvents).toHaveBeenCalledOnce();
+    expect(onChange.mock.calls[0][0].data.status).toBe('applied');
+    expect(context.remote.create).not.toHaveBeenCalled();
+    expect(context.remote.update).not.toHaveBeenCalled();
+    expect(onStatus).toHaveBeenCalledWith('SUBSCRIBED', null);
+    unsubscribe();
+    expect(context.unsubscribeRealtime).toHaveBeenCalledOnce();
   });
 
   it('online consulta remoto, actualiza caché y no mezcla colección local', async () => {

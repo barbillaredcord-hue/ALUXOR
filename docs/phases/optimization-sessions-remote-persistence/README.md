@@ -16,8 +16,9 @@ Esta fase:
 - implementa RLS por membresía activa de workspace;
 - conecta React mediante Hook y Repository con el cliente compartido;
 - incorpora un Sync Engine manual con caché local y cola persistente;
+- incorpora Realtime por Broadcast privado y reconciliación segura por workspace;
 - conserva compatibilidad con la migración local v1 → v2;
-- no implementa sincronización automática ni Realtime.
+- no implementa sincronización automática ni resolución automática de conflictos.
 
 ## Arquitectura
 
@@ -51,7 +52,19 @@ Supabase Client Adapter
     ↓
 Supabase
 
-Realtime (pendiente)
+Supabase Broadcast privado
+↓
+Realtime Subscription
+↓
+Remote Adapter
+↓
+Reconciliation
+↓
+Local Repository
+↓
+Application Repository
+↓
+Hook
 ```
 
 El Adapter remoto reutiliza el Adapter durable existente. No replica validación,
@@ -583,7 +596,7 @@ La migración:
 - dispone de una migración posterior que habilita RLS;
 - es consumida por la conexión React mediante el Repository remoto;
 - es coordinada por el Sync Engine manual;
-- no existe Realtime;
+- existe Realtime en código y migración; su validación operacional externa está pendiente;
 - no existe historial remoto.
 
 ## Límites
@@ -597,7 +610,7 @@ Esta fase no:
 - procesa automáticamente operaciones pendientes;
 - implementa sincronización automática;
 - resuelve conflictos remotos automáticamente;
-- implementa Realtime;
+- valida operacionalmente Realtime después de aplicar la migración;
 - modifica Quote;
 - modifica Smart Cut Engine;
 - modifica Fabricación.
@@ -813,7 +826,7 @@ Un conflicto:
 - no hay merge;
 - no hay resolución de conflictos;
 - el Sync Engine solo se ejecuta manualmente;
-- no hay Realtime;
+- Realtime está implementado en código y migración, sin evidencia operacional externa todavía;
 - no hay historial remoto.
 
 ## Pendientes para sincronización automática
@@ -825,14 +838,82 @@ Un conflicto:
 - sincronizar al recuperar conexión únicamente en una fase posterior;
 - evaluar Service Worker y Background Sync en una fase separada.
 
-## Pendientes para Realtime
+## Realtime
 
-- definir suscripción por workspace;
-- validar cada payload Realtime con el Adapter remoto;
-- evitar ecos y duplicados;
-- reconciliar eventos con `version` y `revision`;
-- no sustituir sincronización por entrega de eventos;
-- no aplicar candidatos ni Proposal automáticamente.
+Archivos:
+
+```text
+src/lib/optimization-sessions/realtimeSubscription.js
+src/lib/optimization-sessions/realtimeReconciliation.js
+supabase/migrations/20260728120000_enable_optimization_sessions_realtime.sql
+```
+
+La entrega utiliza Broadcast privado porque los DELETE de Postgres Changes no
+admiten filtro por columna. El trigger publica INSERT, UPDATE y DELETE en:
+
+```text
+optimization-sessions:<workspace_id>
+```
+
+La política `optimization_sessions_broadcast_select` permite recibir mensajes
+únicamente a usuarios autenticados con membresía activa y permiso
+`view_workspace` sobre el UUID incluido en el topic. No existe un canal global.
+
+`repositoryProvider.js` continúa siendo el único punto de composición. La
+suscripción compartida mantiene como máximo un canal por workspace, autentica
+Realtime antes de abrirlo, admite varios consumidores lógicos y cierra el canal
+cuando el último consumidor se retira. El cambio de workspace limpia la
+suscripción anterior desde el Hook.
+
+Flujo:
+
+```text
+Supabase Broadcast privado
+↓
+Realtime Subscription
+↓
+Remote Adapter
+↓
+Realtime Reconciliation
+├── Local Repository
+└── Pending Operations Repository
+↓
+Sync Engine
+↓
+Application Repository
+↓
+useOptimizationSessions
+```
+
+Reglas de reconciliación:
+
+- valida `workspaceId` antes de aplicar;
+- normaliza la fila completa con Remote Adapter;
+- INSERT nuevo y UPDATE con versión mayor actualizan solo la caché;
+- versiones iguales se clasifican como duplicados;
+- versiones menores se clasifican como eventos antiguos;
+- DELETE elimina solo cuando no existen operaciones pendientes y el evento no
+  es anterior a la copia local;
+- un eco exacto se ignora y no confirma ni retira la operación pendiente;
+- una divergencia con operación pendiente conserva el modelo existente con
+  status `conflict`, payload local y payload remoto;
+- un conflicto previo nunca se resuelve automáticamente;
+- el evento no crea versiones, no encola operaciones, no escribe remoto y no
+  llama `syncPendingOperations()`.
+
+El Hook expone `realtimeStatus` de forma aditiva. React continúa sin importar
+Supabase, Remote Repository, Remote Adapter, Pending Operations Repository ni
+Sync Engine.
+
+### Límites de Realtime
+
+- la reconexión de transporte pertenece al SDK Supabase;
+- no hay retries de dominio ni sincronización automática;
+- no hay merge ni resolución automática de conflictos;
+- Realtime no sustituye confirmación remota, versionado, caché ni Sync Engine;
+- la migración y los canales privados requieren validación operacional en el
+  backend externo antes de declarar disponibilidad productiva;
+- no se aplican candidatos, Proposal ni cambios de Quote automáticamente.
 
 ## Compatibilidad
 
