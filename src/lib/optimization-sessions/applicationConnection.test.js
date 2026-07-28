@@ -10,6 +10,7 @@ const sectionSource = source('../../sections/OptimizationSessionsSection.jsx');
 const appSource = source('../../app/App.jsx');
 const providerSource = source('./repositoryProvider.js');
 const repositorySource = source('./applicationRepository.js');
+const syncEngineSource = source('./syncEngine.js');
 
 describe('conexión React de Optimization Sessions', () => {
   it('el Hook depende del Application Repository y no conoce Supabase', () => {
@@ -39,7 +40,7 @@ describe('conexión React de Optimization Sessions', () => {
     );
   });
 
-  it('el proveedor compone Repository, Adapter remoto y cliente compartido', () => {
+  it('repositoryProvider compone toda la infraestructura', () => {
     expect(providerSource).toContain(
       "import { supabase } from '../supabase/client.js';",
     );
@@ -52,19 +53,32 @@ describe('conexión React de Optimization Sessions', () => {
     expect(providerSource).toContain(
       'createOptimizationSessionApplicationRepository({',
     );
+    expect(providerSource).toContain('createOptimizationSessionSyncEngine({');
+    expect(providerSource).toContain(
+      'OptimizationSessionPendingOperationsRepository',
+    );
+    expect(providerSource).toContain('createBrowserConnectivityProvider()');
   });
 
-  it('la conexión no incorpora cola, merge, Sync Engine ni Realtime', () => {
+  it('Application Repository delega en Sync Engine', () => {
+    expect(repositorySource).toContain('syncEngine[method](...args)');
+    expect(repositorySource).not.toContain('createRemoteRepository');
+    expect(repositorySource).not.toContain('localRepository');
+  });
+
+  it('no incorpora Realtime, polling ni sincronización automática', () => {
     const connectionSource = [
       hookSource,
       providerSource,
       repositorySource,
+      syncEngineSource,
     ].join('\n');
 
-    expect(connectionSource).not.toMatch(/offlineQueue|OfflineQueue/);
-    expect(connectionSource).not.toMatch(/\bmerge\b/i);
     expect(connectionSource).not.toMatch(/\brealtime\b/i);
-    expect(connectionSource).not.toMatch(/\bSync Engine\b/i);
+    expect(connectionSource).not.toContain('setInterval');
+    expect(connectionSource).not.toContain('addEventListener');
+    expect(connectionSource).not.toMatch(/serviceWorker|BackgroundSync/i);
+    expect(hookSource).not.toContain('syncPendingOperations');
   });
 
   it('el Hook conserva sus operaciones públicas', () => {

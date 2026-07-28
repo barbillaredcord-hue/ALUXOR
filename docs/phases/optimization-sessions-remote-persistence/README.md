@@ -15,8 +15,9 @@ Esta fase:
 - define la tabla remota `optimization_sessions` mediante una migración SQL;
 - implementa RLS por membresía activa de workspace;
 - conecta React mediante Hook y Repository con el cliente compartido;
+- incorpora un Sync Engine manual con caché local y cola persistente;
 - conserva compatibilidad con la migración local v1 → v2;
-- no implementa sincronización ni Realtime.
+- no implementa sincronización automática ni Realtime.
 
 ## Arquitectura
 
@@ -39,7 +40,18 @@ RLS por workspace
 ↓
 Conexión React por Repository
 ↓
-Sync Engine / Realtime (pendientes)
+Sync Engine manual
+├── Local Repository
+├── Pending Operations Repository
+└── Remote Repository
+    ↓
+Remote Adapter
+    ↓
+Supabase Client Adapter
+    ↓
+Supabase
+
+Realtime (pendiente)
 ```
 
 El Adapter remoto reutiliza el Adapter durable existente. No replica validación,
@@ -570,7 +582,7 @@ La migración:
 - define la tabla, pero no se aplicó a un backend real;
 - dispone de una migración posterior que habilita RLS;
 - es consumida por la conexión React mediante el Repository remoto;
-- no existe Sync Engine;
+- es coordinada por el Sync Engine manual;
 - no existe Realtime;
 - no existe historial remoto.
 
@@ -582,9 +594,9 @@ Esta fase no:
 - crea un segundo cliente global;
 - ejecuta queries contra un backend durante las pruebas;
 - cambia el Repository local;
-- procesa Offline Queue;
-- implementa sincronización;
-- resuelve conflictos remotos;
+- procesa automáticamente operaciones pendientes;
+- implementa sincronización automática;
+- resuelve conflictos remotos automáticamente;
 - implementa Realtime;
 - modifica Quote;
 - modifica Smart Cut Engine;
@@ -651,12 +663,15 @@ useOptimizationSessions
 ↓
 Application Repository
 ↓
-Remote Repository
-↓
+Sync Engine
+├── Local Repository
+├── Pending Operations Repository
+└── Remote Repository
+    ↓
 Remote Adapter
-↓
+    ↓
 Supabase Client Adapter
-↓
+    ↓
 cliente Supabase compartido
 ```
 
@@ -665,47 +680,150 @@ cliente Supabase compartido
 Al abrir una Quote:
 
 1. el Hook llama `getSessionsByQuote(workspaceId, quoteId)`;
-2. el Application Repository ejecuta `remote.list({ quoteId })`;
-3. el Remote Repository convierte las filas mediante el Remote Adapter;
-4. si existen sesiones remotas, el Hook recibe exclusivamente esas sesiones;
-5. si el resultado remoto está vacío, se conserva la lectura local anterior;
-6. un error remoto se devuelve explícitamente y no activa merge ni
-   sincronización silenciosa.
+2. el Application Repository delega en el Sync Engine;
+3. online, el Sync Engine ejecuta `remote.list({ quoteId })`;
+4. el Remote Repository convierte las filas mediante el Remote Adapter;
+5. remoto es autoritativo y su resultado actualiza la caché local;
+6. una colección remota vacía se devuelve como vacía, sin subir datos locales;
+7. las entidades con operaciones pendientes se preservan en caché, pero no se
+   mezclan en la respuesta remota;
+8. un error remoto se devuelve explícitamente y no se interpreta como vacío.
+
+Offline, el Sync Engine consulta exclusivamente el Local Repository. No llama
+al remoto y conserva el orden del contrato durable.
 
 ### Flujo de escritura
 
-Las operaciones `createSession`, `updateSession` y `deleteSession` del Hook
-terminan respectivamente en `remote.create`, `remote.update` y
-`remote.remove`. La versión se prepara mediante la API oficial antes del
-update. No se escriben copias locales, no se encola ninguna operación y no se
-generan identidades nuevas.
+Online, `createSession`, `updateSession` y `deleteSession` ejecutan primero
+`remote.create`, `remote.update` y `remote.remove`. Solo después de una
+confirmación actualizan o eliminan la caché local. La versión se prepara
+mediante la API oficial antes del update.
+
+Offline, las mismas operaciones escriben primero mediante el Local Repository
+y registran una operación persistente `pending`. Nunca generan otra identidad
+para la Optimization Session.
 
 El proveedor es la única capa que importa el cliente Supabase compartido.
-Construye el Supabase Client Adapter por workspace y lo inyecta en el Remote
-Repository. React y la UI permanecen desacoplados del proveedor remoto.
+Construye conectividad, repositorios local/remoto, Pending Operations
+Repository, Sync Engine y Application Repository. React y la UI permanecen
+desacoplados de toda esa infraestructura.
+
+## Pending Operations Repository
+
+Archivo:
+
+`src/lib/optimization-sessions/pendingOperationsRepository.js`
+
+La cola se almacena por workspace en `localStorage`. Cada operación contiene:
+
+```text
+operationId
+entityId
+operationType: create | update | delete
+workspaceId
+quoteId
+payload
+status: pending | failed | conflict
+attempts
+createdAt
+updatedAt
+lastError
+expectedVersion
+conflict (opcional)
+```
+
+`operationId` utiliza el generador UUID compartido. `entityId` conserva
+exactamente el ID de la sesión. El orden estable es `createdAt` y después
+`operationId`; nunca se compactan entidades o workspaces distintos.
+
+Compactación segura:
+
+- `create + update` conserva un único `create` con el payload reciente;
+- `update + update` conserva un único `update`, el `expectedVersion` original
+  y el payload semántico más reciente;
+- `create + delete` cancela ambas operaciones;
+- `update + delete` conserva únicamente `delete`.
+
+El estado de sincronización es metadata de infraestructura y no se añade al
+contrato durable de la sesión.
+
+## Sync Engine
+
+Archivo:
+
+`src/lib/optimization-sessions/syncEngine.js`
+
+API pública:
+
+```text
+getSessionsByQuote
+getSession
+getLatestSession
+createSession
+updateSession
+removeSession
+setActiveSession
+closeSession
+reopenSession
+compareSessions
+syncPendingOperations
+getPendingOperations
+```
+
+El Application Repository conserva sus operaciones anteriores y traduce
+`deleteSession` a `removeSession`. Añade acceso no visual a
+`syncPendingOperations` y `getPendingOperations`.
+
+### Sincronización manual
+
+`syncPendingOperations(workspaceId)`:
+
+1. consulta la conectividad inyectada;
+2. offline devuelve `status: offline` y `skipped`, sin tocar remoto;
+3. online procesa únicamente operaciones `pending`, en orden y secuencialmente;
+4. incrementa `attempts` solo cuando existe un intento remoto;
+5. al confirmar, actualiza la caché local y retira la operación;
+6. conserva fallos como `failed`;
+7. conserva conflictos de versión como `conflict`;
+8. devuelve `status`, `processed`, `succeeded`, `failed`, `conflicts` y
+   `skipped`.
+
+La función nunca se ejecuta al construir el motor, al montar el Hook ni al
+recuperar conectividad.
+
+### Conflictos
+
+Se detectan mediante `version`, `expectedVersion` y los códigos de conflicto
+existentes en dominio, Remote Repository y Supabase Client Adapter.
+
+Un conflicto:
+
+- no sobrescribe remoto;
+- conserva el payload local;
+- obtiene y conserva la fila remota disponible;
+- mantiene la operación con status `conflict`;
+- no decide local gana, remoto gana ni merge.
 
 ### Limitaciones actuales
 
 - las operaciones remotas son asíncronas;
 - la Section conserva su contrato, pero no añade controles nuevos;
-- no hay retries ni recuperación automática;
-- no hay escritura local paralela;
-- no hay cola offline;
+- no hay retries automáticos ni recuperación automática;
+- existe caché local y cola persistente, sin procesamiento automático;
 - no hay merge;
 - no hay resolución de conflictos;
-- no hay Sync Engine;
+- el Sync Engine solo se ejecuta manualmente;
 - no hay Realtime;
 - no hay historial remoto.
 
-## Pendientes para sincronización
+## Pendientes para sincronización automática
 
-- definir protocolo local/remoto mediante `version`;
 - resolver optimistic conflicts de forma explícita;
-- hacer idempotentes create, update y delete;
-- confirmar orden entre `updated_at`, `version` y `revision`;
-- procesar y retirar Offline Queue solo tras confirmación remota;
+- definir una acción explícita para reactivar operaciones `failed`;
 - definir recuperación después de interrupciones;
-- impedir que un retry duplique una sesión.
+- añadir retries solo con política e idempotencia aprobadas;
+- sincronizar al recuperar conexión únicamente en una fase posterior;
+- evaluar Service Worker y Background Sync en una fase separada.
 
 ## Pendientes para Realtime
 

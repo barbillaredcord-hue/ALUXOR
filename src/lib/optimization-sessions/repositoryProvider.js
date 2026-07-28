@@ -1,16 +1,25 @@
-import {
-  OptimizationSessionRepository,
-} from '../optimization-session/repository.js';
 import { supabase } from '../supabase/client.js';
 import {
   createOptimizationSessionApplicationRepository,
 } from './applicationRepository.js';
+import {
+  createBrowserConnectivityProvider,
+} from './connectivityProvider.js';
+import {
+  OptimizationSessionLocalSyncRepository,
+} from './localSyncRepository.js';
+import {
+  OptimizationSessionPendingOperationsRepository,
+} from './pendingOperationsRepository.js';
 import {
   createRemoteOptimizationRepository,
 } from './remoteRepository.js';
 import {
   createOptimizationSessionSupabaseClient,
 } from './supabaseClient.js';
+import {
+  createOptimizationSessionSyncEngine,
+} from './syncEngine.js';
 
 const remoteRepositories = new Map();
 
@@ -30,6 +39,11 @@ function remoteRepositoryForWorkspace(workspaceId) {
 
 export const OptimizationSessionApplicationRepository =
   createOptimizationSessionApplicationRepository({
-    localRepository: OptimizationSessionRepository,
-    createRemoteRepository: remoteRepositoryForWorkspace,
+    syncEngine: createOptimizationSessionSyncEngine({
+      localRepository: OptimizationSessionLocalSyncRepository,
+      pendingOperationsRepository:
+        OptimizationSessionPendingOperationsRepository,
+      createRemoteRepository: remoteRepositoryForWorkspace,
+      isOnline: createBrowserConnectivityProvider().isOnline,
+    }),
   });
