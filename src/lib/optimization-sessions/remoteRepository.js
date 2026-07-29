@@ -163,7 +163,13 @@ export function createRemoteOptimizationRepository(client) {
           'selectMany() devolvió una fila inválida.',
           {
             index,
+            rowId: result.data[index]?.id ?? null,
+            field: adapted.error?.details?.field
+              ?? adapted.error?.details?.missing?.[0]
+              ?? adapted.error?.details?.unexpected?.[0]
+              ?? null,
             adapterError: adapted.error,
+            operation: 'selectMany',
           },
         );
       }

@@ -70,6 +70,20 @@ function invalidFields(row) {
   };
 }
 
+function canonicalTimestamp(value) {
+  const timestamp = Date.parse(value || '');
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : value;
+}
+
+function normalizeRemoteTimestamps(row) {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) return row;
+  return {
+    ...row,
+    created_at: canonicalTimestamp(row.created_at),
+    updated_at: canonicalTimestamp(row.updated_at),
+  };
+}
+
 export function optimizationSessionToRemoteRow(session) {
   const row = optimizationSessionToDto(session);
   if (!row) {
@@ -98,14 +112,19 @@ export function optimizationSessionFromRemoteRow(row) {
     ));
   }
 
-  const hydrated = optimizationSessionDtoToModel(
+  const hydrated = optimizationSessionDtoToModel(normalizeRemoteTimestamps(
     cloneOptimizationSessionValue(row),
-  );
+  ));
   if (!hydrated.success) {
+    const invalidField = hydrated.errors.find((item) => item?.path)?.path || null;
     return optimizationSessionResult(null, remoteError(
       'La fila remota no representa una Optimization Session válida.',
       OPTIMIZATION_SESSION_REMOTE_ERROR_CODES.INVALID_ROW,
-      { validationErrors: hydrated.errors },
+      {
+        rowId: row?.id ?? null,
+        field: invalidField,
+        validationErrors: hydrated.errors,
+      },
     ), { validation: hydrated });
   }
   return optimizationSessionResult(hydrated.session, null);

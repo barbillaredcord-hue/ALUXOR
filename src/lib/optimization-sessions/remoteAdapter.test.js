@@ -78,6 +78,19 @@ describe('Optimization Session Remote Adapter', () => {
     });
   });
 
+  it('adapta timestamps reales de timestamptz a ISO canónico', () => {
+    const session = optimizationSessionFixture();
+    const row = optimizationSessionToRemoteRow(session).data;
+    row.created_at = session.createdAt.replace('T', ' ').replace('.000Z', '+00');
+    row.updated_at = session.updatedAt.replace('T', ' ').replace('.000Z', '+00');
+
+    const restored = optimizationSessionFromRemoteRow(row);
+
+    expect(restored.error).toBeNull();
+    expect(restored.data.createdAt).toBe(session.createdAt);
+    expect(restored.data.updatedAt).toBe(session.updatedAt);
+  });
+
   it('preserva referencias opcionales nulas sin inventar valores', () => {
     const session = optimizationSessionFixture({
       recommendedCandidateId: null,
@@ -172,6 +185,10 @@ describe('Optimization Session Remote Adapter', () => {
         expect.objectContaining({ path: 'version' }),
       ]),
     );
+    expect(restored.error.details).toMatchObject({
+      rowId: row.id,
+      field: 'version',
+    });
   });
 
   it('rechaza columnas ajenas, candidatos completos y geometría', () => {

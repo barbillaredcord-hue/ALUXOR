@@ -249,6 +249,31 @@ describe('Optimization Session Remote Repository', () => {
       .toBe('OPTIMIZATION_SESSION_REMOTE_RESPONSE_INVALID');
   });
 
+  it('identifica índice, id, campo y operación de una fila inválida', async () => {
+    const valid = row(optimizationSessionFixture());
+    const invalid = structuredClone(valid);
+    invalid.id = 'session-invalid';
+    invalid.version = 0;
+    const repository = createRemoteOptimizationRepository(
+      fakeClient([valid, invalid]),
+    );
+
+    const result = await repository.list({});
+
+    expect(result.error).toMatchObject({
+      code: 'OPTIMIZATION_SESSION_REMOTE_RESPONSE_INVALID',
+      details: {
+        index: 1,
+        rowId: 'session-invalid',
+        field: 'version',
+        operation: 'selectMany',
+        adapterError: {
+          code: 'OPTIMIZATION_SESSION_REMOTE_INVALID_ROW',
+        },
+      },
+    });
+  });
+
   it('no muta la sesión aunque el cliente modifique su argumento', async () => {
     const session = optimizationSessionFixture();
     const snapshot = JSON.stringify(session);

@@ -171,6 +171,30 @@ describe('Optimization Sessions Realtime Reconciliation', () => {
     expect(context.sessions.size).toBe(0);
   });
 
+  it('aplica DELETE parcial usando únicamente id y workspace del broadcast', () => {
+    const value = session();
+    const context = setup(value);
+    const payload = {
+      eventType: 'DELETE',
+      workspaceId: WORKSPACE_ID,
+      new: null,
+      old: {
+        id: value.id,
+        workspace_id: WORKSPACE_ID,
+      },
+    };
+
+    const removed = context.reconciler.reconcile(WORKSPACE_ID, payload);
+
+    expect(removed.error).toBeNull();
+    expect(removed.data).toMatchObject({
+      status: 'applied',
+      eventType: 'DELETE',
+      sessionId: value.id,
+    });
+    expect(context.sessions.has(value.id)).toBe(false);
+  });
+
   it('ignora DELETE antiguo frente a una copia local más nueva', () => {
     const local = session({ version: 3 });
     const context = setup(local);

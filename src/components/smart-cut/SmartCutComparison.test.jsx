@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import SmartCutComparison, {
+  notifySmartCutSelection,
   resolveSmartCutSelection,
 } from './SmartCutComparison.jsx';
 
@@ -146,6 +147,20 @@ describe('SmartCutComparison', () => {
     expect(selectedShelfMarkup).toContain('Diagnóstico Shelf.');
     expect(selectedShelfMarkup).not.toContain('Diagnóstico Best Fit.');
     expect(resolveSmartCutSelection(candidates, shelf.id, bestFit.id)).toBe(shelf);
+  });
+
+  it('acepta selección controlada y notifica el candidateId al padre', () => {
+    const onSelectCandidate = vi.fn();
+    const controlledMarkup = render({
+      initialSelectedCandidateId: bestFit.id,
+      selectedCandidateId: shelf.id,
+      onSelectCandidate,
+    });
+
+    expect(controlledMarkup).toContain('Costado Shelf');
+    expect(controlledMarkup).not.toContain('Costado Best');
+    expect(notifySmartCutSelection(bestFit.id, onSelectCandidate)).toBe(bestFit.id);
+    expect(onSelectCandidate).toHaveBeenCalledWith(bestFit.id);
   });
 
   it('muestra dimensiones, orientación, regiones, piezas y desperdicio por hoja', () => {

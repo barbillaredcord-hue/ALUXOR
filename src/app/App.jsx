@@ -246,6 +246,7 @@ function App() {
     addMeasureItem,
     removeMeasureItem,
     updateMaterialItem,
+    updateMaterialOptimizationSession,
     addMaterialItem,
     removeMaterialItem,
     applySuggestedPrices,
@@ -286,7 +287,7 @@ function App() {
       isProjectReadOnly(order) && productionOrderMatchesQuote(order, quoteRecord)
     )),
   });
-  useOptimizationSessions({
+  const optimizationSessions = useOptimizationSessions({
     workspaceId: activeWorkspace?.id || null,
     quoteId: activeQuoteIdentity?.id || null,
   });
@@ -1151,6 +1152,13 @@ function App() {
             decimal={decimal}
             readOnly={projectReadOnly}
             contextQuoteId={activeQuoteIdentity?.id || null}
+            optimizationSessions={optimizationSessions}
+            optimizationSessionContext={{
+              workspaceId: activeWorkspace?.id || null,
+              quoteId: activeQuoteIdentity?.id || null,
+              userId: authSession?.user?.id || null,
+            }}
+            onActivateSessionReference={updateMaterialOptimizationSession}
             onCalculateMaterial={(payload) => openMaterialCalculator({
               sourceSection: 'corte',
               ...payload,

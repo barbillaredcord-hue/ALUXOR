@@ -265,4 +265,87 @@ describe('material calculator engine', () => {
       costoUnitario: 120,
     });
   });
+
+  it('persiste solo el snapshot compacto del candidato y conserva activeSessionId', () => {
+    const selectedPieces = [
+      { id: 'first', nombre: 'Primera', ancho: 70, alto: 40, cantidad: 1 },
+      { id: 'tall', nombre: 'Alta', ancho: 30, alto: 100, cantidad: 1 },
+      { id: 'large', nombre: 'Grande', ancho: 70, alto: 60, cantidad: 1 },
+    ];
+    const calculation = calculateMaterial({
+      type: CALCULATION_TYPES.SHEET,
+      pieces: selectedPieces,
+      selectedPieceIds: selectedPieces.map((piece) => piece.id),
+      unit: 'cm',
+      formatWidth: 100,
+      formatHeight: 100,
+      wastePercent: 0,
+      price: 100,
+      allowRotation: false,
+      kerf: 0,
+      strategy: 'input-order',
+      optimize: true,
+    });
+    const bestFit = calculation.optimization.candidates.find(
+      (candidate) => candidate.strategy === 'best-fit',
+    );
+    const effectiveCalculation = {
+      ...calculation,
+      optimization: {
+        ...calculation.optimization,
+        selectedCandidateId: bestFit.id,
+        selectedCandidate: bestFit,
+      },
+    };
+    const form = {
+      measureItems: selectedPieces,
+      materialItems: [{
+        id: 'melamine',
+        nombre: 'Melamina',
+        optimization: {
+          mode: 'legacy',
+          status: 'valid',
+          activeSessionId: 'session-existing',
+        },
+      }],
+    };
+    const proposal = buildMaterialProposal({
+      form,
+      material: {
+        ...form.materialItems[0],
+        ancho: 100,
+        alto: 100,
+      },
+      calculation: effectiveCalculation,
+      selectedPieceIds: selectedPieces.map((piece) => piece.id),
+    });
+    const applied = applyMaterialProposal(form, proposal);
+    const optimization = applied.form.materialItems[0].optimization;
+
+    expect(optimization).toMatchObject({
+      mode: 'smart-cut',
+      activeCandidateId: bestFit.id,
+      status: 'valid',
+      activeSessionId: 'session-existing',
+      candidateSnapshot: {
+        candidateId: bestFit.id,
+        recommendedCandidateId: calculation.optimization.recommendedCandidateId,
+        strategy: 'best-fit',
+        sheetsRequired: 1,
+        utilization: bestFit.summary.utilization,
+        inputSignature: calculation.optimization.inputSignature,
+        candidateSignature: bestFit.id,
+      },
+    });
+    expect(proposal.materialItem.cutConfig).toEqual({
+      allowRotation: false,
+      kerf: 0,
+      strategy: 'input-order',
+    });
+    const serialized = JSON.stringify(optimization);
+    expect(serialized).not.toContain('"sheets"');
+    expect(serialized).not.toContain('"placedPieces"');
+    expect(serialized).not.toContain('"unplacedPieces"');
+    expect(calculation.optimization.candidates[0].sheets).toBeDefined();
+  });
 });

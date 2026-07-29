@@ -181,12 +181,24 @@ export default function useQuickCalculator({
     material,
     calculation,
     selectedPieceIds,
+    selectedCandidateId = null,
+    selectedCandidate = null,
     replace = false,
   } = {}) {
+    const effectiveCalculation = selectedCandidate
+      ? {
+        ...calculation,
+        optimization: {
+          ...calculation?.optimization,
+          selectedCandidateId,
+          selectedCandidate,
+        },
+      }
+      : calculation;
     const proposal = buildMaterialProposal({
       form,
       material,
-      calculation,
+      calculation: effectiveCalculation,
       selectedPieceIds,
     });
     const result = applyMaterialProposal(form, proposal, { replace });

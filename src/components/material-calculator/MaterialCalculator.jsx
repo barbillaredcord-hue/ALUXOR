@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
   BookOpen,
@@ -81,6 +81,25 @@ const initialQuickPiece = {
   quantity: 1,
 };
 
+export function initialMaterialCalculatorConfig(materials = []) {
+  const material = materials.find((item) => (
+    item?.optimization?.candidateSnapshot?.candidateId
+  ));
+  if (!material) return initialConfig;
+  const snapshotConfig = material.optimization.candidateSnapshot.configuration || {};
+  return {
+    ...initialConfig,
+    materialId: material.id,
+    materialName: material.nombre || material.name || initialConfig.materialName,
+    formatWidth: snapshotConfig.sheetWidth || material.ancho || initialConfig.formatWidth,
+    formatHeight: snapshotConfig.sheetHeight || material.alto || initialConfig.formatHeight,
+    kerf: snapshotConfig.kerf ?? initialConfig.kerf,
+    allowRotation: snapshotConfig.allowRotation ?? initialConfig.allowRotation,
+    price: material.precioUnitario ?? initialConfig.price,
+    wastePercent: material.merma ?? initialConfig.wastePercent,
+  };
+}
+
 const SAFE_PIECE_CATEGORIES = [
   { name: 'Estructura', pattern: /\b(costado|piso|techo|base|respaldo)\b/i },
   { name: 'Puertas', pattern: /\b(puerta|frente)\b/i },
@@ -159,6 +178,122 @@ export function pieceQuantityTotal(pieces = []) {
   return (Array.isArray(pieces) ? pieces : []).reduce((total, piece) => (
     total + Math.max(0, Number(piece?.cantidad ?? piece?.quantity) || 0)
   ), 0);
+}
+
+function isUsableSmartCutCandidate(candidate) {
+  return (
+    candidate?.valid === true
+    && candidate?.complete === true
+    && candidate?.validation?.isPhysicallyValid === true
+  );
+}
+
+export function resolveInitialSmartCutCandidateId(
+  optimization,
+  appliedCandidateId = null,
+) {
+  const candidates = Array.isArray(optimization?.candidates)
+    ? optimization.candidates
+    : [];
+  const applied = candidates.find((candidate) => (
+    candidate.id === appliedCandidateId && isUsableSmartCutCandidate(candidate)
+  ));
+  if (applied) return applied.id;
+  const recommended = candidates.find((candidate) => (
+    candidate.id === optimization?.recommendedCandidateId
+    && isUsableSmartCutCandidate(candidate)
+  ));
+  if (recommended) return recommended.id;
+  const ranked = (Array.isArray(optimization?.candidateRanking)
+    ? optimization.candidateRanking
+    : [])
+    .map((entry) => candidates.find((candidate) => candidate.id === entry.candidateId))
+    .find(isUsableSmartCutCandidate);
+  return ranked?.id || candidates.find(isUsableSmartCutCandidate)?.id || null;
+}
+
+export function resolveSelectedOptimizationCandidate(calculation, selectedCandidateId) {
+  return calculation?.optimization?.candidates?.find((candidate) => (
+    candidate.id === selectedCandidateId && isUsableSmartCutCandidate(candidate)
+  )) || null;
+}
+
+export function sheetSummaryMetrics(
+  calculation,
+  selectedCandidateId,
+  selectedCandidate = resolveSelectedOptimizationCandidate(
+    calculation,
+    selectedCandidateId,
+  ),
+) {
+  const candidate = selectedCandidate;
+  if (!candidate) {
+    return {
+      netArea: calculation?.netArea,
+      waste: calculation?.wastePercent,
+      wasteUnit: '%',
+      requiredArea: calculation?.areaWithWaste,
+      requiredSheets: calculation?.commercialSheets,
+      utilization: null,
+      placedPieceCount: null,
+      unplacedPieceCount: null,
+      source: 'legacy',
+    };
+  }
+  return {
+    netArea: calculation?.netArea,
+    waste: candidate.summary.wasteArea / 10000,
+    wasteUnit: 'm²',
+    requiredArea: candidate.summary.usedArea / 10000,
+    requiredSheets: candidate.summary.requiredSheets,
+    utilization: candidate.summary.utilization,
+    placedPieceCount: candidate.summary.placedPieceCount,
+    unplacedPieceCount: candidate.summary.unplacedPieceCount,
+    source: 'candidate',
+  };
+}
+
+export function calculationForSelectedSmartCutCandidate(
+  calculation,
+  selectedCandidateId,
+) {
+  const selectedCandidate = calculation?.optimization?.candidates?.find(
+    (candidate) => candidate.id === selectedCandidateId,
+  ) || null;
+  if (!selectedCandidate) return calculation;
+  return {
+    ...calculation,
+    commercialSheets: selectedCandidate.summary.requiredSheets,
+    estimatedWaste: selectedCandidate.summary.wasteArea / 10000,
+    utilization: selectedCandidate.summary.utilization,
+    optimization: {
+      ...calculation.optimization,
+      selectedCandidateId: selectedCandidate.id,
+      selectedCandidate,
+    },
+  };
+}
+
+export function buildMaterialApplicationPayload({
+  material,
+  calculation,
+  selectedPieceIds = [],
+  selectedCandidateId = null,
+  replace = false,
+} = {}) {
+  const effectiveCalculation = calculationForSelectedSmartCutCandidate(
+    calculation,
+    selectedCandidateId,
+  );
+  const selectedCandidate = effectiveCalculation?.optimization?.selectedCandidate || null;
+  return {
+    material,
+    calculation: effectiveCalculation,
+    selectedPieceIds,
+    selectedCandidateId: selectedCandidate?.id || null,
+    selectedCandidate,
+    replace,
+  };
 }
 
 export function buildTechnicalPieceLayout(pieces = [], selectedPieceIds = []) {
@@ -267,7 +402,9 @@ export default function MaterialCalculator({
   const [selectedPieceIds, setSelectedPieceIds] = useState(() => (
     Array.isArray(initialSelectedPieceIds) ? initialSelectedPieceIds : []
   ));
-  const [config, setConfig] = useState(initialConfig);
+  const [config, setConfig] = useState(() => (
+    initialMaterialCalculatorConfig(materials)
+  ));
   const [quickPiece, setQuickPiece] = useState(initialQuickPiece);
   const [calculation, setCalculation] = useState(null);
   const [feedback, setFeedback] = useState('');
@@ -277,6 +414,7 @@ export default function MaterialCalculator({
   const [hasInteracted, setHasInteracted] = useState(false);
   const [materialEditorOpen, setMaterialEditorOpen] = useState(false);
   const [focusedPieceId, setFocusedPieceId] = useState(null);
+  const [selectedCandidateId, setSelectedCandidateId] = useState(null);
 
   const availablePieces = mode === 'quick' ? [quickPiece] : pieces;
   const effectiveSelection = mode === 'quick' ? ['quick-piece'] : selectedPieceIds;
@@ -288,6 +426,20 @@ export default function MaterialCalculator({
   const selectedUnitCount = selectedPieces.reduce((total, piece) => (
     total + Math.max(0, Number(piece.cantidad ?? piece.quantity) || 0)
   ), 0);
+  const configuredMaterial = materials.find((material) => (
+    material.id === config.materialId
+  )) || null;
+  const appliedCandidateId = configuredMaterial
+    ?.optimization
+    ?.candidateSnapshot
+    ?.candidateId || null;
+
+  useEffect(() => {
+    setSelectedCandidateId(resolveInitialSmartCutCandidateId(
+      calculation?.optimization,
+      appliedCandidateId,
+    ));
+  }, [appliedCandidateId, calculation]);
 
   function updateConfig(field, value) {
     setHasInteracted(true);
@@ -348,6 +500,7 @@ export default function MaterialCalculator({
       allowRotation: config.allowRotation,
       grainDirection: config.grainDirection,
       kerf: config.kerf,
+      strategy: 'largest-first',
       treatment: config.treatment,
       quantityPerPiece: config.quantityPerPiece,
       reserveQuantity: config.reserveQuantity,
@@ -401,16 +554,22 @@ export default function MaterialCalculator({
       ? calculation
       : runCalculation(false);
     if (nextCalculation.status !== 'calculated') return;
+    const effectiveCalculation = calculationForSelectedSmartCutCandidate(
+      nextCalculation,
+      selectedCandidateId,
+    );
+    const selectedCandidate = effectiveCalculation?.optimization?.selectedCandidate || null;
     if (mode === 'quick') {
       setFeedback('Cálculo independiente listo. No se modificó la cotización.');
       return;
     }
-    const result = onApply?.({
-      material: selectedMaterial(nextCalculation),
-      calculation: nextCalculation,
+    const result = onApply?.(buildMaterialApplicationPayload({
+      material: selectedMaterial(effectiveCalculation),
+      calculation: effectiveCalculation,
       selectedPieceIds,
+      selectedCandidateId: selectedCandidate?.id || null,
       replace,
-    });
+    }));
     if (result?.reason === 'confirmation-required') {
       setConflicts(result.conflicts || []);
       setFeedback('Hay piezas con otro material. Revisa antes de reemplazar.');
@@ -460,6 +619,15 @@ export default function MaterialCalculator({
       : selectedPieceIds.length
         ? 'Selección temporal'
         : 'Sin cambios temporales';
+  const selectedOptimizationCandidate = resolveSelectedOptimizationCandidate(
+    calculation,
+    selectedCandidateId,
+  );
+  const sheetMetrics = sheetSummaryMetrics(
+    calculation,
+    selectedCandidateId,
+    selectedOptimizationCandidate,
+  );
   const summaryRows = [
     ['Proyecto', mode === 'quick' ? 'Cálculo independiente' : context.projectName || 'Sin proyecto'],
     ['Conjunto', mode === 'quick'
@@ -470,10 +638,15 @@ export default function MaterialCalculator({
   ];
   if (type === CALCULATION_TYPES.SHEET) {
     summaryRows.push(
-      ['Área neta', calculation?.status === 'calculated' ? `${display(calculation.netArea)} m²` : 'Sin calcular'],
-      ['Merma', calculation?.status === 'calculated' ? `${display(calculation.wastePercent)}%` : 'Sin calcular'],
-      ['Área requerida', calculation?.status === 'calculated' ? `${display(calculation.areaWithWaste)} m²` : 'Sin calcular'],
-      ['Hojas', calculation?.status === 'calculated' ? calculation.commercialSheets : 'Sin calcular'],
+      ['Área neta', calculation?.status === 'calculated' ? `${display(sheetMetrics.netArea)} m²` : 'Sin calcular'],
+      ['Merma', calculation?.status === 'calculated' ? `${display(sheetMetrics.waste)}${sheetMetrics.wasteUnit === '%' ? '%' : ' m²'}` : 'Sin calcular'],
+      ['Área requerida', calculation?.status === 'calculated' ? `${display(sheetMetrics.requiredArea)} m²` : 'Sin calcular'],
+      ['Hojas', calculation?.status === 'calculated' ? sheetMetrics.requiredSheets : 'Sin calcular'],
+      ...(sheetMetrics.source === 'candidate' ? [
+        ['Aprovechamiento', `${display(sheetMetrics.utilization)}%`],
+        ['Piezas colocadas', sheetMetrics.placedPieceCount],
+        ['Piezas no colocadas', sheetMetrics.unplacedPieceCount],
+      ] : []),
     );
   } else if ([CALCULATION_TYPES.GLASS, CALCULATION_TYPES.SURFACE].includes(type)) {
     summaryRows.push(
@@ -1047,6 +1220,8 @@ export default function MaterialCalculator({
                         recommendedCandidateId={calculation.optimization.recommendedCandidateId}
                         selectionReason={calculation.optimization.selectionReason}
                         candidateRanking={calculation.optimization.candidateRanking}
+                        selectedCandidateId={selectedCandidateId}
+                        onSelectCandidate={setSelectedCandidateId}
                       />
                       <button type="button" className="ghost" onClick={() => setResultView('calculation')}>
                         Volver al cálculo

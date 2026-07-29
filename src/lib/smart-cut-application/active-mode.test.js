@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  createSmartCutCandidateSnapshot,
+  createSmartCutInputSignature,
   createLegacyOptimizationState,
   createSmartCutOptimizationState,
   normalizeMaterialOptimizationState,
@@ -62,6 +64,38 @@ function legacyResult() {
 }
 
 describe('Smart Cut Active Mode', () => {
+  it('crea una firma determinista compartida y un snapshot sin geometría', () => {
+    const input = {
+      sheetWidth: 100,
+      sheetHeight: 100,
+      allowRotation: false,
+      kerf: 0,
+      strategy: 'input-order',
+      pieces: [{ id: 'piece-1', name: 'Panel', width: 40, height: 60, quantity: 1 }],
+    };
+    const selected = candidate('best-fit-id');
+    const inputSignature = createSmartCutInputSignature(input);
+    const snapshot = createSmartCutCandidateSnapshot({
+      candidate: selected,
+      recommendedCandidateId: selected.id,
+      configuration: input,
+      inputSignature,
+    });
+
+    expect(createSmartCutInputSignature(input)).toBe(inputSignature);
+    expect(snapshot).toMatchObject({
+      candidateId: selected.id,
+      recommendedCandidateId: selected.id,
+      sheetsRequired: 1,
+      placedPiecesCount: 1,
+      unplacedPiecesCount: 0,
+      inputSignature,
+      candidateSignature: selected.id,
+    });
+    expect(JSON.stringify(snapshot)).not.toContain('"sheets"');
+    expect(JSON.stringify(snapshot)).not.toContain('"placedPieces"');
+  });
+
   it('mantiene Legacy como modo predeterminado y reversible', () => {
     expect(normalizeMaterialOptimizationState()).toEqual({
       mode: OPTIMIZATION_MODES.LEGACY,

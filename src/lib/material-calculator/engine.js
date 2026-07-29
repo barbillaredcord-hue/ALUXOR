@@ -6,6 +6,11 @@ import {
   calcularMaterial,
 } from '../br-engine/materials.js';
 import { optimizeCuts } from '../cut-optimizer/optimizer.js';
+import {
+  createSmartCutCandidateSnapshot,
+  createSmartCutInputSignature,
+  createSmartCutOptimizationState,
+} from '../smart-cut-application/active-mode.js';
 
 export const CALCULATION_TYPES = Object.freeze({
   SHEET: 'sheet',
@@ -224,20 +229,25 @@ export function calculateMaterial(input = {}) {
       result.warnings.push('La orientación de veta está activa; las piezas no se rotarán.');
     }
 
+    const optimizationInput = {
+      sheetWidth: formatWidth,
+      sheetHeight: formatHeight,
+      allowRotation,
+      kerf: convertLength(input.kerf || 0, input.unit, 'cm') || 0,
+      strategy: input.strategy || 'largest-first',
+      pieces: pieces.map((piece) => ({
+        id: piece.id,
+        name: piece.name,
+        width: piece.width,
+        height: piece.height,
+        quantity: piece.quantity,
+      })),
+    };
     const optimization = input.optimize
-      ? optimizeCuts({
-        sheetWidth: formatWidth,
-        sheetHeight: formatHeight,
-        allowRotation,
-        kerf: convertLength(input.kerf || 0, input.unit, 'cm') || 0,
-        pieces: pieces.map((piece) => ({
-          id: piece.id,
-          name: piece.name,
-          width: piece.width,
-          height: piece.height,
-          quantity: piece.quantity,
-        })),
-      })
+      ? {
+        ...optimizeCuts(optimizationInput),
+        inputSignature: createSmartCutInputSignature(optimizationInput),
+      }
       : null;
     const material = calcularMaterial({
       tipoCompra: 'hoja',
@@ -340,6 +350,29 @@ export function buildMaterialProposal({
   const materialId = String(
     sameNamedAlreadyAssigned ? sameNamed.id : material.id || '',
   );
+  const selectedCandidate = calculation?.optimization?.selectedCandidate || null;
+  const optimizationConfig = calculation?.optimization?.config || {};
+  const inputSignature = calculation?.optimization?.inputSignature || null;
+  const candidateSnapshot = createSmartCutCandidateSnapshot({
+    candidate: selectedCandidate,
+    recommendedCandidateId: calculation?.optimization?.recommendedCandidateId,
+    configuration: optimizationConfig,
+    inputSignature,
+  });
+  const previousOptimization = (
+    sameNamedAlreadyAssigned ? sameNamed?.optimization : material?.optimization
+  ) || {};
+  const optimization = selectedCandidate && candidateSnapshot
+    ? {
+      ...previousOptimization,
+      ...createSmartCutOptimizationState({
+        activeCandidateId: selectedCandidate.id,
+        engineVersion: selectedCandidate.metadata?.contractVersion,
+        inputSignature,
+        candidateSnapshot,
+      }),
+    }
+    : previousOptimization;
   const conflicts = measures
     .filter((piece) => selectedIds.includes(piece.id))
     .flatMap((piece) => (Array.isArray(piece.materialAssignments)
@@ -367,6 +400,15 @@ export function buildMaterialProposal({
       baseCalculo: material.baseCalculo || 'medidas_area',
       usarArea: material.usarArea ?? true,
       precioManual: false,
+      ...(selectedCandidate ? {
+        optimization,
+        cutConfig: {
+          ...(material.cutConfig || {}),
+          allowRotation: optimizationConfig.allowRotation ?? true,
+          kerf: optimizationConfig.kerf ?? 0,
+          strategy: optimizationConfig.strategy || 'largest-first',
+        },
+      } : {}),
     },
     target: isHardware ? 'accessory' : 'material',
   };

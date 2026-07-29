@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import * as Quote from '../quote.js';
+import {
+  applyMaterialProposal,
+  buildMaterialProposal,
+  calculateMaterial,
+  CALCULATION_TYPES,
+} from '../../material-calculator/engine.js';
 
 const helpers = {
   clean(value, fallback = '') {
@@ -310,6 +316,64 @@ describe('quote.js', () => {
     expect(legacy.materialRows[0].costTotal).toBe(
       legacy.materialRows[0].hojasNecesarias * input.materialItems[0].costoUnitario,
     );
+  });
+
+  it('aplica desde Material Studio el Best Fit seleccionado y conserva la sesión activa', () => {
+    const input = smartCutQuoteInput();
+    const calculation = calculateMaterial({
+      type: CALCULATION_TYPES.SHEET,
+      pieces: input.measureItems,
+      selectedPieceIds: input.measureItems.map((piece) => piece.id),
+      unit: 'cm',
+      formatWidth: 100,
+      formatHeight: 100,
+      wastePercent: 0,
+      marginPercent: 0,
+      price: 100,
+      allowRotation: false,
+      kerf: 0,
+      strategy: 'input-order',
+      optimize: true,
+    });
+    const bestFit = calculation.optimization.candidates.find(
+      (candidate) => candidate.strategy === 'best-fit',
+    );
+    const form = {
+      ...input,
+      materialItems: [{
+        ...input.materialItems[0],
+        optimization: { activeSessionId: 'session-existing' },
+      }],
+    };
+    const proposal = buildMaterialProposal({
+      form,
+      material: form.materialItems[0],
+      calculation: {
+        ...calculation,
+        optimization: {
+          ...calculation.optimization,
+          selectedCandidateId: bestFit.id,
+          selectedCandidate: bestFit,
+        },
+      },
+      selectedPieceIds: input.measureItems.map((piece) => piece.id),
+    });
+    const applied = applyMaterialProposal(form, proposal);
+    const quote = Quote.calculateQuote(applied.form, helpers);
+    const material = quote.materialRows[0];
+
+    expect(material.optimization).toMatchObject({
+      mode: 'smart-cut',
+      status: 'valid',
+      activeCandidateId: bestFit.id,
+      activeSessionId: 'session-existing',
+      inputSignature: calculation.optimization.inputSignature,
+    });
+    expect(material.cutOptimization.id).toBe(bestFit.id);
+    expect(material.cutOptimization.strategy).toBe('best-fit');
+    expect(material.hojasNecesarias).toBe(1);
+    expect(material.optimizationSummary.utilization)
+      .toBe(bestFit.summary.utilization);
   });
 
   it.each([

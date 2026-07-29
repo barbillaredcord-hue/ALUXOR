@@ -10,6 +10,110 @@ export const OPTIMIZATION_STATE_STATUSES = Object.freeze({
   PENDING: 'pending',
 });
 
+function text(value) {
+  return String(value ?? '').trim();
+}
+
+function finite(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function signatureRegions(regions) {
+  return (Array.isArray(regions) ? regions : []).map((region) => [
+    region?.id ?? region?.sourceId ?? null,
+    region?.x ?? null,
+    region?.y ?? null,
+    region?.width ?? region?.ancho ?? null,
+    region?.height ?? region?.alto ?? null,
+  ]);
+}
+
+export function createSmartCutInputSignature(input = {}) {
+  const margins = input.margins || {};
+  const source = JSON.stringify([
+    input.sheetWidth,
+    input.sheetHeight,
+    input.allowRotation,
+    input.kerf,
+    input.strategy,
+    [
+      margins.top ?? margins.superior ?? 0,
+      margins.right ?? margins.derecho ?? 0,
+      margins.bottom ?? margins.inferior ?? 0,
+      margins.left ?? margins.izquierdo ?? 0,
+    ],
+    signatureRegions(input.blockedRegions),
+    signatureRegions(input.reservedRegions),
+    (Array.isArray(input.pieces) ? input.pieces : []).map((piece) => [
+      piece.id,
+      piece.name,
+      piece.width,
+      piece.height,
+      piece.quantity,
+    ]),
+  ]);
+  let hash = 2166136261;
+  for (let index = 0; index < source.length; index += 1) {
+    hash ^= source.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `quote-cut-input-v1-${(hash >>> 0).toString(16).padStart(8, '0')}`;
+}
+
+export function createSmartCutCandidateSnapshot({
+  candidate,
+  recommendedCandidateId = null,
+  configuration = {},
+  inputSignature = null,
+} = {}) {
+  const candidateId = text(candidate?.id);
+  if (!candidateId || !candidate?.summary) return null;
+  const summary = candidate.summary;
+  return {
+    candidateId,
+    recommendedCandidateId: text(recommendedCandidateId) || null,
+    strategy: text(candidate.strategy),
+    configuration: {
+      sheetWidth: finite(configuration.sheetWidth),
+      sheetHeight: finite(configuration.sheetHeight),
+      kerf: finite(configuration.kerf),
+      allowRotation: Boolean(configuration.allowRotation),
+      strategy: text(configuration.strategy) || 'largest-first',
+    },
+    sheetsRequired: finite(summary.requiredSheets),
+    usedArea: finite(summary.usedArea),
+    wasteArea: finite(summary.wasteArea),
+    utilization: finite(summary.utilization),
+    placedPiecesCount: finite(summary.placedPieceCount),
+    unplacedPiecesCount: finite(summary.unplacedPieceCount),
+    inputSignature: text(inputSignature) || null,
+    candidateSignature: candidateId,
+  };
+}
+
+function normalizeCandidateSnapshot(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return createSmartCutCandidateSnapshot({
+    candidate: {
+      id: value.candidateId,
+      strategy: value.strategy,
+      summary: {
+        requiredSheets: value.sheetsRequired,
+        usedArea: value.usedArea,
+        wasteArea: value.wasteArea,
+        utilization: value.utilization,
+        placedPieceCount: value.placedPiecesCount,
+        unplacedPieceCount: value.unplacedPiecesCount,
+      },
+    },
+    recommendedCandidateId: value.recommendedCandidateId,
+    configuration: value.configuration,
+    inputSignature: value.inputSignature,
+  });
+}
+
 export function normalizeMaterialOptimizationState(value = {}) {
   const source = value && typeof value === 'object' && !Array.isArray(value)
     ? value
@@ -32,6 +136,7 @@ export function normalizeMaterialOptimizationState(value = {}) {
   const engineVersion = engineVersionValue !== null && Number.isFinite(engineVersionValue)
     ? engineVersionValue
     : null;
+  const candidateSnapshot = normalizeCandidateSnapshot(source.candidateSnapshot);
 
   return {
     mode,
@@ -42,6 +147,12 @@ export function normalizeMaterialOptimizationState(value = {}) {
     engineVersion: mode === OPTIMIZATION_MODES.SMART_CUT ? engineVersion : null,
     inputSignature,
     status,
+    ...(mode === OPTIMIZATION_MODES.SMART_CUT && candidateSnapshot
+      ? { candidateSnapshot }
+      : {}),
+    ...(source.activeSessionId !== undefined
+      ? { activeSessionId: text(source.activeSessionId) || null }
+      : {}),
   };
 }
 
@@ -57,6 +168,7 @@ export function createSmartCutOptimizationState({
   proposalId,
   engineVersion,
   inputSignature,
+  candidateSnapshot,
   status = OPTIMIZATION_STATE_STATUSES.VALID,
 } = {}) {
   return normalizeMaterialOptimizationState({
@@ -65,6 +177,7 @@ export function createSmartCutOptimizationState({
     proposalId,
     engineVersion,
     inputSignature,
+    candidateSnapshot,
     status,
   });
 }

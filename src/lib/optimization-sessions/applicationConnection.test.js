@@ -7,6 +7,7 @@ function source(path) {
 
 const hookSource = source('../../hooks/useOptimizationSessions.js');
 const sectionSource = source('../../sections/OptimizationSessionsSection.jsx');
+const cutOptimizerSource = source('../../sections/CutOptimizerSection.jsx');
 const appSource = source('../../app/App.jsx');
 const providerSource = source('./repositoryProvider.js');
 const repositorySource = source('./applicationRepository.js');
@@ -29,6 +30,7 @@ describe('conexión React de Optimization Sessions', () => {
     expect(sectionSource).not.toMatch(/supabase/i);
     expect(sectionSource).not.toContain('remoteAdapter');
     expect(sectionSource).not.toContain('remoteRepository');
+    expect(cutOptimizerSource).not.toMatch(/supabase/i);
   });
 
   it('App monta el Hook con workspace y Quote activos', () => {
@@ -36,7 +38,52 @@ describe('conexión React de Optimization Sessions', () => {
       "import useOptimizationSessions from '../hooks/useOptimizationSessions.js';",
     );
     expect(appSource).toMatch(
-      /useOptimizationSessions\(\{\s*workspaceId: activeWorkspace\?\.id \|\| null,\s*quoteId: activeQuoteIdentity\?\.id \|\| null,\s*\}\);/,
+      /const optimizationSessions = useOptimizationSessions\(\{\s*workspaceId: activeWorkspace\?\.id \|\| null,\s*quoteId: activeQuoteIdentity\?\.id \|\| null,\s*\}\);/,
+    );
+    expect(appSource).toContain(
+      'optimizationSessions={optimizationSessions}',
+    );
+    expect(appSource.match(/optimizationSessions=\{optimizationSessions\}/g))
+      .toHaveLength(1);
+    expect(appSource).toContain('onActivateSessionReference=');
+    expect(appSource).toContain(
+      'onActivateSessionReference={updateMaterialOptimizationSession}',
+    );
+    expect(appSource).not.toMatch(
+      /onActivateSessionReference=\{[\s\S]{0,300}updateMaterialItem\(/,
+    );
+  });
+
+  it('el Smart Cut Optimizer conecta únicamente la API pública del Hook', () => {
+    [
+      'optimizationSessions.createSession(',
+      'optimizationSessions.updateSession(',
+      'deleteSession: optimizationSessions.deleteSession,',
+      'optimizationSessions.setActiveSession(',
+      'optimizationSessions.closeSession(',
+      'optimizationSessions.reopenSession(',
+      'optimizationSessions.reload',
+      'optimizationSessions.sessions',
+      'optimizationSessions.latestSession',
+      'optimizationSessions.summary',
+      'optimizationSessions.realtimeStatus',
+    ].forEach((contract) => expect(cutOptimizerSource).toContain(contract));
+    const saveHandler = cutOptimizerSource.match(
+      /async function saveCurrentSession\(\) \{[\s\S]*?\n  \}/,
+    )?.[0];
+    expect(saveHandler).toContain('optimizationSessions.createSession(');
+    expect(saveHandler).not.toContain('optimizeCuts(');
+  });
+
+  it('la integración visual no copia colecciones ni usa alert()', () => {
+    expect(sectionSource).not.toMatch(
+      /useState\(sessions|useState\(summary|useState\(latestSession/,
+    );
+    expect(sectionSource).not.toMatch(/\balert\s*\(/);
+    expect(cutOptimizerSource).not.toMatch(/\balert\s*\(/);
+    expect(sectionSource).not.toMatch(/\bisActive\b/);
+    expect(cutOptimizerSource).toContain(
+      'deleteOptimizationSessionAndClearActiveReference',
     );
   });
 

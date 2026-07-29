@@ -17,14 +17,26 @@ export function resolveSmartCutSelection(
     || candidates[0];
 }
 
+export function notifySmartCutSelection(candidateId, onSelectCandidate) {
+  onSelectCandidate?.(candidateId);
+  return candidateId;
+}
+
 export default function SmartCutComparison({
   candidates = [],
   recommendedCandidateId = null,
   selectionReason = '',
   candidateRanking = [],
   initialSelectedCandidateId = null,
+  selectedCandidateId: controlledSelectedCandidateId,
+  onSelectCandidate,
 }) {
-  const [selectedCandidateId, setSelectedCandidateId] = useState(initialSelectedCandidateId);
+  const [internalSelectedCandidateId, setInternalSelectedCandidateId] = useState(
+    initialSelectedCandidateId,
+  );
+  const selectedCandidateId = controlledSelectedCandidateId === undefined
+    ? internalSelectedCandidateId
+    : controlledSelectedCandidateId;
   const recommendedCandidate = candidates.find(
     (candidate) => candidate.id === recommendedCandidateId,
   ) || null;
@@ -46,6 +58,12 @@ export default function SmartCutComparison({
   const rankingEntry = candidateRanking.find(
     (item) => item.candidateId === selectedCandidate?.id,
   );
+  function selectCandidate(candidateId) {
+    if (controlledSelectedCandidateId === undefined) {
+      setInternalSelectedCandidateId(candidateId);
+    }
+    notifySmartCutSelection(candidateId, onSelectCandidate);
+  }
 
   return (
     <section className="smart-cut-comparison" aria-label="Comparación de candidatos Smart Cut">
@@ -67,7 +85,7 @@ export default function SmartCutComparison({
         selectedCandidateId={selectedCandidate.id}
         recommendedCandidateId={recommendedCandidateId}
         candidateRanking={candidateRanking}
-        onSelect={setSelectedCandidateId}
+        onSelect={selectCandidate}
       />
 
       <div className="smart-cut-selected-heading" role="status" aria-live="polite">

@@ -15,6 +15,7 @@ import {
   isNewerRemoteQuoteVersion,
   mergeRemoteQuoteForms,
   notifyQuoteDeletionCommitted,
+  quoteFormWithActiveOptimizationSession,
   quoteNoteUpdateFromProduction,
   quoteHydrationKey,
   resetQuoteEditingState,
@@ -452,5 +453,64 @@ describe('hidratación estable del Cotizador', () => {
     const hydrated = hydrateExistingQuoteForm({ producto: 'Existente' });
     expect(hasRealQuoteFormChanges(hydrated, hydrated)).toBe(false);
     expect(canScheduleQuoteAutoSave(true, 'cotizador')).toBe(false);
+  });
+});
+
+describe('referencia activa de Optimization Sessions en Quote', () => {
+  it('reemplaza o limpia la única referencia por material sin copiar geometría', () => {
+    const source = {
+      materialItems: [{
+        id: 'material-1',
+        nombre: 'Melamina',
+        optimization: {
+          activeSessionId: 'session-old',
+          mode: 'smart-cut',
+        },
+      }],
+    };
+    const next = quoteFormWithActiveOptimizationSession(
+      source,
+      'material-1',
+      'session-new',
+    );
+    const cleared = quoteFormWithActiveOptimizationSession(
+      next,
+      'material-1',
+      null,
+    );
+
+    expect(next.materialItems[0].optimization).toMatchObject({
+      activeSessionId: 'session-new',
+      mode: 'smart-cut',
+    });
+    expect(cleared.materialItems[0].optimization.activeSessionId).toBeNull();
+    expect(next).not.toBe(source);
+    expect(source.materialItems[0].optimization.activeSessionId).toBe('session-old');
+    expect(JSON.stringify(next)).not.toMatch(/sheets|placedPieces|geometry|isActive/);
+  });
+
+  it('Realtime de Quote aplica la referencia confirmada a otra instancia', () => {
+    const confirmedForm = {
+      materialItems: [{
+        id: 'material-1',
+        optimization: { activeSessionId: 'session-old' },
+      }],
+    };
+    const remoteForm = quoteFormWithActiveOptimizationSession(
+      confirmedForm,
+      'material-1',
+      'session-new',
+    );
+    const merge = mergeRemoteQuoteForms({
+      confirmedForm,
+      localForm: structuredClone(confirmedForm),
+      remoteForm,
+      remoteVersion: 4,
+    });
+
+    expect(merge.nextForm.materialItems[0].optimization.activeSessionId)
+      .toBe('session-new');
+    expect(merge.dirtyFields.size).toBe(0);
+    expect(merge.suppressAutoSave).toBe(true);
   });
 });

@@ -1,6 +1,7 @@
 import { Areas, Materials, Pricing, Summary } from './index.js';
 import { optimizeCuts } from '../cut-optimizer/optimizer.js';
 import {
+  createSmartCutInputSignature,
   normalizeMaterialOptimizationState,
   resolveMaterialOptimizationMode,
 } from '../smart-cut-application/active-mode.js';
@@ -408,44 +409,9 @@ function cutOptimizationForMaterial(tipoCompra, item, measureRows, helpers = {})
     reservedRegions: cutConfig.reservedRegions,
     pieces,
   };
-  const margins = input.margins || {};
-  const signatureRegions = (regions) => (Array.isArray(regions) ? regions : []).map((region) => [
-    region?.id ?? region?.sourceId ?? null,
-    region?.x ?? null,
-    region?.y ?? null,
-    region?.width ?? region?.ancho ?? null,
-    region?.height ?? region?.alto ?? null,
-  ]);
-  const signatureSource = JSON.stringify([
-    input.sheetWidth,
-    input.sheetHeight,
-    input.allowRotation,
-    input.kerf,
-    input.strategy,
-    [
-      margins.top ?? margins.superior ?? 0,
-      margins.right ?? margins.derecho ?? 0,
-      margins.bottom ?? margins.inferior ?? 0,
-      margins.left ?? margins.izquierdo ?? 0,
-    ],
-    signatureRegions(input.blockedRegions),
-    signatureRegions(input.reservedRegions),
-    input.pieces.map((piece) => [
-      piece.id,
-      piece.name,
-      piece.width,
-      piece.height,
-      piece.quantity,
-    ]),
-  ]);
-  let hash = 2166136261;
-  for (let index = 0; index < signatureSource.length; index += 1) {
-    hash ^= signatureSource.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
   return {
     optimization: optimizeCuts(input),
-    inputSignature: `quote-cut-input-v1-${(hash >>> 0).toString(16).padStart(8, '0')}`,
+    inputSignature: createSmartCutInputSignature(input),
   };
 }
 

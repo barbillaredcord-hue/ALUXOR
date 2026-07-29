@@ -153,6 +153,74 @@ export function hydrateExistingQuoteForm(form) {
     : null;
 }
 
+export function quoteFormWithActiveOptimizationSession(
+  form,
+  materialId,
+  activeSessionId,
+) {
+  if (!form || !materialId) return form;
+  const areaTotal = Quote.quoteAreaTotal(form, quoteHelpers);
+  let changed = false;
+  const materialItems = Quote.materialItemsFromForm(form, areaTotal, quoteHelpers)
+    .map((item) => {
+      if (item.id !== materialId) return item;
+      const nextActiveSessionId = activeSessionId || null;
+      if (item.optimization?.activeSessionId === nextActiveSessionId) return item;
+      changed = true;
+      return {
+        ...item,
+        optimization: {
+          ...(item.optimization || {}),
+          activeSessionId: nextActiveSessionId,
+        },
+      };
+    });
+  return changed ? { ...form, materialItems } : form;
+}
+export function mergeRemoteActiveOptimizationSessions(localForm, remoteForm) {
+  if (!localForm || !remoteForm) return localForm;
+
+  const localItems = Array.isArray(localForm.materialItems)
+    ? localForm.materialItems
+    : [];
+
+  const remoteItems = Array.isArray(remoteForm.materialItems)
+    ? remoteForm.materialItems
+    : [];
+
+  const remoteItemsById = new Map(
+    remoteItems
+      .filter((item) => item?.id)
+      .map((item) => [item.id, item]),
+  );
+
+  let changed = false;
+
+  const materialItems = localItems.map((item) => {
+    const remoteItem = remoteItemsById.get(item.id);
+    if (!remoteItem) return item;
+
+    const localSession = item.optimization?.activeSessionId ?? null;
+    const remoteSession = remoteItem.optimization?.activeSessionId ?? null;
+
+    if (localSession === remoteSession) return item;
+
+    changed = true;
+
+    return {
+      ...item,
+      optimization: {
+        ...(item.optimization || {}),
+        activeSessionId: remoteSession,
+      },
+    };
+  });
+
+  return changed
+    ? { ...localForm, materialItems }
+    : localForm;
+}
+
 export function quoteHydrationKey(item) {
   if (!item?.id) return '';
   return `${item.id}:${Number(item.version) || 0}`;
@@ -552,10 +620,22 @@ export default function useQuotes({
     const remoteItem = QuoteAdapter.quoteRowToHistoryItem(row);
     const remoteForm = remoteItem.form || {};
     const confirmedForm = lastConfirmedQuoteFormRef.current || {};
-    const merge = mergeRemoteQuoteForms({
-      confirmedForm,
-      localForm: latestQuoteFormRef.current,
-      remoteForm,
+
+    const currentLocalForm = latestQuoteFormRef.current;
+
+    const localFormWithRemoteActiveSessions =
+      mergeRemoteActiveOptimizationSessions(
+        currentLocalForm,
+        remoteForm,
+      );
+
+const activeOptimizationSessionChanged =
+  localFormWithRemoteActiveSessions !== currentLocalForm;
+
+const merge = mergeRemoteQuoteForms({
+  confirmedForm,
+  localForm: localFormWithRemoteActiveSessions,
+  remoteForm,
       dirtyFields: dirtyQuoteFieldsRef.current,
       fieldConflicts: quoteFieldConflictsRef.current,
       bufferedFields: remoteQuoteBufferRef.current.fields,
@@ -571,10 +651,14 @@ export default function useQuotes({
     };
 
     lastConfirmedQuoteFormRef.current = remoteForm;
-    if (merge.changedVisibleForm) {
-      latestQuoteFormRef.current = merge.nextForm;
-      quoteRemoteApplyRef.current = merge.suppressAutoSave;
-      setForm(merge.nextForm);
+
+    if (
+        merge.changedVisibleForm ||
+        activeOptimizationSessionChanged
+    ) {
+        latestQuoteFormRef.current = merge.nextForm;
+        quoteRemoteApplyRef.current = merge.suppressAutoSave;
+        setForm(merge.nextForm);
     }
 
     const nextIdentity = {
@@ -1529,6 +1613,22 @@ export default function useQuotes({
     });
   }
 
+  function updateMaterialOptimizationSession(materialId, activeSessionId) {
+    const currentForm = latestQuoteFormRef.current;
+    const nextForm = quoteFormWithActiveOptimizationSession(
+      currentForm,
+      materialId,
+      activeSessionId,
+    );
+    if (nextForm === currentForm) return false;
+    markQuoteFormDirty(currentForm, nextForm);
+    setQuoteCollaborationStatus('Guardando…');
+    setSyncStatus('Guardando referencia de sesión…');
+    setForm(nextForm);
+    saveToHistory({ silent: true, formOverride: nextForm });
+    return true;
+  }
+
   function addMaterialItem(manualCapture = false) {
     updateDirtyQuoteForm((current) => ({
       ...current,
@@ -2029,6 +2129,8 @@ export default function useQuotes({
     const autoConflictRetry = Boolean(options.autoConflictRetry);
     const navigateToHistory = !silent && options.navigateToHistory !== false;
     const editSession = quoteEditSessionRef.current;
+    const saveForm = options.formOverride || latestQuoteFormRef.current || form;
+    const saveQuote = Quote.calculateQuote(saveForm, quoteHelpers);
 
     if (isProjectReadOnly(getActiveProductionOrder?.())) {
       setSyncStatus('Proyecto entregado · solo lectura');
@@ -2077,10 +2179,10 @@ export default function useQuotes({
       currentIdentity?.remote && isRemoteQuoteId(currentIdentity.id)
     );
     const folio = currentIdentity?.folio
-      || clean(form.folioManual, generateQuoteFolio(history));
-    const status = QuoteAdapter.normalizeQuoteStatus(form.estadoCotizacion);
+      || clean(saveForm.folioManual, generateQuoteFolio(history));
+    const status = QuoteAdapter.normalizeQuoteStatus(saveForm.estadoCotizacion);
     const historyForm = {
-      ...form,
+      ...saveForm,
       estadoCotizacion: status,
     };
     const item = {
@@ -2090,17 +2192,17 @@ export default function useQuotes({
       status,
       folio,
       estadoCotizacion: status,
-      formaPago: clean(form.formaPago, 'Anticipo y saldo contra entrega'),
-      notasCliente: clean(form.notasCliente),
-      notasInternas: clean(form.notasInternas),
-      clienteNombre: clean(form.clienteNombre, 'Cliente'),
-      clienteTelefono: clean(form.clienteTelefono),
-      producto: clean(form.producto, 'Proyecto a medida'),
-      tipoTrabajo: clean(form.tipoTrabajo, 'Trabajo'),
-      giro: clean(form.giro, 'Carpintería'),
-      total: quote.total,
-      anticipo: quote.deposit,
-      resto: quote.rest,
+      formaPago: clean(saveForm.formaPago, 'Anticipo y saldo contra entrega'),
+      notasCliente: clean(saveForm.notasCliente),
+      notasInternas: clean(saveForm.notasInternas),
+      clienteNombre: clean(saveForm.clienteNombre, 'Cliente'),
+      clienteTelefono: clean(saveForm.clienteTelefono),
+      producto: clean(saveForm.producto, 'Proyecto a medida'),
+      tipoTrabajo: clean(saveForm.tipoTrabajo, 'Trabajo'),
+      giro: clean(saveForm.giro, 'Carpintería'),
+      total: saveQuote.total,
+      anticipo: saveQuote.deposit,
+      resto: saveQuote.rest,
       form: historyForm,
       ...(currentIdentity?.version ? { version: currentIdentity.version } : {}),
     };
@@ -2162,7 +2264,7 @@ export default function useQuotes({
       error: payloadError,
     } = QuoteAdapter.quoteFormToPayload({
       form: historyForm,
-      quote,
+      quote: saveQuote,
       workspaceId,
       folio,
       id: item.id,
@@ -3292,6 +3394,7 @@ export default function useQuotes({
     addMeasureItem,
     removeMeasureItem,
     updateMaterialItem,
+    updateMaterialOptimizationSession,
     addMaterialItem,
     removeMaterialItem,
     applySuggestedPrices,

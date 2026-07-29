@@ -60,7 +60,8 @@ function isEcho(operation, eventType, remoteSession) {
     && operation.operationType
       === OPTIMIZATION_SESSION_PENDING_OPERATION_TYPES.DELETE
   ) {
-    return operation.expectedVersion === remoteSession.version;
+    return remoteSession.version === null
+      || operation.expectedVersion === remoteSession.version;
   }
   return (
     operation.operationType
@@ -117,14 +118,33 @@ export function createOptimizationSessionRealtimeReconciler({
 
     const row = eventType === 'DELETE' ? event.old : event.new;
     const adapted = optimizationSessionFromRemoteRow(row);
-    if (adapted.error) {
+    const partialDelete = eventType === 'DELETE'
+      && row
+      && typeof row === 'object'
+      && !Array.isArray(row)
+      && optimizationSessionText(row.id)
+      && optimizationSessionText(row.workspace_id);
+    if (adapted.error && !partialDelete) {
       return failure(
         'El payload Realtime no representa una sesión válida.',
         'OPTIMIZATION_SESSION_REALTIME_PAYLOAD_INVALID',
-        { adapterError: adapted.error },
+        {
+          operation: eventType,
+          rowId: row?.id ?? null,
+          field: adapted.error?.details?.field
+            ?? adapted.error?.details?.missing?.[0]
+            ?? adapted.error?.details?.unexpected?.[0]
+            ?? null,
+          adapterError: adapted.error,
+        },
       );
     }
-    const remoteSession = adapted.data;
+    const remoteSession = adapted.data || {
+      id: optimizationSessionText(row.id),
+      workspaceId: optimizationSessionText(row.workspace_id),
+      quoteId: null,
+      version: Number.isInteger(Number(row.version)) ? Number(row.version) : null,
+    };
     if (remoteSession.workspaceId !== canonicalWorkspaceId) {
       return result(
         OPTIMIZATION_SESSION_REALTIME_RESULTS.IGNORED,
@@ -206,7 +226,10 @@ export function createOptimizationSessionRealtimeReconciler({
           remoteSession,
         );
       }
-      if (compareOptimizationSessionVersions(remoteSession, local.data) < 0) {
+      if (
+        remoteSession.version !== null
+        && compareOptimizationSessionVersions(remoteSession, local.data) < 0
+      ) {
         return result(
           OPTIMIZATION_SESSION_REALTIME_RESULTS.STALE,
           eventType,
