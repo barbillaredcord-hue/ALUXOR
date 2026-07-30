@@ -5,7 +5,7 @@
 - **Workspace operativo actual:** ALUXOR / BosqueReal
 - **Etapa activa:** Etapa III — ERP operativo
 - **Fase oficial:** Consolidación de la experiencia y del ciclo de vida de Optimization Sessions implementada y validada
-- **Última actualización:** 29/07/2026
+- **Última actualización:** 30/07/2026
 
 ## 1. Identidad del proyecto
 
@@ -97,7 +97,7 @@ Componentes verificados:
 - **Identity:** normalización, comparación y preservación canónica por UUID y workspace. `createUuid.js` es el generador seguro compartido por Cotizaciones y colas, pero Producción y Compras todavía conservan puntos de generación directa o inyectable que deben converger.
 - **Integrity:** `runIntegrityAudit()` es la entrada pública explícita; combina auditor local estricto, auditor remoto autenticado de solo lectura, comparación local/remota, reporte consolidado, recomendaciones y readiness conservador.
 - **Read Only:** `isProjectReadOnly()` pertenece al Production Engine y deriva únicamente de `Entregado`; los hooks de Cotización, Producción, Compras y Workspace rechazan mutaciones y las secciones existentes reflejan el mismo contrato sin duplicar pantallas.
-- **Smart Cut Engine / Cut Optimizer:** motor físico determinista, congelado y compatible con Legacy. La UI comparativa, Proposal Application Layer y Active Mode están implementados. Optimization Sessions está completado como dominio durable local y remoto con Source, Adapter, Local Repository, Remote Adapter, Remote Repository, Supabase Client Adapter, Application Repository, Repository Provider, Versioning, Storage, Offline Queue, Pending Operations Repository, Connectivity Provider, Sync Engine manual, Realtime Subscription, Reconciliation, Hook, Section, Summary y Selectors. La tabla `optimization_sessions`, sus políticas RLS, el trigger de inmutabilidad de `workspace_id`, el Broadcast privado por workspace y la conexión React mediante dependencias inyectadas están implementados. La creación, actualización y eliminación de sesiones, la selección activa por material y la sincronización bidireccional entre ventanas están validadas operacionalmente. Quote conserva únicamente `material.optimization.activeSessionId`; no existe `isActive` como fuente paralela. Permanecen pendientes la sincronización automática, resolución explícita de conflictos e historial remoto consolidado. Este cierre no declara finalizado el Smart Cut Optimizer completo.
+- **Smart Cut Engine / Cut Optimizer:** motor físico determinista, congelado y compatible con Legacy. La UI comparativa, Proposal Application Layer y Active Mode están implementados. Optimization Sessions está completado como dominio durable local y remoto con Source, Adapter, Local Repository, Remote Adapter, Remote Repository, Supabase Client Adapter, Application Repository, Repository Provider, Versioning, Storage, Offline Queue, Pending Operations Repository, Connectivity Provider, Sync Engine manual, Realtime Subscription, Reconciliation, Hook, Section, Summary y Selectors. Su experiencia y ciclo de vida están consolidados mediante Working Input y Working State canónicos, dirty determinista, baseline sincronizada, `expectedVersion` estable y recuperación segura al abrir o reconciliar una sesión. La tabla `optimization_sessions`, sus políticas RLS, el trigger de inmutabilidad de `workspace_id`, el Broadcast privado por workspace y la conexión React mediante dependencias inyectadas están implementados. La creación, actualización repetitiva y eliminación de sesiones, la selección activa por material, la recuperación tras reconexión y la sincronización bidireccional entre ventanas están validadas operacionalmente. Quote conserva únicamente `material.optimization.activeSessionId`; no existe `isActive` como fuente paralela. Permanecen pendientes la sincronización automática, resolución avanzada de conflictos e historial remoto consolidado. Este cierre no declara finalizado el Smart Cut Optimizer completo.
 - **Business State:** adapter central derivado y sin persistencia. Agrega summaries existentes y expone proyecto, cliente, cotización, producción, compras, workflow, salud, riesgos, pendientes, actividad, alertas, indicadores, última actualización y read only sin apropiarse de los dominios.
 - **Workspace:** aislamiento y permisos como contexto empresarial; el indicador permanente de workspace del sistema sigue pendiente.
 - **Brand System:** infraestructura visual consolidada en 25.2E con tokens JavaScript y CSS, tema funcional, helpers, componentes `BR*`, clases de layout y capas separadas de accesibilidad e impresión.
@@ -132,6 +132,8 @@ Sync Engine
 
 `repositoryProvider.js` es el punto único de composición. El Hook consume exclusivamente Application Repository; Application Repository delega en Sync Engine; y el Sync Engine coordina Local Repository, Pending Operations Repository, conectividad, Remote Repository y reconciliación Realtime. La suscripción utiliza un único canal Broadcast privado por workspace, valida filas mediante Remote Adapter y solo escribe en caché local cuando la comparación de versiones y operaciones pendientes lo permite. Realtime de Optimization Sessions sincroniza el contenido de las sesiones; Realtime de Cotizaciones sincroniza `material.optimization.activeSessionId` dentro de `form_data`. El adapter de cotizaciones conserva el formulario completo y `QuoteRepository.subscribeQuotes` entrega esos cambios sin retirar `form_data`. El dominio continúa dependiendo únicamente de contratos abstractos. Supabase es una implementación concreta, inyectable y sustituible, y la UI no lo importa directamente.
 
+Durante una sesión abierta, `workingInput` es la única fuente de verdad editable. `workingState` coordina la baseline, la versión esperada, el dirty y los conflictos sin convertirlos en estado persistente paralelo. Material Calculator y Cut Optimizer reconstruyen su interfaz y su cálculo desde ese contrato: la selección aplicada se conserva al navegar, las sesiones legacy se normalizan al abrirse y una caché local incompleta puede recuperarse desde la sesión durable. La sesión abierta continúa siendo estado temporal de interfaz; la sesión activa continúa determinada exclusivamente por `material.optimization.activeSessionId` en Quote.
+
 ### Fuentes oficiales de verdad verificadas
 
 | Contrato | Fuente oficial | Consumidores o representación |
@@ -144,6 +146,7 @@ Sync Engine
 | Integridad | Colecciones locales reales y lecturas Supabase bajo RLS | `runIntegrityAudit()` y su reporte; Business State no es fuente de auditoría. |
 | Estado empresarial transversal | Summaries de cada dominio agregados por `getBusinessState()` | FLDSMDFR y consumidores futuros; nunca se persiste como verdad paralela. |
 | Entrada persistente de optimización | Quote y su configuración de material | Smart Cut consume una copia normalizada, no muta la entrada y devuelve candidatos, diagnósticos y propuestas. |
+| Entrada editable de una sesión abierta | `workingInput` canónico | Material Calculator y Cut Optimizer consumen la misma entrada. Conserva `selectedPieceIds`, `selectedCandidateId`, `strategy` y `pieceOrder`; baseline y Working State permiten detectar cambios reales sin una segunda fuente editable. |
 | Resultado activo de optimización | `material.optimization.activeSessionId` en Quote | Es la única referencia canónica que determina qué Optimization Session alimenta la cotización. Material Calculator consume sus métricas activas; una referencia inexistente u obsoleta activa el fallback Legacy. |
 | Branding activo | Recursos de `public/branding`, manifest, favicons, tokens y capas CSS oficiales | Login, shell, encabezado, PWA, documentos y adopción incremental de superficies. Los tokens del Design System son la referencia visual oficial desde 25.2E. |
 
@@ -191,7 +194,7 @@ Production
 Fabrication
 ```
 
-Optimization Session conserva el resultado técnico completo de la ejecución: geometría, candidatos, configuración y métricas. Quote no copia ese contenido y mantiene únicamente `material.optimization.activeSessionId`, referencia canónica y única para determinar qué sesión alimenta la cotización. La aplicación lee y escribe sesiones mediante Hook → Application Repository → Sync Engine; online utiliza Remote Repository y actualiza la caché local después de la confirmación remota, y offline utiliza Local Repository y Pending Operations Repository. Realtime de sesiones sincroniza INSERT, UPDATE y DELETE; Realtime de Cotizaciones integra el cambio de `activeSessionId` remoto en el formulario local y actualiza la interfaz aunque esa referencia sea el único campo modificado. Al eliminar una sesión activa, el flujo de Quote limpia la referencia correspondiente. La sincronización disponible continúa siendo manual mediante `syncPendingOperations()`; sincronización automática, resolución explícita de conflictos e historial remoto consolidado permanecen pendientes.
+Optimization Session conserva el resultado técnico completo de la ejecución: geometría, candidatos, configuración y métricas. Quote no copia ese contenido y mantiene únicamente `material.optimization.activeSessionId`, referencia canónica y única para determinar qué sesión alimenta la cotización. La aplicación lee y escribe sesiones mediante Hook → Application Repository → Sync Engine; online utiliza Remote Repository y actualiza la caché local después de la confirmación remota, y offline utiliza Local Repository y Pending Operations Repository. Realtime de sesiones sincroniza INSERT, UPDATE y DELETE; Realtime de Cotizaciones integra el cambio de `activeSessionId` remoto en el formulario local y actualiza la interfaz aunque esa referencia sea el único campo modificado. Al eliminar una sesión activa, el flujo de Quote limpia la referencia correspondiente. La sincronización disponible continúa siendo manual mediante `syncPendingOperations()`; sincronización automática, resolución avanzada de conflictos e historial remoto consolidado permanecen pendientes.
 
 ## 7. Roadmap maestro por etapas
 
@@ -558,16 +561,16 @@ optimization:
 | Proposal Application Layer | Completa |
 | Active Mode | Completo |
 | Persistencia | Completada en alcance local/remoto: Storage local, versionado, Offline Queue legacy, Remote Adapter, Remote Repository, Supabase Client Adapter, tabla SQL, RLS, trigger de workspace, conexión React, Pending Operations Repository y Sync Engine manual implementados |
-| Optimization Sessions | Completado como dominio durable local/remoto, integrado con Cotización y validado bidireccionalmente por Realtime |
-| Experiencia y ciclo de vida de Sessions | Completados: sesión abierta separada de sesión activa, cambios sin guardar deterministas, confirmaciones y protección ante actualizaciones remotas |
+| Optimization Sessions | Completado como dominio durable local/remoto, integrado con Cotización, consolidado en experiencia y ciclo de vida y validado bidireccionalmente por Realtime |
+| Experiencia y ciclo de vida de Sessions | Consolidados: Working Input y Working State canónicos, sesión abierta separada de sesión activa, dirty determinista, baseline sincronizada, `expectedVersion` estable, guardado y actualización repetitiva, recuperación tras reconexión o caché incompleta y confirmación exclusiva ante conflictos remotos reales |
 | Remanentes reutilizables | Pendientes |
-| Historial de optimizaciones | Pendiente |
-| Sincronización | Sync Engine manual implementado; sincronización automática y resolución de conflictos pendientes |
+| Historial remoto de optimizaciones | Pendiente |
+| Sincronización | Sync Engine manual y Realtime bidireccional implementados; sincronización automática y resolución avanzada de conflictos pendientes |
 | Realtime | Implementado y validado operacionalmente para crear, actualizar, eliminar y cambiar la referencia activa entre ventanas |
 | Supabase | Client Adapter, tabla `optimization_sessions`, RLS, trigger de inmutabilidad de workspace y conexión desde la aplicación implementados |
 | Integración definitiva con Inventario | Pendiente |
 
-Smart Cut es actualmente uno de los módulos técnicamente más maduros del proyecto. Optimization Sessions es un dominio durable local y remoto con Remote Adapter, Remote Repository abstracto, Supabase Client Adapter inyectable, SQL, RLS, Application Repository, Sync Engine manual y Realtime desacoplado por workspace. Su integración con Cotización usa exclusivamente `material.optimization.activeSessionId`, y Material Calculator presenta las métricas de la sesión activa. Persistencia remota, CRUD Realtime, selección activa bidireccional y experiencia segura de apertura y actualización están implementados; sincronización automática, resolución explícita de conflictos, historial remoto consolidado, remanentes e integración definitiva con Inventario siguen pendientes. El motor físico permanece desacoplado y congelado, pero Smart Cut Optimizer completo no se declara finalizado.
+Smart Cut es actualmente uno de los módulos técnicamente más maduros del proyecto. Optimization Sessions es un dominio durable local y remoto con Remote Adapter, Remote Repository abstracto, Supabase Client Adapter inyectable, SQL, RLS, Application Repository, Sync Engine manual y Realtime desacoplado por workspace. Su integración con Cotización usa exclusivamente `material.optimization.activeSessionId`, y Material Calculator presenta las métricas de la sesión activa. Persistencia remota, CRUD Realtime, selección activa bidireccional y el ciclo completo de apertura, edición, guardado, actualización repetitiva, reconciliación y recuperación están consolidados. `strategy` representa únicamente la estrategia física (`shelf` / `best-fit`); `pieceOrder` representa únicamente el orden de alimentación (`largest-first` / `input-order`). Ambos se persisten por separado junto con `selectedPieceIds` y `selectedCandidateId`. Permanecen pendientes la sincronización automática, resolución avanzada de conflictos, historial remoto consolidado, remanentes e integración definitiva con Inventario. El motor físico permanece desacoplado y congelado, pero Smart Cut Optimizer completo no se declara finalizado.
 
 La persistencia remota, el Sync Engine y esta integración no modificaron Smart Cut Engine, geometría, estrategias, candidatos, evaluación, selección, Proposal ni Active Mode. El cambio en Quote se limita al flujo oficial que persiste y reconcilia `material.optimization.activeSessionId`; no copia el resultado técnico de la sesión.
 
@@ -595,12 +598,18 @@ Componentes verificados:
 - Material Calculator consume las métricas de la sesión activa sin copiar el resultado técnico completo a Quote.
 - Eliminar una sesión activa limpia `activeSessionId` mediante el flujo persistente y Realtime de Cotizaciones.
 - La sesión abierta es estado temporal del Hook y puede ser distinta de la sesión activa; abrir no modifica Quote y marcar como activa no cambia la sesión abierta.
-- La firma editable se deriva de la serialización canónica, excluye versionado, timestamps, auditoría y `durationMs`, y distingue de forma determinista **Sin cambios** de **Cambios sin guardar**.
-- Actualizar solo opera sobre la sesión abierta, requiere cambios locales y confirmación explícita, usa Application Repository y limpia el estado dirty después de la confirmación.
+- `workingInput` y `workingState` son los contratos canónicos de edición: baseline y Working se sincronizan al abrir, guardar, actualizar y aceptar una revisión remota limpia.
+- La firma editable se deriva de la serialización canónica, incluye la selección y configuración persistibles, excluye versionado, timestamps, auditoría y `durationMs`, y distingue de forma determinista **Sin cambios** de **Cambios sin guardar**.
+- `expectedVersion` avanza con la baseline aceptada y permite actualizar repetidamente una sesión sin cerrarla ni recargarla.
+- Actualizar solo opera sobre la sesión abierta, requiere cambios locales, usa Application Repository y limpia el estado dirty después de la confirmación. La confirmación de sobrescritura aparece únicamente ante un conflicto remoto real.
 - Cambiar de sesión con cambios pendientes exige cancelar o descartar; no existe guardado automático, duplicación ni merge implícito.
-- Realtime adopta una versión remota cuando el estado abierto está limpio; si existen cambios locales, preserva el borrador y muestra **Conflicto pendiente** sin escribir ni sincronizar automáticamente.
+- Realtime adopta una versión remota cuando el estado abierto está limpio; si existen cambios locales y una revisión remota realmente posterior a la baseline, preserva el borrador y muestra **Conflicto pendiente** sin escribir ni sincronizar automáticamente.
+- La hidratación, el cambio de sesión y la creación limpian estados de conflicto obsoletos; la reconciliación entre ventanas y la recuperación después de reconexión no generan confirmaciones falsas.
+- La apertura recupera `selectedPieceIds`, `selectedCandidateId`, `strategy` y `pieceOrder`, incluso para sesiones legacy o cuando la caché local está incompleta.
+- Material Calculator y Cut Optimizer consumen `workingInput`; la selección aplicada sobrevive a la navegación y el cambio entre Shelf y Best Fit recalcula y actualiza inmediatamente el resultado visible.
+- Si un candidato guardado deja de existir tras recalcular, se resuelve de forma determinista el candidato recomendado sin desactivar la validación física.
 
-La fase no incluye sincronización automática, reintentos automáticos, Background Sync, merge, resolución automática de conflictos ni historial remoto consolidado.
+La fase no incluye sincronización automática, reintentos automáticos, Background Sync, merge, resolución avanzada de conflictos ni historial remoto consolidado.
 
 #### Validación manual bidireccional
 
@@ -615,7 +624,7 @@ La fase no incluye sincronización automática, reintentos automáticos, Backgro
 
 #### Validación del cierre técnico
 
-- `npm test`: 88 archivos y 707 pruebas aprobadas en el estado actual.
+- `npm test`: 90 archivos y 758 pruebas aprobadas en el estado final validado.
 - `npm run build`: correcto.
 - `git diff --check`: correcto, sin errores de whitespace.
 - Realtime bidireccional validado operacionalmente en dos ventanas.
@@ -654,7 +663,7 @@ Este orden es oficial. El adelanto técnico de Smart Cut no renumera Recepción 
 | Recepción | Interfaz existente y fuente reutilizable; dominio incompleto | La pantalla deriva partidas y conserva cambios en estado React. Respeta el modo de solo lectura, pero no tiene todavía modelo durable, repository, storage ni movimientos propios. |
 | Inventario | Interfaz existente y fuente reutilizable; dominio incompleto | Summary puro disponible; la pantalla calcula sobre datos de cotización y estado React y deshabilita edición en proyectos entregados. Falta modelo por movimientos y persistencia. |
 | Fabricación | Interfaz existente y fuente reutilizable; dominio incompleto | Consume el summary oficial Legacy o Smart Cut activo y válido sin recalcular geometría, candidatos ni costos. Respeta el modo de solo lectura; checklist, progreso y notas no son todavía un dominio durable. |
-| Smart Cut Engine / Cut Optimizer | Motor congelado y dominio de sesiones durable local/remoto con Realtime | Motor, Shelf, Best Fit, candidatos, evaluación, ranking, selección, recomendación, UI comparativa, Proposal y Active Mode tienen cierre técnico. Optimization Session conserva el resultado técnico completo; Quote conserva únicamente `activeSessionId`. Source, Adapter, repositories, Supabase Client Adapter, Repository Provider, versionado, storage, colas, Sync Engine manual, Realtime, Hook, Section, Summary y Selectors están implementados. CRUD, selección activa y consolidación de experiencia y ciclo de vida están implementados. Faltan sincronización automática, resolución explícita de conflictos, historial remoto, remanentes e integración definitiva con Inventario; Smart Cut Optimizer completo no se declara finalizado. |
+| Smart Cut Engine / Cut Optimizer | Motor congelado y dominio de sesiones durable local/remoto con Realtime | Motor, Shelf, Best Fit, candidatos, evaluación, ranking, selección, recomendación, UI comparativa, Proposal y Active Mode tienen cierre técnico. Optimization Session conserva el resultado técnico completo; Quote conserva únicamente `activeSessionId`. Source, Adapter, repositories, Supabase Client Adapter, Repository Provider, versionado, storage, colas, Sync Engine manual, Realtime, Hook, Section, Summary y Selectors están implementados. CRUD, selección activa y consolidación de experiencia y ciclo de vida están implementados. Faltan sincronización automática, resolución avanzada de conflictos, historial remoto, remanentes e integración definitiva con Inventario; Smart Cut Optimizer completo no se declara finalizado. |
 | Instalación | Pendiente como dominio | Existe como etapa, permiso y estado de workflow; no existe aún un dominio durable independiente. |
 | Entrega | Estado terminal implementado; dominio de evidencia pendiente | `Entregado` existe en Producción, activa read only y se refleja como `Terminada` en Cotización. Faltan evidencia, firma y un dominio de cierre operacional independiente. |
 | Historial | Operativo parcialmente | Cuenta con motor, summary, respaldo local y fundamentos remotos. Los proyectos entregados pueden abrirse y consultarse sin permitir cancelación, cambio de estado o eliminación. No equivale todavía a un historial transversal completo de todos los dominios. |
@@ -1007,18 +1016,31 @@ Las fechas no verificables se mantienen como **Pendiente de validación**; no se
 - Conflictos preservados sin resolución automática.
 - Hook con apertura, limpieza y cambio de workspace sin importar Supabase.
 - Integración bidireccional de `activeSessionId` validada en dos ventanas.
-- 88 archivos y 707 pruebas aprobadas; build y `git diff --check` correctos.
+- Recuperación tras reconexión y reconciliación estable entre ventanas.
+- 90 archivos y 758 pruebas aprobadas; build y `git diff --check` correctos.
 
 **Experiencia y ciclo de vida implementados:**
 
+- Working Input canónico como única fuente editable mientras una sesión está abierta.
+- Working State canónico para baseline, versión, dirty, conflicto y operación en curso.
 - La UI distingue **Abrir**, **Actualizar** y **Marcar como activa** sin convertir la sesión abierta en fuente persistente.
 - Las insignias **Abierta** y **Activa** pueden coexistir o pertenecer a sesiones diferentes.
 - **Actualizar sesión** queda deshabilitado sin sesión abierta, sin cambios, en modo solo lectura, durante una mutación o ante una versión remota pendiente.
-- Sobrescribir requiere confirmación explícita; cancelar no modifica el estado ni ejecuta persistencia.
+- La confirmación para sobrescribir aparece únicamente cuando una revisión remota real supera la baseline mientras existen cambios locales; se eliminaron los conflictos falsos de hidratación y apertura.
+- Cancelar una confirmación no modifica el estado ni ejecuta persistencia.
 - Abrir otra sesión con cambios locales exige cancelar o descartar antes del cambio.
 - El estado dirty se calcula mediante firma canónica determinista y excluye `durationMs`.
+- Baseline y Working se sincronizan después de abrir, guardar, actualizar o adoptar una revisión remota limpia; `expectedVersion` conserva la versión aceptada más reciente.
+- **Guardar nueva sesión** y **Actualizar sesión** son estables; una sesión puede actualizarse repetidamente sin cerrarla ni recargarla.
 - Eliminar la sesión abierta limpia el estado temporal; si además era activa, se conserva el flujo existente que limpia `activeSessionId` en Quote.
-- Realtime refresca la sesión abierta limpia y preserva el borrador local ante una versión remota más reciente.
+- Realtime refresca la sesión abierta limpia, preserva el borrador local ante una versión remota más reciente y recupera el estado después de reconexión.
+- La apertura reconstruye correctamente el estado desde la sesión durable y recupera datos cuando la caché local está incompleta.
+- `selectedPieceIds`, `selectedCandidateId`, `strategy` y `pieceOrder` se conservan al guardar, actualizar, reabrir y reconciliar por Realtime.
+- Las sesiones legacy continúan siendo compatibles mediante normalización aditiva.
+- Material Calculator y Cut Optimizer consumen `workingInput`; la selección aplicada permanece al navegar entre secciones.
+- Shelf y Best Fit cambian y recalculan de inmediato. `strategy` representa exclusivamente esa estrategia física.
+- `pieceOrder` representa exclusivamente el orden de alimentación `largest-first` o `input-order`; no se utiliza como alias de estrategia.
+- Los candidatos obsoletos se resuelven de forma determinista contra el resultado recalculado actual, manteniendo la validación física.
 - Los estados técnicos de conexión se presentan como **Conectando**, **Sincronizado**, **Trabajando sin conexión**, **Reconectando** o **Conflicto pendiente**.
 - La vinculación visible reúne sesión, material, cotización, candidato, última actualización y estados abierta/activa/dirty sin copiar geometría.
 
@@ -1034,7 +1056,7 @@ Las fechas no verificables se mantienen como **Pendiente de validación**; no se
 - **Actualizar sesión:** guarda el estado actual del optimizador sobre la sesión abierta, sin crear una sesión nueva y con confirmación antes de sobrescribir.
 - **Marcar como activa:** guarda el id de la sesión en `material.optimization.activeSessionId` y define qué sesión alimenta Material Calculator y la cotización. No sobrescribe ni modifica el contenido técnico de la sesión.
 
-Realtime no sustituye Sync Engine, versionado, cola ni confirmación remota. La sincronización automática, reintentos, Background Sync, merge, resolución de conflictos e historial remoto consolidado permanecen fuera de alcance. No se implementó duplicación de sesiones. Remanentes reutilizables continúa después de esta consolidación y seguirá perteneciendo durablemente a Inventario.
+Realtime no sustituye Sync Engine, versionado, cola ni confirmación remota. La sincronización automática, reintentos, Background Sync, merge, resolución avanzada de conflictos e historial remoto consolidado permanecen fuera de alcance. No se implementó duplicación de sesiones. Remanentes reutilizables continúa después de esta consolidación y seguirá perteneciendo durablemente a Inventario.
 
 **Siguiente paso técnico previsto:** Remanentes reutilizables, después de que Inventario disponga del contrato durable necesario. La siguiente fase funcional oficial continúa siendo 25.5 — Recepción Durable.
 
@@ -1172,6 +1194,7 @@ El congelamiento aplica únicamente a la infraestructura visual. No limita la ev
 | 28/07/2026 | Optimization Sessions — Realtime | Broadcast privado por workspace, reconciliación segura de INSERT/UPDATE/DELETE, prevención de ecos y duplicados, preservación de conflictos e integración Hook → Application Repository implementados. |
 | 29/07/2026 | Optimization Sessions — Cotización, referencia activa y Realtime | Cierre integrado mediante `6a61cfc` (`fix: synchronize active optimization session through realtime`). Creación, actualización, eliminación y cambio de sesión activa validados bidireccionalmente en dos ventanas; Quote conserva únicamente `material.optimization.activeSessionId`, Material Calculator muestra las métricas activas y la eliminación limpia la referencia. Validación: 86 archivos, 694 pruebas, build y `git diff --check` correctos; push completado a `origin/main`. |
 | 29/07/2026 | Optimization Sessions — consolidación de experiencia y ciclo de vida | Sesión abierta temporal separada de sesión activa, firma dirty determinista, confirmaciones de descarte y sobrescritura, actualización exclusiva de la sesión abierta, mensajes comprensibles y reconciliación Realtime segura implementados. Validación: 88 archivos, 707 pruebas, build y `git diff --check` correctos; sin commit ni push. |
+| 30/07/2026 | Optimization Sessions — cierre de consolidación del dominio | Working Input y Working State canónicos; baseline, dirty y `expectedVersion` estables; guardado y actualización repetitiva; persistencia separada de `selectedPieceIds`, `selectedCandidateId`, `strategy` y `pieceOrder`; recuperación, reconciliación Realtime y compatibilidad legacy consolidadas. Material Calculator y Cut Optimizer consumen `workingInput`; Shelf y Best Fit cambian de inmediato sin modificar el Smart Cut Engine. Validación: 90 archivos, 758 pruebas, build correcto y `git diff --check` limpio; sin commit ni push. |
 | Próximo paso técnico previsto | Smart Cut / Inventario | Remanentes reutilizables, después del contrato durable requerido en Inventario. |
 | Próxima fase funcional | 25.5 | Recepción Durable. |
 
@@ -1191,7 +1214,9 @@ Smart Cut UI .......... Completa
 Smart Cut Proposal .... Completa
 Smart Cut Active Mode . Completo
 Optimization Sessions . Durable local + remoto, integrado con Cotización
-Experiencia Sessions .. Consolidada y validada
+Experiencia Sessions .. Ciclo de vida consolidado y validado
+Working Input ......... Fuente editable canónica
+Working State ......... Baseline, dirty y versión canónicos
 Remote Adapter ........ Implementado
 Remote Repository ..... Implementado
 Supabase Adapter ...... Implementado
