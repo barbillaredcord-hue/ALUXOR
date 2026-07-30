@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   closeOptimizationSession,
+  hydrateOptimizationSession,
   reopenOptimizationSession,
 } from '../optimization-session/session.js';
 import {
@@ -282,6 +283,74 @@ describe('Optimization Sessions Sync Engine', () => {
     expect(context.local.replaceQuoteCache).toHaveBeenCalledOnce();
     expect(context.local.getSessionsByQuote(WORKSPACE_ID, QUOTE_ID).data)
       .toEqual([remoteSession]);
+  });
+
+  it('la hidratación remota corrige una caché incompleta usando session.id', async () => {
+    const first = session({
+      id: 'session-first',
+      executionId: 'execution-first',
+      inputSignature: 'same-input-signature',
+      createdBy: 'user-a',
+      lastModifiedBy: 'user-a',
+    });
+    const second = session({
+      id: 'session-second',
+      executionId: 'execution-second',
+      inputSignature: 'same-input-signature',
+      createdBy: 'user-b',
+      lastModifiedBy: 'user-b',
+    });
+    const context = setup({ remoteSessions: [first, second] });
+    context.local.cacheSession(WORKSPACE_ID, first);
+
+    const result = await context.engine.getSessionsByQuote(
+      WORKSPACE_ID,
+      QUOTE_ID,
+    );
+
+    expect(result.data.map((entry) => entry.id)).toEqual([
+      first.id,
+      second.id,
+    ]);
+    expect(context.local.getSessionsByQuote(WORKSPACE_ID, QUOTE_ID).data
+      .map((entry) => entry.id)).toEqual([first.id, second.id]);
+  });
+
+  it('después de aceptar v2 actualiza con expectedVersion 2 y persiste v3', async () => {
+    const versionOne = session();
+    const closed = close(versionOne);
+    const versionTwo = hydrateOptimizationSession({
+      ...closed,
+      version: 2,
+    }).session;
+    const context = setup({ remoteSessions: [versionTwo] });
+    context.local.cacheSession(WORKSPACE_ID, versionOne);
+
+    const hydrated = await context.engine.getSessionsByQuote(
+      WORKSPACE_ID,
+      QUOTE_ID,
+    );
+    const edited = reopenOptimizationSession(hydrated.data[0], {
+      changedAt: '2026-07-26T16:00:00.000Z',
+      changedBy: 'user-a',
+    }).session;
+    const updated = await context.engine.updateSession(
+      WORKSPACE_ID,
+      edited,
+      2,
+    );
+
+    expect(hydrated.data[0].version).toBe(2);
+    expect(context.remote.update).toHaveBeenCalledWith(
+      expect.objectContaining({ id: versionOne.id, version: 3 }),
+      2,
+    );
+    expect(updated).toMatchObject({
+      data: { id: versionOne.id, version: 3 },
+      error: null,
+      syncStatus: 'synced',
+    });
+    expect(context.remoteData.get(versionOne.id).version).toBe(3);
   });
 
   it('offline lee sólo local y nunca llama remoto', async () => {

@@ -4,13 +4,26 @@ import { optimizeCuts } from '../lib/cut-optimizer/optimizer.js';
 import { createUuid } from '../lib/identity/createUuid.js';
 import { convertLength } from '../lib/material-calculator/engine.js';
 import {
+  buildOptimizationSessionSummary,
   createOptimizationSessionFromResult,
+  normalizeOptimizationSessionWorkingInput,
+  optimizationSessionCandidateStrategy,
+  optimizationSessionPieceOrder,
+  optimizationSessionWorkingInputFromSession,
+  optimizationSessionWorkingInputSignature,
+  reviseOptimizationSession,
+  sessionWithOptimizationWorkingInput,
 } from '../lib/optimization-session/index.js';
 import OptimizationSessionsSection from './OptimizationSessionsSection.jsx';
 
-const strategyLabels = {
+const pieceOrderLabels = {
   'largest-first': 'Largest First / Mayor área',
   'input-order': 'Orden capturado',
+};
+
+const candidateStrategyLabels = {
+  shelf: 'Shelf',
+  'best-fit': 'Best Fit',
 };
 
 export function resolveVisibleCutOptimization({
@@ -43,11 +56,33 @@ export function buildOptimizationSessionFromCurrentResult({
   quoteId,
   userId,
   createdAt,
+  workingInput = null,
   createId = createUuid,
 } = {}) {
   const candidates = Array.isArray(result?.candidates) ? result.candidates : [];
   const candidateSignature = candidates.map((candidate) => candidate.id).join('|');
-  return createOptimizationSessionFromResult({
+  const selectedCandidateId = candidates.some((candidate) => candidate.id === result?.id)
+    ? result.id
+    : null;
+  const normalizedWorkingInputBase = workingInput
+    ? normalizeOptimizationSessionWorkingInput(workingInput)
+    : null;
+  const normalizedWorkingInput = normalizedWorkingInputBase
+    ? normalizeOptimizationSessionWorkingInput({
+      ...normalizedWorkingInputBase,
+      selectedCandidateId,
+      strategy: result?.strategy || normalizedWorkingInputBase.strategy,
+      pieceOrder: result?.config?.strategy
+        || optimizationSessionPieceOrder(normalizedWorkingInputBase),
+    })
+    : null;
+  const resultSummary = buildOptimizationSessionSummary({
+    selectedResult: result,
+    workingInput: normalizedWorkingInput,
+    material,
+    reviewedAt: createdAt,
+  });
+  const creation = createOptimizationSessionFromResult({
     optimizationResult: result,
     id: createId(),
     executionId: createId(),
@@ -56,28 +91,308 @@ export function buildOptimizationSessionFromCurrentResult({
     materialId: material?.id,
     createdAt,
     createdBy: userId,
-    inputSignature: material?.optimization?.inputSignature
+    inputSignature: normalizedWorkingInput
+      ? optimizationSessionWorkingInputSignature(normalizedWorkingInput)
+      : material?.optimization?.inputSignature
       || `cut-result-v1:${candidateSignature}`,
-    selectedCandidateId: result?.id || null,
+    selectedCandidateId,
     configuration: {
       source: 'cut-optimizer-ui',
       sheetWidth: result?.config?.sheetWidth ?? 0,
       sheetHeight: result?.config?.sheetHeight ?? 0,
       kerf: result?.config?.kerf ?? 0,
       allowRotation: result?.config?.allowRotation ?? false,
-      strategy: result?.config?.strategy || 'largest-first',
+      strategy: result?.strategy || 'shelf',
+      pieceOrder: result?.config?.strategy || 'largest-first',
     },
-    metadata: {
-      source: 'cut-optimizer-ui',
-      materialName: String(material?.nombre || material?.name || material?.id || ''),
-      usedArea: result?.summary?.usedArea ?? 0,
-      utilization: result?.summary?.utilization ?? 0,
-      wasteArea: result?.summary?.wasteArea ?? 0,
-      sheetsRequired: result?.summary?.requiredSheets ?? 0,
-      selectedCandidateId: String(result?.id || ''),
-      strategy: String(result?.strategy || result?.config?.strategy || ''),
-    },
+    metadata: resultSummary,
   });
+  if (!creation.success || !normalizedWorkingInput) return creation;
+  return {
+    ...creation,
+    session: sessionWithOptimizationWorkingInput(
+      creation.session,
+      normalizedWorkingInput,
+    ),
+  };
+}
+
+export function buildOptimizationSessionRevisionFromCurrentResult({
+  session,
+  result,
+  material,
+  userId,
+  changedAt,
+  workingInput = null,
+  reviewedAt = changedAt,
+} = {}) {
+  const candidates = Array.isArray(result?.candidates) ? result.candidates : [];
+  const candidateIds = candidates.map((candidate) => candidate.id).sort();
+  const selectedCandidateId = candidateIds.includes(result?.id) ? result.id : null;
+  const normalizedWorkingInputBase = workingInput
+    ? normalizeOptimizationSessionWorkingInput(workingInput)
+    : optimizationSessionWorkingInputFromSession(session);
+  const normalizedWorkingInput = normalizedWorkingInputBase
+    ? normalizeOptimizationSessionWorkingInput({
+      ...normalizedWorkingInputBase,
+      selectedCandidateId,
+      strategy: result?.strategy || normalizedWorkingInputBase.strategy,
+      pieceOrder: result?.config?.strategy
+        || optimizationSessionPieceOrder(normalizedWorkingInputBase),
+    })
+    : null;
+  const resultSummary = buildOptimizationSessionSummary({
+    selectedResult: result,
+    workingInput: normalizedWorkingInput,
+    material,
+    reviewedAt,
+  });
+  const revision = reviseOptimizationSession(session, {
+    changedAt,
+    changedBy: userId,
+    engineVersion: result?.metadata?.contractVersion ?? session?.engineVersion,
+    inputSignature: normalizedWorkingInput
+      ? optimizationSessionWorkingInputSignature(normalizedWorkingInput)
+      : material?.optimization?.inputSignature
+      || session?.inputSignature
+      || `cut-result-v1:${candidateIds.join('|')}`,
+    configuration: {
+      ...(session?.configuration || {}),
+      source: 'cut-optimizer-ui',
+      sheetWidth: result?.config?.sheetWidth ?? 0,
+      sheetHeight: result?.config?.sheetHeight ?? 0,
+      kerf: result?.config?.kerf ?? 0,
+      allowRotation: result?.config?.allowRotation ?? false,
+      strategy: result?.strategy || session?.configuration?.strategy || 'shelf',
+      pieceOrder: result?.config?.strategy
+        || session?.configuration?.pieceOrder
+        || 'largest-first',
+    },
+    candidateIds,
+    recommendedCandidateId: candidateIds.includes(result?.recommendedCandidateId)
+      ? result.recommendedCandidateId
+      : null,
+    selectedCandidateId,
+    metadata: resultSummary,
+  });
+  if (!revision.success || !normalizedWorkingInput) return revision;
+  return {
+    ...revision,
+    session: sessionWithOptimizationWorkingInput(
+      revision.session,
+      normalizedWorkingInput,
+    ),
+  };
+}
+
+export function buildOptimizationSessionWorkingInputFromCut({
+  session,
+  quote,
+  material,
+} = {}) {
+  return normalizeOptimizationSessionWorkingInput({
+    type: 'sheet',
+    materialId: session?.materialId || material?.id,
+    selectedPieceIds: (quote?.measureRows || []).map((piece) => piece.id),
+    selectedCandidateId: session?.selectedCandidateId,
+    unit: 'cm',
+    thickness: material?.grosor ?? 16,
+    formatWidth: session?.configuration?.sheetWidth ?? material?.ancho ?? 122,
+    formatHeight: session?.configuration?.sheetHeight ?? material?.alto ?? 244,
+    price: material?.costoUnitario ?? 0,
+    wastePercent: material?.merma ?? 0,
+    marginPercent: material?.margen ?? 0,
+    allowRotation: session?.configuration?.allowRotation ?? true,
+    grainDirection: session?.configuration?.grainDirection ?? false,
+    kerf: session?.configuration?.kerf ?? 0.3,
+    strategy: optimizationSessionCandidateStrategy({
+      strategy: session?.configuration?.strategy,
+      selectedCandidateId: session?.selectedCandidateId,
+    }) || session?.configuration?.strategy || 'largest-first',
+    pieceOrder: session?.configuration?.pieceOrder
+      || optimizationSessionPieceOrder(session?.configuration),
+    margins: session?.configuration?.margins,
+    blockedRegions: session?.configuration?.blockedRegions,
+    reservedRegions: session?.configuration?.reservedRegions,
+  });
+}
+
+export function resolveOptimizationWorkingCutResult(result, workingInput) {
+  if (!workingInput) return result;
+  const { candidate } = resolveOptimizationWorkingCandidate(result, workingInput);
+  if (!candidate) return result;
+  return {
+    ...result,
+    ...candidate,
+    hojas: candidate.sheets,
+    piezasColocadas: candidate.placedPieces,
+    piezasNoColocadas: candidate.unplacedPieces,
+    purchasing: { sheetsToBuy: candidate.summary.requiredSheets },
+    manufacturing: { totalCuts: candidate.placedPieces.length },
+  };
+}
+
+export function resolveOptimizationWorkingCandidate(result, workingInput) {
+  const candidates = Array.isArray(result?.candidates) ? result.candidates : [];
+  const requestedCandidateId = workingInput?.selectedCandidateId || null;
+  const requestedCandidate = requestedCandidateId
+    ? candidates.find((item) => item.id === requestedCandidateId)
+    : null;
+  const requestedStrategy = optimizationSessionCandidateStrategy(workingInput);
+  const strategyCandidate = requestedStrategy
+    ? candidates.find((item) => item.strategy === requestedStrategy)
+    : null;
+  const recommendedCandidate = candidates.find((item) => (
+    item.id === result?.recommendedCandidateId
+  )) || null;
+  const candidate = strategyCandidate || requestedCandidate || recommendedCandidate;
+  return {
+    candidate,
+    requestedCandidateId,
+    resolvedCandidateId: candidate?.id || null,
+    requestedCandidateAvailable: Boolean(requestedCandidate),
+    usedRecommendedFallback: Boolean(
+      requestedCandidateId
+      && candidate
+      && candidate.id !== requestedCandidateId
+    ),
+  };
+}
+
+export function getOptimizationResultCompatibility({
+  result,
+  recalculatedResult,
+  workingInput,
+  sourcePieceCount,
+} = {}) {
+  const pending = {
+    compatible: false,
+    code: 'recalculation-pending',
+    reason: 'El resultado actual está pendiente de recálculo.',
+    resultId: result?.id || null,
+    expectedId: null,
+    sourcePieceCount,
+    resultSourcePieceCount: result?.metadata?.sourcePieceCount,
+    resolvedCandidateId: null,
+    selectedCandidateObsolete: false,
+  };
+  if (!result || !recalculatedResult || !workingInput) return pending;
+
+  const candidateResolution = resolveOptimizationWorkingCandidate(
+    recalculatedResult,
+    workingInput,
+  );
+  const expected = resolveOptimizationWorkingCutResult(
+    recalculatedResult,
+    workingInput,
+  );
+  const details = {
+    resultId: result?.id || null,
+    expectedId: expected?.id || null,
+    sourcePieceCount,
+    resultSourcePieceCount: result?.metadata?.sourcePieceCount,
+    resolvedCandidateId: candidateResolution.resolvedCandidateId,
+    selectedCandidateObsolete: candidateResolution.usedRecommendedFallback,
+  };
+  if (!candidateResolution.candidate || !expected?.id) {
+    return {
+      compatible: false,
+      code: 'candidate-unavailable',
+      reason: 'El candidato seleccionado ya no está disponible y no existe una recomendación compatible.',
+      ...details,
+    };
+  }
+  if (result.id !== expected.id) {
+    return {
+      compatible: false,
+      code: candidateResolution.usedRecommendedFallback
+        ? 'candidate-unavailable'
+        : 'result-mismatch',
+      reason: candidateResolution.usedRecommendedFallback
+        ? 'El candidato anterior ya no está disponible; se está resolviendo el recomendado.'
+        : 'El resultado visible no corresponde al candidato recalculado actual.',
+      ...details,
+    };
+  }
+  if (result.complete === false) {
+    return {
+      compatible: false,
+      code: 'incomplete-result',
+      reason: 'El resultado recalculado está incompleto.',
+      ...details,
+    };
+  }
+  if (
+    result.validation?.isPhysicallyValid !== true
+    || result.valid === false
+  ) {
+    return {
+      compatible: false,
+      code: 'physically-invalid',
+      reason: 'El resultado recalculado no es físicamente válido.',
+      ...details,
+    };
+  }
+  const candidateSourcePieceCount = result.metadata?.sourcePieceCount;
+  if (
+    Number.isFinite(sourcePieceCount)
+    && Number.isFinite(candidateSourcePieceCount)
+    && candidateSourcePieceCount !== sourcePieceCount
+  ) {
+    return {
+      compatible: false,
+      code: 'piece-count-mismatch',
+      reason: 'La cantidad de filas de piezas del resultado no coincide con la entrada actual.',
+      ...details,
+    };
+  }
+  return {
+    compatible: true,
+    code: 'compatible',
+    reason: '',
+    ...details,
+  };
+}
+
+export function isOptimizationResultCompatibleWithWorkingInput({
+  result,
+  recalculatedResult,
+  workingInput,
+  sourcePieceCount,
+} = {}) {
+  return getOptimizationResultCompatibility({
+    result,
+    recalculatedResult,
+    workingInput,
+    sourcePieceCount,
+  }).compatible;
+}
+
+export async function persistAndOpenOptimizationSession({
+  session,
+  workingInput,
+  createSession,
+  openSession,
+  onSessionCreated,
+} = {}) {
+  if (!session || typeof createSession !== 'function') {
+    return {
+      data: null,
+      error: new Error('La sesión nueva no está lista para persistirse.'),
+    };
+  }
+  const response = await createSession(session);
+  if (response?.error || !response?.data) return response;
+  const savedInput = optimizationSessionWorkingInputFromSession(
+    response.data,
+    workingInput,
+  );
+  const opened = openSession?.(response.data, {
+    discardChanges: true,
+    workingInput: savedInput,
+  });
+  if (opened?.opened) onSessionCreated?.(response.data);
+  return response;
 }
 
 export async function deleteOptimizationSessionAndClearActiveReference({
@@ -103,6 +418,7 @@ export default function CutOptimizerSection({
   optimizationSessions = null,
   optimizationSessionContext = null,
   onActivateSessionReference,
+  onSessionCreated,
   onCalculateMaterial,
 }) {
   const initialMaterial = quote.materialRows?.[0];
@@ -122,22 +438,50 @@ export default function CutOptimizerSection({
   });
   const [useRecalculatedResult, setUseRecalculatedResult] = useState(false);
   const [sessionCreationError, setSessionCreationError] = useState(null);
+  const openedSession = optimizationSessions?.openedSession || null;
+  const openedSessionInput = optimizationSessions?.openedSessionInput || null;
+  const workingInputActive = Boolean(openedSession && openedSessionInput);
   const transferActive = Boolean(
     calculatorTransfer
     && (!calculatorTransfer.quoteId || calculatorTransfer.quoteId === contextQuoteId),
   );
+  const temporaryWorkingInput = transferActive
+    ? calculatorTransfer.workingInput || calculatorTransfer.config
+    : null;
+  const resolvedWorkingInput = workingInputActive
+    ? normalizeOptimizationSessionWorkingInput(openedSessionInput)
+    : temporaryWorkingInput
+      ? normalizeOptimizationSessionWorkingInput(temporaryWorkingInput)
+      : null;
   const selectedIds = useMemo(() => new Set(
-    transferActive ? calculatorTransfer.selectedPieceIds : [],
-  ), [calculatorTransfer, transferActive]);
-  const material = transferActive ? calculatorTransfer.material : quote.materialRows?.[0];
-  const sheetWidth = transferActive
+    workingInputActive
+      ? openedSessionInput.selectedPieceIds
+      : transferActive ? calculatorTransfer.selectedPieceIds : [],
+  ), [calculatorTransfer, openedSessionInput, transferActive, workingInputActive]);
+  const material = workingInputActive
+    ? quote.materialRows?.find((item) => item.id === openedSessionInput.materialId)
+      || quote.materialRows?.[0]
+    : transferActive ? calculatorTransfer.material : quote.materialRows?.[0];
+  const sheetWidth = workingInputActive
+    ? convertLength(
+      openedSessionInput.formatWidth,
+      openedSessionInput.unit,
+      'cm',
+    )
+    : transferActive
     ? convertLength(
       calculatorTransfer.config.formatWidth,
       calculatorTransfer.config.unit,
       'cm',
     )
     : material?.ancho || 122;
-  const sheetHeight = transferActive
+  const sheetHeight = workingInputActive
+    ? convertLength(
+      openedSessionInput.formatHeight,
+      openedSessionInput.unit,
+      'cm',
+    )
+    : transferActive
     ? convertLength(
       calculatorTransfer.config.formatHeight,
       calculatorTransfer.config.unit,
@@ -145,30 +489,107 @@ export default function CutOptimizerSection({
     )
     : material?.alto || 244;
   const piezas = useMemo(() => quote.measureRows
-    .filter((item) => !transferActive || selectedIds.has(item.id))
+    .filter((item) => (
+      workingInputActive || transferActive ? selectedIds.has(item.id) : true
+    ))
     .map((item) => ({
       id: item.id,
       name: item.nombre,
       width: item.ancho,
       height: item.alto,
       quantity: item.cantidad,
+      grainDirection: (
+        workingInputActive ? openedSessionInput : temporaryWorkingInput
+      )?.grainDirection
+        ? 'vertical'
+        : null,
     }))
     .filter((piece) => piece.width > 0 && piece.height > 0 && piece.quantity > 0),
-  [quote.measureRows, selectedIds, transferActive]);
-  const recalculatedResult = useMemo(() => optimizeCuts({
+  [quote.measureRows, selectedIds, transferActive, workingInputActive]);
+  const effectiveConfig = workingInputActive
+    ? openedSessionInput
+    : temporaryWorkingInput || config;
+  const effectivePieceOrder = optimizationSessionPieceOrder(effectiveConfig);
+  const effectiveKerf = workingInputActive || transferActive
+    ? convertLength(effectiveConfig.kerf, effectiveConfig.unit, 'cm') || 0
+    : effectiveConfig.kerf;
+  const rawRecalculatedResult = useMemo(() => optimizeCuts({
     sheetWidth,
     sheetHeight,
-    allowRotation: config.allowRotation,
-    kerf: config.kerf,
-    strategy: config.strategy,
+    allowRotation: effectiveConfig.grainDirection
+      ? false
+      : effectiveConfig.allowRotation,
+    kerf: effectiveKerf,
+    strategy: effectivePieceOrder,
+    margins: effectiveConfig.margins,
+    blockedRegions: effectiveConfig.blockedRegions,
+    reservedRegions: effectiveConfig.reservedRegions,
     pieces: piezas,
-  }), [sheetWidth, sheetHeight, piezas, config.allowRotation, config.kerf, config.strategy, run]);
+  }), [
+    sheetWidth,
+    sheetHeight,
+    piezas,
+    effectiveConfig.grainDirection,
+    effectiveConfig.allowRotation,
+    effectiveConfig.margins,
+    effectiveConfig.blockedRegions,
+    effectiveConfig.reservedRegions,
+    effectiveKerf,
+    effectivePieceOrder,
+    run,
+  ]);
+  const recalculatedResult = resolveOptimizationWorkingCutResult(
+    rawRecalculatedResult,
+    resolvedWorkingInput,
+  );
   const visibleOptimization = resolveVisibleCutOptimization({
     material,
     recalculatedResult,
-    useRecalculatedResult,
+    useRecalculatedResult: (
+      useRecalculatedResult || workingInputActive || transferActive
+    ),
   });
-  const result = visibleOptimization.result;
+  const result = resolvedWorkingInput
+    ? recalculatedResult
+    : visibleOptimization.result;
+  const currentResultCompatibility = !resolvedWorkingInput
+    ? {
+      compatible: true,
+      reason: '',
+      resolvedCandidateId: result?.id || null,
+      selectedCandidateObsolete: false,
+    }
+    : getOptimizationResultCompatibility({
+      result,
+      recalculatedResult: rawRecalculatedResult,
+      workingInput: resolvedWorkingInput,
+      sourcePieceCount: piezas.length,
+    });
+  const currentResultCompatible = currentResultCompatibility.compatible;
+  const creationWorkingInput = resolvedWorkingInput
+    || normalizeOptimizationSessionWorkingInput({
+      type: 'sheet',
+      materialId: material?.id,
+      selectedPieceIds: piezas.map((piece) => piece.id),
+      selectedCandidateId: result?.id,
+      unit: 'cm',
+      thickness: material?.grosor ?? 16,
+      formatWidth: result?.config?.sheetWidth ?? sheetWidth,
+      formatHeight: result?.config?.sheetHeight ?? sheetHeight,
+      price: material?.costoUnitario ?? 0,
+      wastePercent: material?.merma ?? 0,
+      marginPercent: material?.margen ?? 0,
+      allowRotation: result?.config?.allowRotation ?? effectiveConfig.allowRotation,
+      grainDirection: effectiveConfig.grainDirection ?? false,
+      kerf: result?.config?.kerf ?? effectiveKerf,
+      strategy: result?.strategy
+        || optimizationSessionCandidateStrategy(effectiveConfig)
+        || 'shelf',
+      pieceOrder: result?.config?.strategy || effectivePieceOrder,
+      margins: result?.config?.margins ?? effectiveConfig.margins,
+      blockedRegions: result?.config?.blockedRegions ?? effectiveConfig.blockedRegions,
+      reservedRegions: result?.config?.reservedRegions ?? effectiveConfig.reservedRegions,
+    });
 
   useEffect(() => {
     setUseRecalculatedResult(false);
@@ -194,11 +615,160 @@ export default function CutOptimizerSection({
     && sessionQuoteId
     && sessionActorId
     && optimizationSessions?.createSession
+    && currentResultCompatible
     && result?.validation?.isPhysicallyValid === true
   );
 
+  useEffect(() => {
+    if (
+      !workingInputActive
+      || !openedSessionInput
+      || !currentResultCompatibility.selectedCandidateObsolete
+      || !currentResultCompatibility.resolvedCandidateId
+      || openedSessionInput.selectedCandidateId
+        === currentResultCompatibility.resolvedCandidateId
+    ) return;
+    optimizationSessions?.setOpenedSessionInput?.({
+      ...openedSessionInput,
+      selectedCandidateId: currentResultCompatibility.resolvedCandidateId,
+      strategy: rawRecalculatedResult.candidates.find(
+        (candidate) => (
+          candidate.id === currentResultCompatibility.resolvedCandidateId
+        ),
+      )?.strategy || openedSessionInput.strategy,
+    }, {
+      changedAt: new Date().toISOString(),
+      changedBy: sessionActorId,
+    });
+  }, [
+    workingInputActive,
+    openedSessionInput,
+    currentResultCompatibility.resolvedCandidateId,
+    currentResultCompatibility.selectedCandidateObsolete,
+    optimizationSessions,
+    sessionActorId,
+  ]);
+
+  useEffect(() => {
+    if (!openedSession) return;
+    setConfig((current) => ({
+      ...current,
+      allowRotation: openedSessionInput?.allowRotation
+        ?? openedSession.configuration?.allowRotation
+        ?? current.allowRotation,
+      kerf: openedSessionInput?.kerf
+        ?? openedSession.configuration?.kerf
+        ?? current.kerf,
+      strategy: optimizationSessionPieceOrder(
+        openedSessionInput || openedSession.configuration,
+      ),
+    }));
+    setUseRecalculatedResult(true);
+    setSessionCreationError(null);
+  }, [openedSession?.id, openedSession?.version]);
+
+  function updateWorkingConfig(field, value) {
+    setUseRecalculatedResult(true);
+    if (workingInputActive) {
+      optimizationSessions.setOpenedSessionInput({
+        ...openedSessionInput,
+        [field]: value,
+      }, {
+        changedAt: new Date().toISOString(),
+        changedBy: sessionActorId,
+      });
+      return;
+    }
+    setConfig((current) => ({ ...current, [field]: value }));
+  }
+
+  function openOptimizationSession(session, options = {}) {
+    const sessionMaterial = quote.materialRows?.find(
+      (item) => item.id === session.materialId,
+    ) || quote.materialRows?.[0];
+    const fallback = buildOptimizationSessionWorkingInputFromCut({
+      session,
+      quote,
+      material: sessionMaterial,
+    });
+    return optimizationSessions.openSession(session, {
+      ...options,
+      workingInput: optimizationSessionWorkingInputFromSession(session, fallback),
+    });
+  }
+
+  function updateOpenedSessionFromCurrentResult() {
+    if (
+      !openedSession
+      || !sessionActorId
+      || !currentResultCompatible
+    ) {
+      return Promise.resolve({
+        data: null,
+        error: new Error(
+          'El resultado actual no coincide con la entrada abierta. Recalcula antes de actualizar.',
+        ),
+      });
+    }
+    const revision = buildOptimizationSessionRevisionFromCurrentResult({
+      session: openedSession,
+      result,
+      material,
+      userId: sessionActorId,
+      changedAt: new Date().toISOString(),
+      workingInput: resolvedWorkingInput,
+    });
+    if (!revision.success) {
+      return Promise.resolve({
+        data: null,
+        error: new Error('No fue posible preparar la revisión de la sesión.'),
+      });
+    }
+    return optimizationSessions.updateOpenedSession(revision.session);
+  }
+
+  function overwriteOpenedSessionFromCurrentResult() {
+    const remote = optimizationSessions.remoteUpdatePending;
+    if (
+      !remote
+      || !optimizationSessions.overwriteOpenedSession
+      || !sessionActorId
+      || !currentResultCompatible
+    ) {
+      return Promise.resolve({
+        data: null,
+        error: new Error('No existe una revisión remota válida para sobrescribir.'),
+      });
+    }
+    const revision = buildOptimizationSessionRevisionFromCurrentResult({
+      session: remote,
+      result,
+      material,
+      userId: sessionActorId,
+      changedAt: new Date().toISOString(),
+      workingInput: resolvedWorkingInput,
+    });
+    if (!revision.success) {
+      return Promise.resolve({
+        data: null,
+        error: new Error('No fue posible preparar la sobrescritura de la sesión.'),
+      });
+    }
+    return optimizationSessions.overwriteOpenedSession(revision.session);
+  }
+
   async function saveCurrentSession() {
     setSessionCreationError(null);
+    if (!currentResultCompatible) {
+      const error = new Error(
+        'El resultado actual no coincide con la entrada resuelta. Recalcula antes de guardar.',
+      );
+      setSessionCreationError({
+        code: 'OPTIMIZATION_SESSION_CREATION_RESULT_MISMATCH',
+        message: error.message,
+      });
+      return { data: null, error };
+    }
     const creation = buildOptimizationSessionFromCurrentResult({
       result,
       material,
@@ -206,6 +776,7 @@ export default function CutOptimizerSection({
       quoteId: sessionQuoteId,
       userId: sessionActorId,
       createdAt: new Date().toISOString(),
+      workingInput: creationWorkingInput,
     });
     if (!creation.success) {
       setSessionCreationError({
@@ -217,7 +788,13 @@ export default function CutOptimizerSection({
       });
       return { data: null, error: creation.errors };
     }
-    return optimizationSessions.createSession(creation.session);
+    return persistAndOpenOptimizationSession({
+      session: creation.session,
+      workingInput: creationWorkingInput,
+      createSession: optimizationSessions.createSession,
+      openSession: optimizationSessions.openSession,
+      onSessionCreated,
+    });
   }
 
   function mutationOptions(session) {
@@ -299,16 +876,15 @@ export default function CutOptimizerSection({
       <div className="cut-controls">
         <div className="cut-controls-head">
           <strong>Configuración del motor</strong>
-          <span>Hoja: {sheetWidth} × {sheetHeight} cm · Kerf: {decimal(config.kerf * 10, 0)} mm / {config.kerf} cm · Rotación: {config.allowRotation ? 'Sí' : 'No'} · Estrategia: {strategyLabels[config.strategy]}</span>
+          <span>Hoja: {sheetWidth} × {sheetHeight} cm · Grosor: {effectiveConfig.thickness ?? material?.grosor ?? '—'} mm · Kerf: {decimal(effectiveKerf * 10, 0)} mm / {effectiveKerf} cm · Rotación: {effectiveConfig.grainDirection ? 'No (veta)' : effectiveConfig.allowRotation ? 'Sí' : 'No'} · Estrategia: {candidateStrategyLabels[result.strategy] || result.strategy} · Orden: {pieceOrderLabels[effectivePieceOrder]}</span>
         </div>
         <label className="cut-toggle">
           <input
             disabled={readOnly}
             type="checkbox"
-            checked={config.allowRotation}
+            checked={effectiveConfig.allowRotation}
             onChange={(event) => {
-              setUseRecalculatedResult(true);
-              setConfig((current) => ({ ...current, allowRotation: event.target.checked }));
+              updateWorkingConfig('allowRotation', event.target.checked);
             }}
           />
           Permitir rotación
@@ -320,18 +896,42 @@ export default function CutOptimizerSection({
             type="number"
             min="0"
             step="0.1"
-            value={config.kerf}
+            value={effectiveConfig.kerf}
             onChange={(event) => {
-              setUseRecalculatedResult(true);
-              setConfig((current) => ({ ...current, kerf: Number(event.target.value) || 0 }));
+              updateWorkingConfig('kerf', Number(event.target.value) || 0);
             }}
           />
         </label>
         <label>
           Estrategia
-          <select disabled={readOnly} value={config.strategy} onChange={(event) => {
-            setUseRecalculatedResult(true);
-            setConfig((current) => ({ ...current, strategy: event.target.value }));
+          <select
+            disabled={readOnly || !workingInputActive}
+            value={result.strategy || ''}
+            onChange={(event) => {
+              const candidate = rawRecalculatedResult.candidates.find(
+                (item) => item.strategy === event.target.value,
+              );
+              if (!candidate || !workingInputActive) return;
+              optimizationSessions.setOpenedSessionInput({
+                ...openedSessionInput,
+                strategy: candidate.strategy,
+                selectedCandidateId: candidate.id,
+                pieceOrder: effectivePieceOrder,
+              }, {
+                changedAt: new Date().toISOString(),
+                changedBy: sessionActorId,
+              });
+              setUseRecalculatedResult(true);
+            }}
+          >
+            <option value="shelf">Shelf</option>
+            <option value="best-fit">Best Fit</option>
+          </select>
+        </label>
+        <label>
+          Orden de piezas
+          <select disabled={readOnly} value={effectivePieceOrder} onChange={(event) => {
+            updateWorkingConfig('pieceOrder', event.target.value);
           }}>
             <option value="largest-first">Mayor área primero</option>
             <option value="input-order">Orden capturado</option>
@@ -415,15 +1015,25 @@ export default function CutOptimizerSection({
           latestSession={optimizationSessions.latestSession}
           activeSessionId={activeSessionId}
           realtimeStatus={optimizationSessions.realtimeStatus}
-          error={sessionCreationError || optimizationSessions.error}
+          connection={optimizationSessions.connection}
+          error={sessionCreationError ? sessionCreationError.message : optimizationSessions.userError}
           readOnly={readOnly}
           canCreate={canSaveSession}
+          openedSessionId={optimizationSessions.openedSessionId}
+          openedSession={optimizationSessions.openedSession}
+          hasUnsavedChanges={optimizationSessions.hasUnsavedChanges}
+          currentResultCompatible={currentResultCompatible}
+          currentResultCompatibilityReason={currentResultCompatibility.reason}
+          remoteUpdatePending={optimizationSessions.remoteUpdatePending}
+          baselineVersion={optimizationSessions.openedSessionBaseline?.version}
+          isMutating={optimizationSessions.isMutating}
           decimal={decimal}
           onCreate={saveCurrentSession}
           onReload={optimizationSessions.reload}
-          onUpdate={(session) => (
-            optimizationSessions.updateSession(session, session.version)
-          )}
+          onOpen={openOptimizationSession}
+          onUpdate={updateOpenedSessionFromCurrentResult}
+          onOverwrite={overwriteOpenedSessionFromCurrentResult}
+          onDiscardChanges={optimizationSessions.discardOpenedSessionChanges}
           onDelete={deleteSession}
           onSetActive={activateSession}
           onClose={(session) => optimizationSessions.closeSession(

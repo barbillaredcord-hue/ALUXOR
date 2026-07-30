@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildOptimizationSessionSummary,
+  getOptimizationSessionSummary,
   getOptimizationSessionsSummary,
 } from './summary.js';
 import {
@@ -15,6 +17,67 @@ import {
 import { optimizationSessionFixture } from './testFixtures.js';
 
 describe('Optimization Session Summary y Selectors', () => {
+  it('reconstruye métricas físicas únicamente desde selectedResult', () => {
+    const selectedResult = {
+      id: 'best-fit-bbb',
+      strategy: 'best-fit',
+      valid: true,
+      complete: true,
+      validation: { isPhysicallyValid: true },
+      summary: {
+        requiredSheets: 1,
+        usedArea: 10000,
+        wasteArea: 0,
+        utilization: 100,
+        totalPieceCount: 3,
+        placedPieceCount: 3,
+        unplacedPieceCount: 0,
+      },
+    };
+    const built = buildOptimizationSessionSummary({
+      selectedResult,
+      workingInput: { thickness: 15 },
+      material: { id: 'material-001', nombre: 'Melamina' },
+      reviewedAt: '2026-07-29T12:00:00.000Z',
+    });
+    const session = optimizationSessionFixture({
+      selectedCandidateId: 'best-fit-bbb',
+      metadata: built,
+    });
+    const summary = getOptimizationSessionSummary(session);
+
+    expect(built).toEqual({
+      source: 'cut-optimizer-ui',
+      materialName: 'Melamina',
+      usedArea: 10000,
+      utilization: 100,
+      wasteArea: 0,
+      sheetsRequired: 1,
+      placedPieceCount: 3,
+      unplacedPieceCount: 0,
+      totalPieceCount: 3,
+      selectedCandidateId: 'best-fit-bbb',
+      strategy: 'best-fit',
+      thickness: 15,
+      optimizationStatus: 'valid',
+      reviewedAt: '2026-07-29T12:00:00.000Z',
+    });
+    expect(summary).toMatchObject({
+      selectedCandidateId: 'best-fit-bbb',
+      usedArea: 10000,
+      utilization: 100,
+      wasteArea: 0,
+      sheetsRequired: 1,
+      strategy: 'best-fit',
+      thickness: 15,
+      optimizationStatus: 'valid',
+      version: 1,
+      revision: 1,
+    });
+    expect(JSON.stringify(summary)).not.toContain('"sheets"');
+    expect(JSON.stringify(summary)).not.toContain('"pieces"');
+  });
+
   it('filtra por workspace, Quote y material', () => {
     const target = optimizationSessionFixture();
     const otherMaterial = optimizationSessionFixture({

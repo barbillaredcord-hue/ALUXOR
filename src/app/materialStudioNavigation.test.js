@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  buildLegacyCalculatorTransfer,
   buildMaterialStudioSession,
   canLeaveMaterialStudio,
+  resolveLegacyOptimizationInput,
+  updateMaterialStudioLegacyWorkingInput,
 } from './App.jsx';
 
 describe('navegación de BR Material Studio', () => {
@@ -48,5 +51,62 @@ describe('navegación de BR Material Studio', () => {
       hasTemporaryChanges: true,
       confirmDiscard: () => true,
     })).toBe(true);
+  });
+
+  it('reutiliza el estado temporal existente sin crear una sesión', () => {
+    const studio = {
+      ...buildMaterialStudioSession({
+        activeSection: 'corte',
+        activeQuoteId: 'quote-25',
+        hasActiveQuote: true,
+        timestamp: 300,
+      }),
+      quoteId: 'quote-25',
+      legacyWorkingInput: null,
+    };
+    const workingInput = {
+      materialId: 'material-1',
+      selectedPieceIds: ['piece-1'],
+      selectedCandidateId: 'best-fit-1',
+      thickness: 15,
+      formatWidth: 100,
+      formatHeight: 200,
+      kerf: 0.4,
+    };
+    const updated = updateMaterialStudioLegacyWorkingInput(studio, workingInput);
+    const resolved = resolveLegacyOptimizationInput({
+      materialStudioSession: updated,
+      quoteId: 'quote-25',
+    });
+    const transfer = buildLegacyCalculatorTransfer({
+      workingInput: resolved,
+      quoteId: 'quote-25',
+      materials: [{ id: 'material-1', nombre: 'Melamina' }],
+    });
+
+    expect(resolved).toBe(workingInput);
+    expect(transfer).toMatchObject({
+      quoteId: 'quote-25',
+      selectedPieceIds: ['piece-1'],
+      material: { id: 'material-1', nombre: 'Melamina' },
+      config: {
+        selectedCandidateId: 'best-fit-1',
+        thickness: 15,
+        kerf: 0.4,
+      },
+    });
+    expect(updated).not.toHaveProperty('openedSessionId');
+    expect(updated).not.toHaveProperty('activeSessionId');
+    expect(resolveLegacyOptimizationInput({
+      openedSessionInput: { selectedPieceIds: ['session-piece'] },
+      materialStudioSession: updated,
+      quoteId: 'quote-25',
+    })).toBeNull();
+    expect(resolveLegacyOptimizationInput({
+      materialStudioSession: updated,
+      quoteId: 'another-quote',
+    })).toBeNull();
+    expect(updateMaterialStudioLegacyWorkingInput(updated, null).legacyWorkingInput)
+      .toBeNull();
   });
 });

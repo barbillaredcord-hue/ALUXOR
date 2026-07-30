@@ -235,12 +235,16 @@ export function calculateMaterial(input = {}) {
       allowRotation,
       kerf: convertLength(input.kerf || 0, input.unit, 'cm') || 0,
       strategy: input.strategy || 'largest-first',
+      margins: input.margins,
+      blockedRegions: input.blockedRegions,
+      reservedRegions: input.reservedRegions,
       pieces: pieces.map((piece) => ({
         id: piece.id,
         name: piece.name,
         width: piece.width,
         height: piece.height,
         quantity: piece.quantity,
+        grainDirection: input.grainDirection ? 'vertical' : null,
       })),
     };
     const optimization = input.optimize

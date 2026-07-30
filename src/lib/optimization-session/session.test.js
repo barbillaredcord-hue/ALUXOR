@@ -15,6 +15,7 @@ import {
   OPTIMIZATION_SESSION_ERROR_CODES,
   OPTIMIZATION_SESSION_STATUSES,
   reopenOptimizationSession,
+  reviseOptimizationSession,
   selectOptimizationSessionCandidate,
   serializeOptimizationSession,
   validateOptimizationSession,
@@ -106,6 +107,36 @@ const helpers = {
 };
 
 describe('Optimization Session contract', () => {
+  it('revisa el resultado editable sin cambiar identidad ni mutar la sesión guardada', () => {
+    const source = createSession();
+    const revised = reviseOptimizationSession(source, {
+      changedAt: CHANGED_AT,
+      changedBy: 'user-002',
+      inputSignature: 'quote-cut-input-v1-updated',
+      configuration: { source: 'cut-optimizer-ui', kerf: 0.4 },
+      candidateIds: ['best-fit-ccc'],
+      recommendedCandidateId: 'best-fit-ccc',
+      selectedCandidateId: 'best-fit-ccc',
+      metadata: { utilization: 68.8 },
+    });
+
+    expect(revised.success).toBe(true);
+    expect(revised.session).toMatchObject({
+      id: source.id,
+      executionId: source.executionId,
+      workspaceId: source.workspaceId,
+      quoteId: source.quoteId,
+      materialId: source.materialId,
+      inputSignature: 'quote-cut-input-v1-updated',
+      candidateIds: ['best-fit-ccc'],
+      selectedCandidateId: 'best-fit-ccc',
+      revision: source.revision + 1,
+      lastModifiedBy: 'user-002',
+    });
+    expect(revised.session.audit.at(-1).type).toBe('updated');
+    expect(source.inputSignature).toBe('quote-cut-input-v1-deadbeef');
+  });
+
   it('crea una sesión determinista con identidad propia y solo referencias', () => {
     const first = createOptimizationSession(createInput());
     const second = createOptimizationSession(createInput());
@@ -268,6 +299,30 @@ describe('Optimization Session contract', () => {
       revision: 4,
     });
     expect(proposal.session.proposalId).toBe('proposal-001');
+  });
+
+  it('conserva candidatos históricos del audit al recalcular candidatos actuales', () => {
+    const selected = selectOptimizationSessionCandidate(createSession(), {
+      candidateId: 'best-fit-bbb',
+      changedAt: CHANGED_AT,
+      changedBy: 'user-001',
+    }).session;
+    const recalculated = reviseOptimizationSession(selected, {
+      changedAt: '2026-07-26T08:06:00.000Z',
+      changedBy: 'user-001',
+      candidateIds: ['best-fit-new', 'shelf-new'],
+      recommendedCandidateId: 'best-fit-new',
+      selectedCandidateId: 'best-fit-new',
+    });
+
+    expect(recalculated.success).toBe(true);
+    expect(validateOptimizationSession(recalculated.session).valid).toBe(true);
+    expect(recalculated.session.candidateIds).toEqual([
+      'best-fit-new',
+      'shelf-new',
+    ]);
+    expect(recalculated.session.audit[1].candidateId).toBe('best-fit-bbb');
+    expect(recalculated.session.audit.at(-1).candidateId).toBe('best-fit-new');
   });
 
   it('rechaza un Proposal que no pertenece al candidato seleccionado', () => {

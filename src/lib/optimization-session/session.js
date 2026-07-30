@@ -10,6 +10,7 @@ export const OPTIMIZATION_SESSION_STATUSES = Object.freeze({
 
 export const OPTIMIZATION_SESSION_EVENT_TYPES = Object.freeze({
   CREATED: 'created',
+  UPDATED: 'updated',
   CANDIDATE_SELECTED: 'candidate-selected',
   PROPOSAL_LINKED: 'proposal-linked',
   REOPENED: 'reopened',
@@ -411,7 +412,7 @@ export function validateOptimizationSession(session) {
       && Object.values(OPTIMIZATION_SESSION_EVENT_TYPES).includes(entry.type)
       && canonicalTimestamp(entry.at)
       && text(entry.by)
-      && (entry.candidateId === null || knownCandidates.has(entry.candidateId))
+      && (entry.candidateId === null || Boolean(text(entry.candidateId)))
       && (entry.proposalId === null || text(entry.proposalId))
       && Object.keys(entry).sort().join('|') === [
         'at',
@@ -629,6 +630,81 @@ export function selectOptimizationSessionCandidate(session, {
       status: OPTIMIZATION_SESSION_STATUSES.SELECTED,
       selectedCandidateId: normalizedCandidateId,
       proposalId: null,
+    },
+  });
+}
+
+export function reviseOptimizationSession(session, {
+  changedAt,
+  changedBy,
+  engineVersion = session?.engineVersion,
+  inputSignature = session?.inputSignature,
+  configuration = session?.configuration,
+  candidateIds = session?.candidateIds,
+  recommendedCandidateId = session?.recommendedCandidateId,
+  selectedCandidateId = session?.selectedCandidateId,
+  metadata = session?.metadata,
+} = {}) {
+  const normalizedConfiguration = normalizeScalarRecord(configuration);
+  const normalizedMetadata = normalizeScalarRecord(metadata);
+  const normalizedCandidateIds = normalizeCandidateIds(candidateIds);
+  if (
+    normalizedConfiguration === null
+    || normalizedMetadata === null
+    || normalizedCandidateIds === null
+  ) {
+    return operationResult({
+      session,
+      errors: [error(
+        OPTIMIZATION_SESSION_ERROR_CODES.INVALID_REFERENCE_DATA,
+        'La revisión contiene configuración, candidatos o metadata inválidos.',
+        'configuration',
+      )],
+    });
+  }
+  const knownCandidates = new Set(normalizedCandidateIds);
+  const normalizedRecommendedId = optionalText(recommendedCandidateId);
+  const normalizedSelectedId = optionalText(selectedCandidateId);
+  if (
+    normalizedRecommendedId && !knownCandidates.has(normalizedRecommendedId)
+    || normalizedSelectedId && !knownCandidates.has(normalizedSelectedId)
+  ) {
+    return operationResult({
+      session,
+      errors: [error(
+        OPTIMIZATION_SESSION_ERROR_CODES.INVALID_CANDIDATE_REFERENCE,
+        'La revisión referencia un candidato inexistente.',
+        'candidateIds',
+      )],
+    });
+  }
+  const proposalId = (
+    session?.proposalId
+    && normalizedSelectedId === session.selectedCandidateId
+  ) ? session.proposalId : null;
+  const status = session?.status === OPTIMIZATION_SESSION_STATUSES.CLOSED
+    ? OPTIMIZATION_SESSION_STATUSES.CLOSED
+    : proposalId
+      ? OPTIMIZATION_SESSION_STATUSES.PROPOSED
+      : normalizedSelectedId
+        ? OPTIMIZATION_SESSION_STATUSES.SELECTED
+        : OPTIMIZATION_SESSION_STATUSES.OPEN;
+  return transition(session, {
+    type: OPTIMIZATION_SESSION_EVENT_TYPES.UPDATED,
+    changedAt,
+    changedBy,
+    candidateId: normalizedSelectedId,
+    proposalId,
+    changes: {
+      engineVersion,
+      inputSignature: text(inputSignature),
+      configuration: normalizedConfiguration,
+      candidateIds: normalizedCandidateIds,
+      recommendedCandidateId: normalizedRecommendedId,
+      selectedCandidateId: normalizedSelectedId,
+      proposalId,
+      status,
+      metadata: normalizedMetadata,
     },
   });
 }

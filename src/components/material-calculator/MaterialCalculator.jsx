@@ -23,6 +23,11 @@ import {
   pieceIdsForGroups,
   pieceIdsForMaterial,
 } from '../../lib/material-calculator/engine.js';
+import {
+  normalizeOptimizationSessionWorkingInput,
+  optimizationSessionCandidateStrategy,
+  optimizationSessionPieceOrder,
+} from '../../lib/optimization-session/index.js';
 import SmartCutComparison from '../smart-cut/SmartCutComparison.jsx';
 
 const TYPE_OPTIONS = [
@@ -67,6 +72,7 @@ const initialConfig = {
   allowRotation: true,
   grainDirection: false,
   kerf: 0.3,
+  pieceOrder: 'largest-first',
   treatment: '',
   quantityPerPiece: 1,
   reserveQuantity: 0,
@@ -81,7 +87,16 @@ const initialQuickPiece = {
   quantity: 1,
 };
 
-export function initialMaterialCalculatorConfig(materials = []) {
+export function initialMaterialCalculatorConfig(materials = [], workingInput = null) {
+  if (workingInput) {
+    const material = materials.find((item) => item.id === workingInput.materialId);
+    return {
+      ...initialConfig,
+      ...workingInput,
+      materialId: workingInput.materialId || '',
+      materialName: material?.nombre || material?.name || initialConfig.materialName,
+    };
+  }
   const material = materials.find((item) => (
     item?.optimization?.candidateSnapshot?.candidateId
   ));
@@ -98,6 +113,46 @@ export function initialMaterialCalculatorConfig(materials = []) {
     price: material.precioUnitario ?? initialConfig.price,
     wastePercent: material.merma ?? initialConfig.wastePercent,
   };
+}
+
+export function buildOptimizationSessionInputFromCalculator({
+  type,
+  config,
+  selectedPieceIds,
+  selectedCandidateId,
+  selectedCandidateStrategy = null,
+} = {}) {
+  const candidateStrategy = selectedCandidateStrategy
+    || optimizationSessionCandidateStrategy({ selectedCandidateId });
+  return normalizeOptimizationSessionWorkingInput({
+    ...config,
+    type,
+    selectedPieceIds,
+    selectedCandidateId,
+    strategy: candidateStrategy || config?.strategy,
+    pieceOrder: optimizationSessionPieceOrder(config),
+  });
+}
+
+export function optimizationSessionInputForSelectedCandidate({
+  calculation,
+  candidateId,
+  type,
+  config,
+  selectedPieceIds,
+} = {}) {
+  const candidate = calculation?.optimization?.candidates?.find(
+    (item) => item.id === candidateId,
+  ) || null;
+  return candidate
+    ? buildOptimizationSessionInputFromCalculator({
+      type,
+      config,
+      selectedPieceIds,
+      selectedCandidateId: candidate.id,
+      selectedCandidateStrategy: candidate.strategy,
+    })
+    : null;
 }
 
 const SAFE_PIECE_CATEGORIES = [
@@ -389,6 +444,11 @@ export default function MaterialCalculator({
   readOnly = false,
   initialMode = 'project',
   initialSelectedPieceIds = [],
+  optimizationSessionInput = null,
+  legacyOptimizationInput = null,
+  onApplySelectionToSession,
+  onApplySelectionToLegacy,
+  onClearLegacySelection,
   onCreateGroup,
   onApply,
   onBack,
@@ -398,12 +458,18 @@ export default function MaterialCalculator({
   const [draftMaterialId] = useState(() => (
     `mat-calc-${globalThis.crypto?.randomUUID?.() || Date.now()}`
   ));
-  const [type, setType] = useState(CALCULATION_TYPES.SHEET);
+  const effectiveOptimizationInput = optimizationSessionInput
+    || legacyOptimizationInput;
+  const [type, setType] = useState(
+    effectiveOptimizationInput?.type || CALCULATION_TYPES.SHEET,
+  );
   const [selectedPieceIds, setSelectedPieceIds] = useState(() => (
-    Array.isArray(initialSelectedPieceIds) ? initialSelectedPieceIds : []
+    Array.isArray(effectiveOptimizationInput?.selectedPieceIds)
+      ? effectiveOptimizationInput.selectedPieceIds
+      : Array.isArray(initialSelectedPieceIds) ? initialSelectedPieceIds : []
   ));
   const [config, setConfig] = useState(() => (
-    initialMaterialCalculatorConfig(materials)
+    initialMaterialCalculatorConfig(materials, effectiveOptimizationInput)
   ));
   const [quickPiece, setQuickPiece] = useState(initialQuickPiece);
   const [calculation, setCalculation] = useState(null);
@@ -414,7 +480,56 @@ export default function MaterialCalculator({
   const [hasInteracted, setHasInteracted] = useState(false);
   const [materialEditorOpen, setMaterialEditorOpen] = useState(false);
   const [focusedPieceId, setFocusedPieceId] = useState(null);
-  const [selectedCandidateId, setSelectedCandidateId] = useState(null);
+  const [selectedCandidateId, setSelectedCandidateId] = useState(
+    effectiveOptimizationInput?.selectedCandidateId || null,
+  );
+  const hasOpenedOptimizationSession = Boolean(
+    optimizationSessionInput && onApplySelectionToSession,
+  );
+  const canShareLegacyOptimization = Boolean(
+    !hasOpenedOptimizationSession && onApplySelectionToLegacy,
+  );
+  const effectiveOptimizationInputKey = JSON.stringify(effectiveOptimizationInput);
+
+  useEffect(() => {
+    if (!effectiveOptimizationInput) return;
+    const localInput = buildOptimizationSessionInputFromCalculator({
+      type,
+      config,
+      selectedPieceIds,
+      selectedCandidateId,
+    });
+    if (JSON.stringify(localInput) === effectiveOptimizationInputKey) return;
+    setType(effectiveOptimizationInput.type || CALCULATION_TYPES.SHEET);
+    setSelectedPieceIds(effectiveOptimizationInput.selectedPieceIds || []);
+    setConfig(initialMaterialCalculatorConfig(materials, effectiveOptimizationInput));
+    setSelectedCandidateId(effectiveOptimizationInput.selectedCandidateId || null);
+    setCalculation(null);
+    setHasInteracted(false);
+  }, [effectiveOptimizationInputKey]);
+
+  useEffect(() => {
+    if (
+      !canShareLegacyOptimization
+      || !hasInteracted
+      || mode !== 'project'
+    ) return;
+    onApplySelectionToLegacy(buildOptimizationSessionInputFromCalculator({
+      type,
+      config,
+      selectedPieceIds,
+      selectedCandidateId,
+    }));
+    setHasInteracted(false);
+  }, [
+    canShareLegacyOptimization,
+    config,
+    hasInteracted,
+    mode,
+    selectedCandidateId,
+    selectedPieceIds,
+    type,
+  ]);
 
   const availablePieces = mode === 'quick' ? [quickPiece] : pieces;
   const effectiveSelection = mode === 'quick' ? ['quick-piece'] : selectedPieceIds;
@@ -435,9 +550,10 @@ export default function MaterialCalculator({
     ?.candidateId || null;
 
   useEffect(() => {
-    setSelectedCandidateId(resolveInitialSmartCutCandidateId(
-      calculation?.optimization,
-      appliedCandidateId,
+    if (!calculation?.optimization) return;
+    setSelectedCandidateId((current) => resolveInitialSmartCutCandidateId(
+      calculation.optimization,
+      current || appliedCandidateId,
     ));
   }, [appliedCandidateId, calculation]);
 
@@ -500,10 +616,13 @@ export default function MaterialCalculator({
       allowRotation: config.allowRotation,
       grainDirection: config.grainDirection,
       kerf: config.kerf,
-      strategy: 'largest-first',
+      strategy: optimizationSessionPieceOrder(config),
       treatment: config.treatment,
       quantityPerPiece: config.quantityPerPiece,
       reserveQuantity: config.reserveQuantity,
+      margins: config.margins,
+      blockedRegions: config.blockedRegions,
+      reservedRegions: config.reservedRegions,
       optimize,
     };
   }
@@ -581,6 +700,36 @@ export default function MaterialCalculator({
       : 'No fue posible aplicar el material.');
   }
 
+  function applySelectionToWorkingSession() {
+    const nextCalculation = runCalculation(true);
+    if (nextCalculation.status !== 'calculated') return;
+    const candidateId = resolveInitialSmartCutCandidateId(
+      nextCalculation.optimization,
+      selectedCandidateId,
+    );
+    const selectedCandidate = nextCalculation.optimization?.candidates?.find(
+      (candidate) => candidate.id === candidateId,
+    ) || null;
+    setSelectedCandidateId(candidateId);
+    const input = buildOptimizationSessionInputFromCalculator({
+      type,
+      config,
+      selectedPieceIds,
+      selectedCandidateId: candidateId,
+      selectedCandidateStrategy: selectedCandidate?.strategy || null,
+    });
+    if (hasOpenedOptimizationSession) {
+      onApplySelectionToSession(input);
+    } else {
+      onApplySelectionToLegacy?.(input);
+    }
+    setHasInteracted(false);
+    setConflicts([]);
+    setFeedback(hasOpenedOptimizationSession
+      ? 'Selección aplicada a la sesión abierta. Falta actualizar la sesión para persistirla.'
+      : 'Selección temporal compartida con Cut Optimizer.');
+  }
+
   function clearTemporaryCalculation() {
     setMode(initialMode);
     setSelectedPieceIds([]);
@@ -593,6 +742,7 @@ export default function MaterialCalculator({
     setResultView('calculation');
     setMaterialEditorOpen(false);
     setHasInteracted(false);
+    if (!hasOpenedOptimizationSession) onClearLegacySelection?.();
   }
 
   const groupedPieces = pieceGroups.map((group) => ({
@@ -606,11 +756,13 @@ export default function MaterialCalculator({
     .filter((group) => group.pieces.some((piece) => selectedSet.has(piece.id)))
     .map((group) => group.name);
   const hasTemporaryChanges = Boolean(
-    selectedPieceIds.length
-    || calculation
-    || newGroupName
-    || hasInteracted
-    || mode !== initialMode
+    hasOpenedOptimizationSession || canShareLegacyOptimization
+      ? hasInteracted || newGroupName || mode !== initialMode
+      : selectedPieceIds.length
+        || calculation
+        || newGroupName
+        || hasInteracted
+        || mode !== initialMode
   );
   const sessionStatus = feedback.includes('se aplicó')
     ? 'Cambio aplicado'
@@ -973,8 +1125,12 @@ export default function MaterialCalculator({
                     Editar cálculo
                   </button>
                   {mode === 'project' && (
-                    <button type="button" disabled={readOnly || !selectedPieceIds.length} onClick={() => apply(false)}>
-                      Aplicar a selección
+                    <button
+                      type="button"
+                      disabled={readOnly || !selectedPieceIds.length}
+                      onClick={applySelectionToWorkingSession}
+                    >
+                      Aplicar selección
                     </button>
                   )}
                 </div>
@@ -1221,7 +1377,29 @@ export default function MaterialCalculator({
                         selectionReason={calculation.optimization.selectionReason}
                         candidateRanking={calculation.optimization.candidateRanking}
                         selectedCandidateId={selectedCandidateId}
-                        onSelectCandidate={setSelectedCandidateId}
+                        selectionLabel={hasOpenedOptimizationSession
+                          ? 'Selección de la sesión abierta'
+                          : 'Selección visual local'}
+                        onSelectCandidate={(candidateId) => {
+                          const candidate = calculation.optimization.candidates.find(
+                            (item) => item.id === candidateId,
+                          ) || null;
+                          setHasInteracted(true);
+                          setSelectedCandidateId(candidateId);
+                          if (hasOpenedOptimizationSession && candidate) {
+                            onApplySelectionToSession(optimizationSessionInputForSelectedCandidate({
+                              calculation,
+                              candidateId,
+                              type,
+                              config,
+                              selectedPieceIds,
+                            }));
+                            setHasInteracted(false);
+                            setFeedback(
+                              `${candidate.strategy === 'best-fit' ? 'Best Fit' : 'Shelf'} aplicado a la sesión abierta.`,
+                            );
+                          }
+                        }}
                       />
                       <button type="button" className="ghost" onClick={() => setResultView('calculation')}>
                         Volver al cálculo

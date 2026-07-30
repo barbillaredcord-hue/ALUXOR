@@ -8,6 +8,9 @@ function source(path) {
 const hookSource = source('../../hooks/useOptimizationSessions.js');
 const sectionSource = source('../../sections/OptimizationSessionsSection.jsx');
 const cutOptimizerSource = source('../../sections/CutOptimizerSection.jsx');
+const materialCalculatorSource = source(
+  '../../components/material-calculator/MaterialCalculator.jsx',
+);
 const appSource = source('../../app/App.jsx');
 const providerSource = source('./repositoryProvider.js');
 const repositorySource = source('./applicationRepository.js');
@@ -49,6 +52,19 @@ describe('conexión React de Optimization Sessions', () => {
     expect(appSource).toContain(
       'onActivateSessionReference={updateMaterialOptimizationSession}',
     );
+    expect(appSource).toContain(
+      'optimizationSessionInput={optimizationSessions.openedSessionInput}',
+    );
+    expect(appSource).toContain('onApplySelectionToSession=');
+    expect(appSource).toContain(
+      'optimizationSessions.setOpenedSessionInput(input,',
+    );
+    expect(appSource).toContain(
+      'onApplySelectionToLegacy={updateLegacyOptimizationInput}',
+    );
+    expect(appSource).toContain(
+      'calculatorTransfer={legacyCalculatorTransfer}',
+    );
     expect(appSource).not.toMatch(
       /onActivateSessionReference=\{[\s\S]{0,300}updateMaterialItem\(/,
     );
@@ -56,8 +72,8 @@ describe('conexión React de Optimization Sessions', () => {
 
   it('el Smart Cut Optimizer conecta únicamente la API pública del Hook', () => {
     [
-      'optimizationSessions.createSession(',
-      'optimizationSessions.updateSession(',
+      'createSession: optimizationSessions.createSession',
+      'optimizationSessions.updateOpenedSession',
       'deleteSession: optimizationSessions.deleteSession,',
       'optimizationSessions.setActiveSession(',
       'optimizationSessions.closeSession(',
@@ -67,11 +83,16 @@ describe('conexión React de Optimization Sessions', () => {
       'optimizationSessions.latestSession',
       'optimizationSessions.summary',
       'optimizationSessions.realtimeStatus',
+      'optimizationSessions.openedSessionId',
+      'optimizationSessions.hasUnsavedChanges',
     ].forEach((contract) => expect(cutOptimizerSource).toContain(contract));
     const saveHandler = cutOptimizerSource.match(
       /async function saveCurrentSession\(\) \{[\s\S]*?\n  \}/,
     )?.[0];
-    expect(saveHandler).toContain('optimizationSessions.createSession(');
+    expect(saveHandler).toContain('persistAndOpenOptimizationSession({');
+    expect(saveHandler).toContain(
+      'createSession: optimizationSessions.createSession',
+    );
     expect(saveHandler).not.toContain('optimizeCuts(');
   });
 
@@ -84,6 +105,21 @@ describe('conexión React de Optimization Sessions', () => {
     expect(sectionSource).not.toMatch(/\bisActive\b/);
     expect(cutOptimizerSource).toContain(
       'deleteOptimizationSessionAndClearActiveReference',
+    );
+  });
+
+  it('Aplicar selección comparte working state sin usar Quote como puente', () => {
+    const handler = materialCalculatorSource.match(
+      /function applySelectionToWorkingSession\(\) \{[\s\S]*?\n  \}/,
+    )?.[0];
+    expect(handler).toContain('onApplySelectionToSession(');
+    expect(handler).toContain('onApplySelectionToLegacy?.(');
+    expect(handler).not.toContain('onApply?.(');
+    expect(appSource).toContain(
+      'optimizationSessionInput={optimizationSessions.openedSessionInput}',
+    );
+    expect(cutOptimizerSource).toContain(
+      'const openedSessionInput = optimizationSessions?.openedSessionInput',
     );
   });
 
@@ -151,6 +187,16 @@ describe('conexión React de Optimization Sessions', () => {
       'reopenSession',
       'compareSessions',
       'realtimeStatus',
+      'openedSessionId',
+      'openedSession',
+      'hasUnsavedChanges',
+      'remoteUpdatePending',
+      'openedSessionInput',
+      'openSession',
+      'setOpenedSessionDraft',
+      'setOpenedSessionInput',
+      'discardOpenedSessionChanges',
+      'updateOpenedSession',
     ].forEach((field) => {
       expect(hookSource).toMatch(new RegExp(`\\b${field}\\b`));
     });
@@ -164,5 +210,19 @@ describe('conexión React de Optimization Sessions', () => {
       "if (typeof unsubscribe === 'function') unsubscribe();",
     );
     expect(hookSource).toContain('}, [repository, workspaceId]);');
+  });
+
+  it('cerrar una sesión limpia solo el working state temporal', () => {
+    expect(hookSource).toContain(
+      'closeOptimizationSessionWorkingState(',
+    );
+    expect(hookSource).toMatch(
+      /closeSession: \(sessionId, options\) => run\([\s\S]*?repository\.closeSession[\s\S]*?closeOptimizationSessionWorkingState/,
+    );
+    const closeContract = hookSource.match(
+      /closeSession: \(sessionId, options\) => run\([\s\S]*?\n    \),/,
+    )?.[0];
+    expect(closeContract).not.toContain('activeSessionId');
+    expect(closeContract).not.toContain('setActiveSession');
   });
 });

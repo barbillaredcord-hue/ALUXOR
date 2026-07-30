@@ -56,6 +56,7 @@ describe('Optimization Session Adapter', () => {
       engineVersion: 1,
       updatedAt: '2026-07-26T12:00:00.000Z',
       version: 1,
+      revision: 1,
     });
     expect(JSON.stringify(summary)).not.toContain('sheets');
     expect(JSON.stringify(summary)).not.toContain('pieces');

@@ -4,6 +4,7 @@ import {
   OPTIMIZATION_SESSION_REPOSITORY_ERRORS,
 } from './repository.js';
 import {
+  reviseOptimizationSession,
   selectOptimizationSessionCandidate,
 } from './session.js';
 import {
@@ -13,6 +14,10 @@ import {
   localStorageMock,
   optimizationSessionInput,
 } from './testFixtures.js';
+import {
+  optimizationSessionWorkingInputFromSession,
+  sessionWithOptimizationWorkingInput,
+} from './workingInput.js';
 
 describe('Optimization Session Repository', () => {
   let repository;
@@ -40,6 +45,99 @@ describe('Optimization Session Repository', () => {
         sessionId: created.data.id,
       }),
     ]);
+  });
+
+  it('persiste una revisión editable preservando identidad', () => {
+    const created = repository.createSession(
+      'workspace-001',
+      optimizationSessionInput(),
+    ).data;
+    const revision = reviseOptimizationSession(created, {
+      changedAt: '2026-07-26T13:00:00.000Z',
+      changedBy: 'user-002',
+      configuration: { source: 'cut-optimizer-ui', kerf: 0.4 },
+      candidateIds: ['best-fit-ccc'],
+      recommendedCandidateId: 'best-fit-ccc',
+      selectedCandidateId: 'best-fit-ccc',
+      metadata: {
+        usedArea: 12600,
+        wasteArea: 7400,
+        utilization: 63,
+        sheetsRequired: 2,
+        selectedCandidateId: 'best-fit-ccc',
+        strategy: 'best-fit',
+        thickness: 15,
+        optimizationStatus: 'valid',
+      },
+    });
+    const updated = repository.updateSession(
+      'workspace-001',
+      revision.session,
+      created.version,
+    );
+
+    expect(revision.success).toBe(true);
+    expect(updated.error).toBeNull();
+    expect(updated.data).toMatchObject({
+      id: created.id,
+      executionId: created.executionId,
+      version: 2,
+      configuration: { source: 'cut-optimizer-ui', kerf: 0.4 },
+      selectedCandidateId: 'best-fit-ccc',
+      metadata: {
+        usedArea: 12600,
+        wasteArea: 7400,
+        utilization: 63,
+        sheetsRequired: 2,
+        selectedCandidateId: 'best-fit-ccc',
+        strategy: 'best-fit',
+        thickness: 15,
+        optimizationStatus: 'valid',
+      },
+    });
+    expect(repository.getSession('workspace-001', created.id).data.metadata)
+      .toEqual(updated.data.metadata);
+  });
+
+  it('persiste y reabre 11 referencias de pieza y kerf 0.5', () => {
+    const created = repository.createSession(
+      'workspace-001',
+      optimizationSessionInput(),
+    ).data;
+    const withInput = sessionWithOptimizationWorkingInput(created, {
+      materialId: created.materialId,
+      selectedPieceIds: Array.from(
+        { length: 11 },
+        (_, index) => `piece-${index + 1}`,
+      ).sort((left, right) => left.localeCompare(right)),
+      formatWidth: 122,
+      formatHeight: 244,
+      thickness: 15,
+      kerf: 0.5,
+      allowRotation: true,
+    });
+    const revision = reviseOptimizationSession(created, {
+      changedAt: '2026-07-26T13:00:00.000Z',
+      changedBy: 'user-002',
+      configuration: withInput.configuration,
+    });
+    const updated = repository.updateSession(
+      'workspace-001',
+      revision.session,
+      created.version,
+    );
+    const reopened = repository.getSession('workspace-001', created.id).data;
+
+    expect(updated.error).toBeNull();
+    expect(reopened.id).toBe(created.id);
+    expect(optimizationSessionWorkingInputFromSession(reopened)).toMatchObject({
+      selectedPieceIds: Array.from(
+        { length: 11 },
+        (_, index) => `piece-${index + 1}`,
+      ).sort((left, right) => left.localeCompare(right)),
+      thickness: 15,
+      kerf: 0.5,
+    });
   });
 
   it('es idempotente al crear la misma ejecución', () => {

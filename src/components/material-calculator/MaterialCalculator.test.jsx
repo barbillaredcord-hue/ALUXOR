@@ -2,11 +2,13 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import MaterialCalculator, {
   buildMaterialApplicationPayload,
+  buildOptimizationSessionInputFromCalculator,
   buildTechnicalPieceLayout,
   calculationForSelectedSmartCutCandidate,
   groupPiecesByCategory,
   inferPieceCategory,
   initialMaterialCalculatorConfig,
+  optimizationSessionInputForSelectedCandidate,
   pieceQuantityTotal,
   resolveInitialSmartCutCandidateId,
   sheetSummaryMetrics,
@@ -181,6 +183,46 @@ describe('MaterialCalculator', () => {
     });
   });
 
+  it('convierte Shelf y Best Fit en workingInput canónico de la sesión abierta', () => {
+    const calculation = {
+      optimization: {
+        candidates: [
+          { id: 'shelf-current', strategy: 'shelf' },
+          { id: 'best-fit-current', strategy: 'best-fit' },
+        ],
+      },
+    };
+    const shared = {
+      calculation,
+      type: 'sheet',
+      config: {
+        materialId: 'm1',
+        unit: 'cm',
+        formatWidth: 122,
+        formatHeight: 244,
+        pieceOrder: 'largest-first',
+      },
+      selectedPieceIds: ['p1'],
+    };
+
+    expect(optimizationSessionInputForSelectedCandidate({
+      ...shared,
+      candidateId: 'shelf-current',
+    })).toMatchObject({
+      selectedPieceIds: ['p1'],
+      selectedCandidateId: 'shelf-current',
+      strategy: 'shelf',
+    });
+    expect(optimizationSessionInputForSelectedCandidate({
+      ...shared,
+      candidateId: 'best-fit-current',
+    })).toMatchObject({
+      selectedPieceIds: ['p1'],
+      selectedCandidateId: 'best-fit-current',
+      strategy: 'best-fit',
+    });
+  });
+
   it('conserva el fallback legacy y restaura candidateSnapshot al recalcular', () => {
     const optimization = {
       candidates: [
@@ -240,6 +282,136 @@ describe('MaterialCalculator', () => {
       unplacedPieceCount: null,
       source: 'legacy',
     });
+  });
+
+  it('restaura selección y configuración desde la sesión abierta', () => {
+    const sessionPieces = Array.from({ length: 13 }, (_, index) => ({
+      id: `piece-${index + 1}`,
+      nombre: `Pieza ${index + 1}`,
+      ancho: 30,
+      alto: 40,
+      cantidad: 1,
+    }));
+    const workingInput = buildOptimizationSessionInputFromCalculator({
+      type: 'sheet',
+      config: {
+        materialId: 'm1',
+        unit: 'cm',
+        thickness: 15,
+        formatWidth: 122,
+        formatHeight: 244,
+        kerf: 0.5,
+        allowRotation: false,
+        grainDirection: true,
+      },
+      selectedPieceIds: sessionPieces
+        .slice(0, 11)
+        .map((piece) => piece.id)
+        .sort((left, right) => left.localeCompare(right)),
+      selectedCandidateId: 'candidate-11',
+    });
+    const markup = renderToStaticMarkup(
+      <MaterialCalculator
+        context={context}
+        pieces={sessionPieces}
+        materials={materials}
+        optimizationSessionInput={workingInput}
+        onApplySelectionToSession={() => {}}
+      />,
+    );
+
+    expect(workingInput).toMatchObject({
+      selectedPieceIds: sessionPieces
+        .slice(0, 11)
+        .map((piece) => piece.id)
+        .sort((left, right) => left.localeCompare(right)),
+      kerf: 0.5,
+      thickness: 15,
+      allowRotation: false,
+      grainDirection: true,
+      selectedCandidateId: 'candidate-11',
+    });
+    expect(markup).toContain('11 piezas seleccionadas');
+    expect(markup).toContain('Aplicar selección');
+    expect(markup).toContain('value="0.5"');
+    expect(markup).toContain('value="15"');
+  });
+
+  it('reconstruye piezas y estrategia física desde workingInput al volver', () => {
+    const bestFitInput = buildOptimizationSessionInputFromCalculator({
+      type: 'sheet',
+      config: {
+        materialId: 'm1',
+        unit: 'cm',
+        formatWidth: 122,
+        formatHeight: 244,
+        pieceOrder: 'input-order',
+      },
+      selectedPieceIds: ['p1'],
+      selectedCandidateId: 'best-fit-current',
+      selectedCandidateStrategy: 'best-fit',
+    });
+    const reopenedMarkup = renderToStaticMarkup(
+      <MaterialCalculator
+        context={context}
+        pieces={pieces}
+        materials={materials}
+        optimizationSessionInput={bestFitInput}
+        onApplySelectionToSession={() => {}}
+      />,
+    );
+    const shelfInput = buildOptimizationSessionInputFromCalculator({
+      type: 'sheet',
+      config: bestFitInput,
+      selectedPieceIds: ['p1'],
+      selectedCandidateId: 'shelf-current',
+      selectedCandidateStrategy: 'shelf',
+    });
+
+    expect(bestFitInput).toMatchObject({
+      selectedPieceIds: ['p1'],
+      selectedCandidateId: 'best-fit-current',
+      strategy: 'best-fit',
+      pieceOrder: 'input-order',
+    });
+    expect(shelfInput).toMatchObject({
+      selectedCandidateId: 'shelf-current',
+      strategy: 'shelf',
+      pieceOrder: 'input-order',
+    });
+    expect(reopenedMarkup).toContain('1 pieza(s) seleccionada(s)');
+  });
+
+  it('restaura el borrador Legacy sin abrir ni activar una sesión', () => {
+    const legacyInput = buildOptimizationSessionInputFromCalculator({
+      type: 'sheet',
+      config: {
+        materialId: 'm1',
+        unit: 'cm',
+        thickness: 15,
+        formatWidth: 100,
+        formatHeight: 200,
+        kerf: 0.4,
+        allowRotation: false,
+      },
+      selectedPieceIds: ['p1'],
+      selectedCandidateId: 'best-fit-temporal',
+    });
+    const markup = renderToStaticMarkup(
+      <MaterialCalculator
+        context={context}
+        pieces={pieces}
+        materials={materials}
+        legacyOptimizationInput={legacyInput}
+        onApplySelectionToLegacy={() => {}}
+      />,
+    );
+
+    expect(markup).toContain('1 pieza(s) seleccionada(s)');
+    expect(markup).toContain('value="15"');
+    expect(markup).toContain('value="0.4"');
+    expect(markup).toContain('Aplicar selección');
+    expect(markup).not.toContain('Cambios sin guardar');
   });
 });
 

@@ -30,6 +30,7 @@ export default function SmartCutComparison({
   initialSelectedCandidateId = null,
   selectedCandidateId: controlledSelectedCandidateId,
   onSelectCandidate,
+  selectionLabel = 'Selección visual local',
 }) {
   const [internalSelectedCandidateId, setInternalSelectedCandidateId] = useState(
     initialSelectedCandidateId,
@@ -73,7 +74,7 @@ export default function SmartCutComparison({
           <h3>Comparación de optimizaciones</h3>
           <p>Vista informativa. Cambiar candidato no aplica ni guarda cambios.</p>
         </div>
-        <span className="smart-cut-local-state">Selección visual local</span>
+        <span className="smart-cut-local-state">{selectionLabel}</span>
       </header>
 
       <SmartCutRecommendation

@@ -6534,6 +6534,11 @@ body,
   color: #9b2c2c;
 }
 
+.optimization-sessions-realtime.is-offline strong,
+.optimization-sessions-realtime.is-pending strong {
+  color: #8a6518;
+}
+
 .optimization-sessions-summary,
 .optimization-session-row {
   display: grid;
@@ -6577,21 +6582,111 @@ body,
   border-radius: 14px;
 }
 
+.optimization-sessions-list > li.is-opened {
+  border-color: #6ba68f;
+  box-shadow: inset 0 0 0 1px rgba(34, 116, 95, 0.16);
+}
+
 .optimization-session-row {
   grid-template-columns: minmax(180px, 1.5fr) repeat(6, minmax(100px, 1fr));
 }
 
-.optimization-session-active {
-  position: absolute;
-  top: 10px;
-  right: 10px;
+.optimization-session-current {
+  gap: 12px;
+}
+
+.optimization-session-current__title,
+.optimization-session-linkage,
+.optimization-session-badges {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.optimization-session-current__title {
+  justify-content: space-between;
+}
+
+.optimization-session-linkage {
+  color: #617068;
+  font-size: 12px;
+}
+
+.optimization-session-linkage > span {
+  padding-right: 8px;
+  border-right: 1px solid #d7e2dc;
+}
+
+.optimization-session-badge {
   padding: 5px 8px;
-  color: #174c3b;
-  background: #e7f1ec;
-  border: 1px solid #b8dfca;
   border-radius: 999px;
   font-size: 11px;
   font-weight: 950;
+}
+
+.optimization-session-badge.is-active {
+  color: #174c3b;
+  background: #e7f1ec;
+  border: 1px solid #b8dfca;
+}
+
+.optimization-session-badge.is-opened {
+  color: #17405f;
+  background: #e8f2fa;
+  border: 1px solid #b8d7eb;
+}
+
+.optimization-session-badge.is-clean {
+  color: #526159;
+  background: #f3f5f4;
+  border: 1px solid #d7e2dc;
+}
+
+.optimization-session-badge.is-dirty {
+  color: #77520d;
+  background: #fff6dc;
+  border: 1px solid #ead18b;
+}
+
+.optimization-session-conflict,
+.optimization-session-confirmation,
+.optimization-session-compatibility,
+.optimization-session-empty-opened {
+  margin: 0;
+  padding: 11px 13px;
+  border-radius: 12px;
+  font-weight: 800;
+}
+
+.optimization-session-conflict,
+.optimization-session-confirmation {
+  color: #7c2d2d;
+  background: #fff5f5;
+  border: 1px solid #efb8b8;
+}
+
+.optimization-session-compatibility {
+  color: #77520d;
+  background: #fff8e7;
+  border: 1px solid #ead18b;
+}
+
+.optimization-session-confirmation {
+  display: grid;
+  gap: 8px;
+}
+
+.optimization-session-empty-opened {
+  color: #526159;
+  background: #f8faf8;
+  border: 1px dashed #cbd8d1;
+}
+
+.optimization-session-confirmation__label {
+  color: #7c2d2d;
+  font-size: 12px;
+  font-weight: 900;
 }
 
 .optimization-sessions-error {

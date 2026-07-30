@@ -178,6 +178,44 @@ describe('Optimization Session Remote Repository', () => {
     expect(filters).toEqual({ workspaceId: 'workspace-a' });
   });
 
+  it('conserva dos sesiones con Quote, material y firma iguales si cambia el id', async () => {
+    const first = optimizationSessionFixture({
+      id: 'session-first',
+      executionId: 'execution-first',
+      workspaceId: 'workspace-shared',
+      quoteId: 'quote-shared',
+      materialId: 'material-shared',
+      inputSignature: 'same-input-signature',
+      createdBy: 'user-a',
+      lastModifiedBy: 'user-a',
+    });
+    const second = optimizationSessionFixture({
+      id: 'session-second',
+      executionId: 'execution-second',
+      workspaceId: 'workspace-shared',
+      quoteId: 'quote-shared',
+      materialId: 'material-shared',
+      inputSignature: 'same-input-signature',
+      createdBy: 'user-b',
+      lastModifiedBy: 'user-b',
+    });
+    const repository = createRemoteOptimizationRepository(
+      fakeClient([row(first), row(second)]),
+    );
+
+    const result = await repository.list({ quoteId: 'quote-shared' });
+
+    expect(result.error).toBeNull();
+    expect(result.data.map((session) => session.id)).toEqual([
+      'session-first',
+      'session-second',
+    ]);
+    expect(result.data.map((session) => session.createdBy)).toEqual([
+      'user-a',
+      'user-b',
+    ]);
+  });
+
   it('elimina por identidad y devuelve la sesión eliminada', async () => {
     const session = optimizationSessionFixture();
     const client = fakeClient([row(session)]);

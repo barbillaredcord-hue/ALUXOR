@@ -131,6 +131,41 @@ export function canLeaveMaterialStudio({
   return !hasTemporaryChanges || confirmDiscard();
 }
 
+export function updateMaterialStudioLegacyWorkingInput(session, input) {
+  return session ? { ...session, legacyWorkingInput: input || null } : session;
+}
+
+export function resolveLegacyOptimizationInput({
+  openedSessionInput,
+  materialStudioSession,
+  quoteId = null,
+} = {}) {
+  if (openedSessionInput || materialStudioSession?.quoteId !== quoteId) return null;
+  return materialStudioSession?.legacyWorkingInput || null;
+}
+
+export function buildLegacyCalculatorTransfer({
+  workingInput,
+  quoteId = null,
+  materials = [],
+} = {}) {
+  if (!workingInput) return null;
+  const material = materials.find((item) => item.id === workingInput.materialId) || {
+    id: workingInput.materialId,
+    nombre: workingInput.materialName || 'Material temporal',
+    ancho: workingInput.formatWidth,
+    alto: workingInput.formatHeight,
+    grosor: workingInput.thickness,
+  };
+  return {
+    quoteId,
+    selectedPieceIds: workingInput.selectedPieceIds,
+    material,
+    config: workingInput,
+    workingInput,
+  };
+}
+
 export function applyFocusedProjectSelection({
   projectId,
   projects,
@@ -558,17 +593,32 @@ function App() {
 
   function openMaterialCalculator(options = {}) {
     const contextOptions = options?.currentTarget ? {} : options;
-    const initialSelectedPieceIds = contextOptions.selectedPieceIds || [];
-    setMaterialStudioSession(buildMaterialStudioSession({
-      activeSection: contextOptions.sourceSection || activeSection,
-      activeQuoteId: activeQuoteIdentity?.id || null,
-      selectedPieceIds: initialSelectedPieceIds,
-      hasActiveQuote: Boolean(
-        activeQuoteIdentity
-        || form.producto
-        || form.clienteNombre
-        || quote.measureRows.length,
-      ),
+    const currentQuoteId = activeQuoteIdentity?.id || null;
+    const initialSelectedPieceIds = optimizationSessions.openedSessionInput
+      ?.selectedPieceIds
+      || (
+        materialStudioSession?.quoteId === currentQuoteId
+          ? materialStudioSession?.legacyWorkingInput?.selectedPieceIds
+          : null
+      )
+      || contextOptions.selectedPieceIds
+      || [];
+    setMaterialStudioSession((current) => ({
+      ...buildMaterialStudioSession({
+        activeSection: contextOptions.sourceSection || activeSection,
+        activeQuoteId: currentQuoteId,
+        selectedPieceIds: initialSelectedPieceIds,
+        hasActiveQuote: Boolean(
+          activeQuoteIdentity
+          || form.producto
+          || form.clienteNombre
+          || quote.measureRows.length,
+        ),
+      }),
+      quoteId: currentQuoteId,
+      legacyWorkingInput: current?.quoteId === currentQuoteId
+        ? current.legacyWorkingInput || null
+        : null,
     }));
     setActiveSection('material-studio');
   }
@@ -583,7 +633,9 @@ function App() {
         'Hay una selección o cálculo temporal sin confirmar. ¿Deseas descartarlo y volver a Cotización?',
       ) ?? true,
     })) return;
-    setMaterialStudioSession(null);
+    setMaterialStudioSession((current) => (
+      current?.legacyWorkingInput ? current : null
+    ));
     setActiveSection('cotizador');
     if (focusPieceId) {
       globalThis.requestAnimationFrame?.(() => {
@@ -605,6 +657,18 @@ function App() {
     setActiveSection('inicio');
   }
 
+  function updateLegacyOptimizationInput(input) {
+    setMaterialStudioSession((current) => (
+      updateMaterialStudioLegacyWorkingInput(current, input)
+    ));
+  }
+
+  function clearLegacyOptimizationInput() {
+    setMaterialStudioSession((current) => (
+      updateMaterialStudioLegacyWorkingInput(current, null)
+    ));
+  }
+
   function handleStartNewQuote() {
     startNewQuoteAndClearProductionSelection(
       startNewQuote,
@@ -618,6 +682,16 @@ function App() {
     setActiveSection,
     currentWorkspaceRole,
     canManageWorkspaceAccess,
+  });
+  const legacyOptimizationInput = resolveLegacyOptimizationInput({
+    openedSessionInput: optimizationSessions.openedSessionInput,
+    materialStudioSession,
+    quoteId: activeQuoteIdentity?.id || null,
+  });
+  const legacyCalculatorTransfer = buildLegacyCalculatorTransfer({
+    workingInput: legacyOptimizationInput,
+    quoteId: activeQuoteIdentity?.id || null,
+    materials: quote.materialRows,
   });
 
   function startSummaryDrag(event) {
@@ -910,6 +984,16 @@ function App() {
             readOnly={projectReadOnly}
             initialMode={materialStudioSession?.initialMode || 'project'}
             initialSelectedPieceIds={materialStudioSession?.initialSelectedPieceIds}
+            optimizationSessionInput={optimizationSessions.openedSessionInput}
+            legacyOptimizationInput={legacyOptimizationInput}
+            onApplySelectionToSession={(input) => (
+              optimizationSessions.setOpenedSessionInput(input, {
+                changedAt: new Date().toISOString(),
+                changedBy: authSession?.user?.id || null,
+              })
+            )}
+            onApplySelectionToLegacy={updateLegacyOptimizationInput}
+            onClearLegacySelection={clearLegacyOptimizationInput}
             onCreateGroup={createPieceGroup}
             onApply={applyProfessionalMaterial}
             onBack={closeMaterialStudio}
@@ -1152,6 +1236,7 @@ function App() {
             decimal={decimal}
             readOnly={projectReadOnly}
             contextQuoteId={activeQuoteIdentity?.id || null}
+            calculatorTransfer={legacyCalculatorTransfer}
             optimizationSessions={optimizationSessions}
             optimizationSessionContext={{
               workspaceId: activeWorkspace?.id || null,
@@ -1159,6 +1244,7 @@ function App() {
               userId: authSession?.user?.id || null,
             }}
             onActivateSessionReference={updateMaterialOptimizationSession}
+            onSessionCreated={clearLegacyOptimizationInput}
             onCalculateMaterial={(payload) => openMaterialCalculator({
               sourceSection: 'corte',
               ...payload,

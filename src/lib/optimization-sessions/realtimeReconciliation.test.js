@@ -4,6 +4,15 @@ import {
   localStorageMock,
 } from '../optimization-session/testFixtures.js';
 import {
+  closeOptimizationSession,
+  hydrateOptimizationSession,
+} from '../optimization-session/session.js';
+import {
+  getOptimizationSessionSummary,
+  optimizationSessionWorkingInputFromSession,
+  sessionWithOptimizationWorkingInput,
+} from '../optimization-session/index.js';
+import {
   optimizationSessionToRemoteRow,
 } from './remoteAdapter.js';
 import {
@@ -85,6 +94,95 @@ describe('Optimization Sessions Realtime Reconciliation', () => {
     expect(result.data.status).toBe('applied');
     expect(context.sessions.get('session-001').version).toBe(1);
     expect(input).toEqual(snapshot);
+  });
+
+  it('agrega una tercera sesión y UPDATE/DELETE afectan únicamente su id', () => {
+    const first = session({ id: 'session-first', executionId: 'execution-first' });
+    const second = session({ id: 'session-second', executionId: 'execution-second' });
+    const third = session({ id: 'session-third', executionId: 'execution-third' });
+    const context = setup();
+    [first, second, third].forEach((value) => {
+      context.reconciler.reconcile(WORKSPACE_ID, event('INSERT', value));
+    });
+
+    const closedSecond = closeOptimizationSession(second, {
+      changedAt: '2026-07-30T16:00:00.000Z',
+      changedBy: 'remote-user',
+    }).session;
+    const updatedSecond = hydrateOptimizationSession({
+      ...closedSecond,
+      version: 2,
+    }).session;
+    context.reconciler.reconcile(
+      WORKSPACE_ID,
+      event('UPDATE', updatedSecond),
+    );
+    context.reconciler.reconcile(WORKSPACE_ID, event('DELETE', first));
+
+    expect([...context.sessions.keys()].sort()).toEqual([
+      'session-second',
+      'session-third',
+    ]);
+    expect(context.sessions.get('session-second')).toMatchObject({
+      version: 2,
+      status: 'closed',
+    });
+    expect(context.sessions.get('session-third')).toEqual(third);
+  });
+
+  it('transmite la revisión inicial con working input, candidato y métricas', () => {
+    const value = sessionWithOptimizationWorkingInput(
+      session({
+        selectedCandidateId: 'best-fit-bbb',
+        metadata: {
+          usedArea: 10000,
+          wasteArea: 0,
+          utilization: 100,
+          sheetsRequired: 1,
+          selectedCandidateId: 'best-fit-bbb',
+          strategy: 'best-fit',
+          thickness: 15,
+          optimizationStatus: 'valid',
+        },
+      }),
+      {
+        materialId: 'material-001',
+        selectedPieceIds: ['piece-1', 'piece-2', 'piece-3'],
+        selectedCandidateId: 'best-fit-bbb',
+        thickness: 15,
+        formatWidth: 100,
+        formatHeight: 100,
+        kerf: 0,
+      },
+    );
+    const context = setup();
+    const result = context.reconciler.reconcile(
+      WORKSPACE_ID,
+      event('INSERT', value),
+    );
+    const received = context.sessions.get(value.id);
+
+    expect(result.error).toBeNull();
+    expect(received.metadata).toEqual(value.metadata);
+    expect(received.selectedCandidateId).toBe('best-fit-bbb');
+    expect(getOptimizationSessionSummary(received)).toMatchObject({
+      usedArea: 10000,
+      wasteArea: 0,
+      utilization: 100,
+      sheetsRequired: 1,
+      selectedCandidateId: 'best-fit-bbb',
+      strategy: 'best-fit',
+      thickness: 15,
+      optimizationStatus: 'valid',
+    });
+    expect(optimizationSessionWorkingInputFromSession(received)).toMatchObject({
+      selectedPieceIds: ['piece-1', 'piece-2', 'piece-3'],
+      selectedCandidateId: 'best-fit-bbb',
+      thickness: 15,
+      formatWidth: 100,
+      formatHeight: 100,
+      kerf: 0,
+    });
   });
 
   it('aplica UPDATE de versión mayor', () => {

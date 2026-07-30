@@ -15,6 +15,7 @@ export {
   OPTIMIZATION_SESSION_STATUSES,
   OPTIMIZATION_SESSION_TYPE,
   reopenOptimizationSession,
+  reviseOptimizationSession,
   selectOptimizationSessionCandidate,
   serializeOptimizationSession,
   validateOptimizationSession,
@@ -75,6 +76,7 @@ export {
 } from './storage.js';
 
 export {
+  buildOptimizationSessionSummary,
   getOptimizationSessionSummary,
   getOptimizationSessionsSummary,
 } from './summary.js';
@@ -85,3 +87,30 @@ export {
   OPTIMIZATION_SESSION_VERSION_ERRORS,
   selectNewestOptimizationSession,
 } from './versioning.js';
+
+export {
+  clearOptimizationSessionWorkingState,
+  closeOptimizationSessionWorkingState,
+  confirmOptimizationSessionWorkingSave,
+  createOptimizationSessionWorkingState,
+  discardOptimizationSessionWorkingChanges,
+  hasOptimizationSessionRemoteConflict,
+  openOptimizationSessionWorkingState,
+  optimizationSessionEditableSignature,
+  prepareOptimizationSessionConflictOverwrite,
+  prepareOptimizationSessionWorkingUpdate,
+  reconcileOptimizationSessionWorkingState,
+  updateOptimizationSessionWorkingDraft,
+  updateOptimizationSessionWorkingInput,
+} from './workingState.js';
+export {
+  normalizeOptimizationSessionWorkingInput,
+  optimizationSessionCandidateStrategy,
+  optimizationSessionPieceOrder,
+  OPTIMIZATION_SESSION_WORKING_INPUT_KEY,
+  OPTIMIZATION_SESSION_WORKING_INPUT_VERSION,
+  optimizationSessionWorkingInputFromSession,
+  optimizationSessionWorkingInputSignature,
+  serializeOptimizationSessionWorkingInput,
+  sessionWithOptimizationWorkingInput,
+} from './workingInput.js';

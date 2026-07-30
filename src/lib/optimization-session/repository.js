@@ -117,12 +117,6 @@ export function createOptimizationSessionRepository({
       'materialId',
       'createdAt',
       'createdBy',
-      'engineVersion',
-      'inputSignature',
-      'configuration',
-      'candidateIds',
-      'recommendedCandidateId',
-      'metadata',
     ];
     const immutableReferencesMatch = immutableFields.every((field) => (
       JSON.stringify(current[field]) === JSON.stringify(session?.[field])
