@@ -5611,7 +5611,7 @@ body,
 }
 
 .receiving-stats {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
 .receiving-stats > div,
@@ -5635,6 +5635,11 @@ body,
   margin-top: 5px;
   color: #14241c;
   font-size: 25px;
+}
+
+.receiving-stats .receiving-unit-total {
+  font-size: 15px;
+  line-height: 1.4;
 }
 
 .receiving-progress {
@@ -5679,6 +5684,173 @@ body,
   color: #1d3429;
   background: #f4ead9;
   border-color: #dfcfb5;
+}
+
+.receiving-tabs,
+.receiving-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.receiving-tabs button {
+  min-height: 40px;
+  padding: 0 13px;
+  color: #294238;
+  background: #f4ead9;
+  border: 1px solid #dfcfb5;
+  border-radius: 999px;
+  cursor: pointer;
+  font-weight: 900;
+}
+
+.receiving-tabs button.active {
+  color: #fff;
+  background: #20362b;
+  border-color: #20362b;
+}
+
+.receiving-filters {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
+  padding: 14px;
+  background: rgba(244, 234, 217, 0.5);
+  border: 1px solid #e4d8c4;
+  border-radius: 16px;
+}
+
+.receiving-filters input,
+.receiving-filters select {
+  min-width: 0;
+  min-height: 42px;
+  border-radius: 10px;
+}
+
+.receiving-search {
+  display: flex;
+  grid-column: span 2;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  background: #fff;
+  border: 1px solid rgba(23, 32, 27, 0.12);
+  border-radius: 10px;
+}
+
+.receiving-search input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+}
+
+.receiving-inbox,
+.receiving-event-list {
+  display: grid;
+  gap: 10px;
+}
+
+.receiving-inbox-row {
+  display: grid;
+  grid-template-columns: minmax(170px, 0.9fr) minmax(220px, 1.3fr) minmax(150px, 0.65fr) minmax(170px, auto);
+  align-items: center;
+  gap: 14px;
+  padding: 15px;
+  background: rgba(255, 253, 248, 0.94);
+  border: 1px solid rgba(23, 32, 27, 0.1);
+  border-left: 4px solid #9cac9f;
+  border-radius: 14px;
+  box-shadow: 0 9px 24px rgba(17, 25, 21, 0.06);
+}
+
+.receiving-inbox-row.status-partial { border-left-color: #d6a92e; }
+.receiving-inbox-row.status-complete { border-left-color: #22745f; }
+.receiving-inbox-row.status-rejected { border-left-color: #a33f36; }
+
+.receiving-inbox-row > div,
+.receiving-inbox-context,
+.receiving-inbox-state {
+  display: grid;
+  gap: 4px;
+}
+
+.receiving-inbox-row span,
+.receiving-inbox-row small,
+.receiving-event-list span,
+.receiving-event-list p {
+  color: #617068;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.receiving-inbox-state em {
+  width: fit-content;
+  padding: 5px 9px;
+  color: #1d3429;
+  background: #fff3cf;
+  border-radius: 999px;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 950;
+}
+
+.receiving-inbox-state strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #8a322b;
+  font-size: 12px;
+}
+
+.receiving-row-actions {
+  display: flex !important;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.receiving-row-actions button {
+  min-height: 36px;
+  padding: 0 10px;
+  border-radius: 10px;
+}
+
+.receiving-event-list article {
+  display: grid;
+  gap: 5px;
+  padding: 14px 16px;
+  background: #fffdf8;
+  border: 1px solid rgba(23, 32, 27, 0.1);
+  border-radius: 13px;
+}
+
+.receiving-event-list article.severity-warning {
+  border-left: 4px solid #d6a92e;
+}
+
+.history-reception-events {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.history-reception-events article {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  background: rgba(255, 253, 248, 0.9);
+  border: 1px solid rgba(23, 32, 27, 0.1);
+  border-radius: 12px;
+}
+
+.history-reception-events span,
+.history-reception-events p {
+  margin: 0;
+  color: #617068;
+  font-size: 13px;
+}
+
+.receiving-capture {
+  padding-top: 18px;
+  border-top: 1px solid rgba(23, 32, 27, 0.12);
 }
 
 .receiving-layout {
@@ -5800,8 +5972,18 @@ body,
 @media (max-width: 900px) {
   .receiving-stats,
   .receiving-layout,
-  .receiving-fields {
+  .receiving-fields,
+  .receiving-filters,
+  .receiving-inbox-row {
     grid-template-columns: 1fr;
+  }
+
+  .receiving-search {
+    grid-column: auto;
+  }
+
+  .receiving-row-actions {
+    justify-content: flex-start;
   }
 
   .receiving-side {

@@ -39,8 +39,8 @@ function defaultNow() {
   return new Date().toISOString();
 }
 
-function key(workspaceId) {
-  return `${STORAGE_PREFIX}.${workspaceId}`;
+function key(storagePrefix, workspaceId) {
+  return `${storagePrefix}.${workspaceId}`;
 }
 
 function failure(message, code = 'OPTIMIZATION_SESSION_PENDING_OPERATION_INVALID') {
@@ -119,6 +119,7 @@ export function createPendingOperationsRepository({
   storage = defaultStorage(),
   createId = createUuid,
   now = defaultNow,
+  storagePrefix = STORAGE_PREFIX,
 } = {}) {
   const memory = new Map();
 
@@ -126,7 +127,7 @@ export function createPendingOperationsRepository({
     const normalizedWorkspaceId = optimizationSessionText(workspaceId);
     if (!normalizedWorkspaceId) return [];
     try {
-      const raw = storage?.getItem(key(normalizedWorkspaceId));
+      const raw = storage?.getItem(key(storagePrefix, normalizedWorkspaceId));
       const parsed = raw ? JSON.parse(raw) : memory.get(normalizedWorkspaceId);
       const values = Array.isArray(parsed) ? parsed : parsed?.operations;
       return (Array.isArray(values) ? values : [])
@@ -149,7 +150,7 @@ export function createPendingOperationsRepository({
     const value = { version: STORAGE_VERSION, operations: normalized };
     memory.set(workspaceId, value);
     try {
-      storage?.setItem(key(workspaceId), JSON.stringify(value));
+      storage?.setItem(key(storagePrefix, workspaceId), JSON.stringify(value));
     } catch {
       // La cola continúa disponible durante la vida de esta instancia.
     }

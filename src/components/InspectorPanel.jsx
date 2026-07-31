@@ -7,8 +7,10 @@ export default function InspectorPanel({
   openPrint,
   openWhatsApp,
   setActiveSection,
+  receptionSummary,
   readOnly = false,
 }) {
+  const receptionAlerts = new Map((receptionSummary?.alerts || []).map((item) => [item.id, item]));
   const nextTask = quote.materialRows?.[0]?.nombre
     ? `Comprar ${quote.materialRows[0].nombre}`
     : 'Revisar datos del proyecto';
@@ -17,6 +19,10 @@ export default function InspectorPanel({
     quote.measureRows?.length ? null : 'Medidas pendientes',
     form.clienteTelefono || form.whatsapp ? null : 'Cliente sin teléfono',
     dataHealth?.warnings?.[0],
+    receptionAlerts.has('reception-damaged') ? 'Material recibido con daño' : null,
+    receptionAlerts.has('reception-rejected') ? 'Material rechazado en recepción' : null,
+    receptionAlerts.has('reception-missing') ? 'Cantidad faltante en recepción' : null,
+    receptionSummary?.pendingItems > 0 ? `${receptionSummary.pendingItems} partida(s) pendiente(s) de recepción` : null,
   ].filter(Boolean);
 
   const hasWarnings = risks.length > 0;
@@ -59,6 +65,8 @@ export default function InspectorPanel({
           <div><span>Materiales</span><strong>{quote.materialRows.length}</strong></div>
           <div><span>Herrajes</span><strong>{quote.accessoryRows.length}</strong></div>
           <div><span>Estado</span><strong>{completion}%</strong></div>
+          <div><span>Recepción</span><strong>{Math.round(receptionSummary?.progress || 0)}%</strong></div>
+          <div><span>Incidencias</span><strong>{receptionSummary?.incidentItems || 0}</strong></div>
         </div>
       </section>
 
@@ -72,6 +80,7 @@ export default function InspectorPanel({
           {!readOnly && <button type="button" onClick={() => setActiveSection('catalogo')}><TableProperties size={16} /> Catálogo</button>}
           {!readOnly && <button type="button" onClick={() => setActiveSection('cotizador')}><Box size={16} /> Plano</button>}
           {!readOnly && <button type="button" onClick={() => setActiveSection('cotizador')}><FolderClock size={16} /> Cotizador</button>}
+          <button type="button" onClick={() => setActiveSection('recepcion')}><Box size={16} /> Recepción</button>
         </div>
       </section>
     </aside>

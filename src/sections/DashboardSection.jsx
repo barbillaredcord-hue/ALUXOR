@@ -5,6 +5,7 @@ import {
   Factory,
   FileClock,
   PackageCheck,
+  PackageOpen,
   ShoppingCart,
 } from 'lucide-react';
 import BusinessIndicators from '../components/operational-center/BusinessIndicators.jsx';
@@ -40,6 +41,7 @@ export default function DashboardSection({
   const quotes = summaries.quotes || {};
   const production = summaries.production || {};
   const purchases = summaries.purchases || {};
+  const receptions = summaries.receptions || {};
   const purchaseOperations = summaries.purchaseOperations || {};
   const inventory = summaries.inventory || {};
   const fabrication = summaries.fabrication || {};
@@ -111,6 +113,23 @@ export default function DashboardSection({
         </>
       ),
       label: 'Ir a Compras',
+    },
+    {
+      id: 'recepcion',
+      title: 'Recepción',
+      icon: PackageOpen,
+      tone: 'aluminum',
+      value: receptions.receptions || 0,
+      detail: `${receptions.pendingItems || 0} pendientes · ${receptions.partialItems || 0} parciales`,
+      content: (
+        <>
+          {metric('Partidas completas', receptions.completeItems)}
+          {metric('Incidencias', receptions.incidentItems)}
+          {metric('Actividad reciente', receptions.recentReceptions)}
+          {metric('Última recepción', receptions.updatedAt || 'Sin fecha')}
+        </>
+      ),
+      label: 'Ir a Recepción',
     },
     {
       id: 'inventario',

@@ -49,6 +49,15 @@ const businessState = {
     production: { active: 1, inProcess: 1, pending: 0, updatedAt: null },
     purchases: { pending: 1, purchased: 0, updatedAt: null },
     purchaseOperations: { activePurchasesCount: 1, overduePurchasesCount: 0 },
+    receptions: {
+      receptions: 1,
+      pending: 0,
+      partial: 1,
+      progress: 40,
+      acceptedQuantity: 4,
+      damagedQuantity: 1,
+      missingQuantity: 0,
+    },
     inventory: { total: 0, available: 0, missing: 0 },
     fabrication: { projects: 0, pieces: 0, materials: 0 },
     history: { records: 2, completed: 0, cancelled: 0, accepted: 1 },
@@ -91,11 +100,12 @@ describe('DashboardSection', () => {
       'Cotizaciones',
       'Producción',
       'Compras',
+      'Recepción',
       'Inventario',
       'Fabricación',
       'Historial',
     ].forEach((title) => expect(markup).toContain(title));
-    expect(markup.match(/aria-expanded="false"/g)).toHaveLength(7);
+    expect(markup.match(/aria-expanded="false"/g)).toHaveLength(8);
     expect(markup).not.toContain('role="dialog"');
   });
 

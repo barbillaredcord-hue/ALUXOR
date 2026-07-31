@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Calculator, ClipboardList, ExternalLink, ShoppingCart } from 'lucide-react';
+import { Calculator, ClipboardList, ExternalLink, PackageOpen, ShoppingCart } from 'lucide-react';
 import {
   PRODUCTION_STATUSES,
   canAdvanceProductionOrder,
@@ -18,6 +18,7 @@ import {
   getProductionOperationalState,
   getPurchaseMaterialState,
 } from '../lib/workflow/projectStatus.js';
+import { getProductionReceptionStatusView } from '../lib/receptions/receptionSelectors.js';
 
 const STATUS_OPTIONS = productionStatusOptions();
 const PRIORITY_OPTIONS = productionPriorityOptions();
@@ -133,6 +134,8 @@ export default function ProductionSection({
   productionError = '',
   productionSyncStatus = '',
   onCalculateMaterial,
+  receptionInbox = [],
+  onOpenReceiving,
 }) {
   const sortedOrders = [...productionOrders].sort((a, b) => (
     dateTimestamp(b.updatedAt || b.fechaCreacion)
@@ -150,6 +153,10 @@ export default function ProductionSection({
   const selectedOperationalState = getProductionOperationalState(
     selectedOrder ? { ...selectedOrder, estado: draft?.estado || selectedOrder.estado } : null,
     selectedPurchaseState,
+  );
+  const selectedReceptionState = getProductionReceptionStatusView(
+    receptionInbox,
+    selectedOrder?.id,
   );
   const operationalStateForOrder = (order) => getProductionOperationalState(
     order,
@@ -454,6 +461,15 @@ export default function ProductionSection({
                     {entry.comentario ? ` · ${entry.comentario}` : ''}
                   </p>
                 )) : <p>Sin eventos registrados.</p>}
+              </article>
+              <article className="production-order-detail-notes">
+                <strong>Recepción · {selectedReceptionState.status}</strong>
+                <p>{selectedReceptionState.pending} pendiente(s) · {selectedReceptionState.partial} parcial(es) · {selectedReceptionState.complete} completa(s) · {selectedReceptionState.incidents} incidencia(s)</p>
+                {relatedPurchase && (
+                  <button type="button" className="ghost" onClick={() => onOpenReceiving?.(relatedPurchase.id)}>
+                    <PackageOpen size={17} /> Abrir Recepción
+                  </button>
+                )}
               </article>
               <article className="production-order-detail-notes">
                 <strong>

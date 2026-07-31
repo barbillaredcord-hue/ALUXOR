@@ -27,6 +27,7 @@ export default function HistorySection({
   readOnly = false,
   productionOrders = [],
   purchases = [],
+  receptionEvents = [],
   onOpenProduction,
 }) {
   const historySummary = getHistorySummary(history);
@@ -102,6 +103,16 @@ export default function HistorySection({
           );
         })}
       </div>
+      <section className="history-reception-events" aria-label="Historial de Recepción">
+        <h3>Actividad de Recepción</h3>
+        {receptionEvents.length ? receptionEvents.map((event) => (
+          <article key={event.id}>
+            <strong>{event.summary}</strong>
+            <span>{new Date(event.occurredAt).toLocaleString('es-MX')} · {event.responsible || 'Responsable no disponible'} · Proyecto {event.projectId || 'sin relación'} · Compra {event.purchaseId} · Partida {event.purchaseItemId} · {event.type}</span>
+            {event.observation && <p>{event.observation}</p>}
+          </article>
+        )) : <p>Sin eventos de Recepción.</p>}
+      </section>
     </section>
   );
 }

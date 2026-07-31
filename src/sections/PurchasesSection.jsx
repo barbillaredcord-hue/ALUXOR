@@ -15,6 +15,7 @@ import {
   resolvePurchaseViewSelection,
   selectPurchaseViews,
 } from '../lib/purchases/purchaseSelectors.js';
+import { getPurchaseReceptionStatusView } from '../lib/receptions/receptionSelectors.js';
 
 const statusConfig = {
   [PURCHASE_STATUSES.PENDING]: { label: 'Pendiente', icon: Circle },
@@ -213,6 +214,7 @@ export default function PurchasesSection({
   onOpenProduction,
   onOpenReceiving,
   onOpenInventory,
+  receptionInbox = [],
 }) {
   const viewSession = sessionForWorkspace(workspaceId);
   const [activeView, setActiveView] = useState(
@@ -278,6 +280,13 @@ export default function PurchasesSection({
     )
     : null;
   const projectReadOnly = isProjectReadOnly(displayProductionOrder);
+  const receptionState = getPurchaseReceptionStatusView(
+    receptionInbox,
+    displayPurchase?.id,
+  );
+  const receptionByPurchaseItemId = useMemo(() => new Map(
+    receptionInbox.map((item) => [item.purchaseItemId, item]),
+  ), [receptionInbox]);
   const canEditPurchase = canManage
     && displayPurchaseState === PURCHASE_OPERATIONAL_STATES.ACTIVE
     && !projectReadOnly;
@@ -498,6 +507,7 @@ export default function PurchasesSection({
                 const purchaseSummary = getPurchasesSummary([purchase]);
                 const overdue = isPurchaseOverdue(purchase);
                 const purchaseState = purchaseViews.stateById.get(purchase.id);
+                const reception = getPurchaseReceptionStatusView(receptionInbox, purchase.id);
                 const relatedOrder = purchaseViews.productionOrdersById.get(purchase.productionOrderId);
                 const relatedQuote = purchaseViews.quotesById.get(purchase.quoteId);
                 return (
@@ -520,6 +530,7 @@ export default function PurchasesSection({
                         ? purchaseCancellationReason(purchase, relatedOrder, relatedQuote)
                         : purchaseState === 'received' ? 'Recepción completa' : purchaseState === 'historical' ? 'Eliminada' : purchaseNextAction(purchase)}</span>
                       <span>{purchase.pendingSync || purchase.items?.some((item) => item.pendingSync) ? 'Pendiente de sincronizar' : 'Sincronizada'}{overdue ? ' · Retrasada' : ''}</span>
+                      <span>Recepción: {reception.status} · {reception.acceptedQuantity} aceptado · {reception.pendingQuantity} pendiente{reception.incidents ? ` · ${reception.incidents} incidencia(s)` : ''}</span>
                     </span>
                   </button>
                 );
@@ -552,6 +563,8 @@ export default function PurchasesSection({
             <div><span>Comprados</span><strong>{summary.purchased}</strong></div>
             <div><span>Recibidos</span><strong>{summary.received}</strong></div>
             <div><span>Progreso</span><strong>{decimal(summary.progress, 0)}%</strong><div className="purchase-progress"><i style={{ width: `${summary.progress}%` }} /></div></div>
+            <div><span>Recepción física</span><strong>{receptionState.status}</strong><small>{decimal(receptionState.acceptedQuantity, 2)} aceptado · {decimal(receptionState.pendingQuantity, 2)} pendiente</small></div>
+            <div><span>Incidencias</span><strong>{receptionState.incidents}</strong></div>
           </div>
 
           <div className="form-grid">
@@ -611,12 +624,14 @@ export default function PurchasesSection({
                   {items.map((item) => {
                     const status = normalizePurchaseStatus(item.status);
                     const Icon = statusConfig[status].icon;
+                    const received = receptionByPurchaseItemId.get(item.id);
                     return (
                       <div key={item.id} className={`purchase-item purchase-item-${status}`}>
                         <Icon size={18} />
                         <div>
                           <input disabled={!canEditPurchase} aria-label="Material" value={item.name} onFocus={() => focusField(purchaseItemDraftFieldKey(displayPurchase.id, item.id, 'name'))} onBlur={blurField} onKeyDown={enterField} onChange={(event) => updateItem(item.id, { name: event.target.value })} />
                           <span>{decimal(item.quantity)} {item.unit} · {money(item.quantity * item.unitCost)}</span>
+                          <span>Recepción: {received?.status || 'pending'} · {decimal(received?.receivedQuantity || 0, 2)} recibido · {decimal(received?.pendingQuantity ?? item.quantity, 2)} pendiente{received?.openIncidentCount ? ` · ${received.openIncidentCount} incidencia(s)` : ''}</span>
                           <span>
                             <input disabled={!canEditPurchase} aria-label="Cantidad" type="number" min="0" step="any" value={item.quantity} onFocus={() => focusField(purchaseItemDraftFieldKey(displayPurchase.id, item.id, 'quantity'))} onBlur={blurField} onKeyDown={enterField} onChange={(event) => updateItem(item.id, { quantity: event.target.value })} />
                             <input disabled={!canEditPurchase} aria-label="Costo unitario" type="number" min="0" step="any" value={item.unitCost} onFocus={() => focusField(purchaseItemDraftFieldKey(displayPurchase.id, item.id, 'unitCost'))} onBlur={blurField} onKeyDown={enterField} onChange={(event) => updateItem(item.id, { unitCost: event.target.value })} />

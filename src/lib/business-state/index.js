@@ -10,6 +10,7 @@ import {
 } from '../production/productionEngine.js';
 import { getPurchasesSummary } from '../purchases/purchaseSummary.js';
 import { selectPurchaseViews } from '../purchases/purchaseSelectors.js';
+import { getReceptionSummary } from '../receptions/receptionSummary.js';
 import {
   QUOTE_STATUSES,
   quoteRecordStatus,
@@ -370,6 +371,7 @@ export function getBusinessProjects({
   quotes = [],
   productionOrders = [],
   purchases = [],
+  receptions,
   now = Date.now(),
 } = {}) {
   const referenceNow = Number.isFinite(Number(now)) ? Number(now) : Date.now();
@@ -391,6 +393,18 @@ export function getBusinessProjects({
         ...purchaseViews.active,
         ...purchaseViews.received,
       ]);
+      const relatedPurchaseIds = new Set(
+        relatedPurchases.map((purchase) => text(purchase?.id)),
+      );
+      const relatedReceptions = availableInput(receptions).filter(
+        (reception) => relatedPurchaseIds.has(text(reception?.purchaseId)),
+      );
+      const receptionSummary = getReceptionSummary({
+        receptions: relatedReceptions,
+        purchases: relatedPurchases,
+        productionOrders: order ? [order] : [],
+        quotes: [quote],
+      });
       const purchaseState = getPurchaseMaterialState(relatedPurchases, order);
       const operationalStatus = getProductionOperationalState(order, purchaseState);
       const commercialStatus = quoteRecordStatus(quote);
@@ -403,6 +417,7 @@ export function getBusinessProjects({
         quotes: getQuotesSummary([quote]),
         production: getProductionSummary(order ? [order] : []),
         purchases: purchaseSummary,
+        receptions: receptionSummary,
         purchaseOperations: purchaseViews.counters,
         customers: getCustomerSummary([quote]),
         projectOperations: getProjectStatusSummary({
@@ -415,7 +430,10 @@ export function getBusinessProjects({
         summaries,
         availability: { customers: true, inventory: false },
       });
-      const pending = getBusinessPendingSummary({ summaries });
+      const pending = getBusinessPendingSummary({
+        summaries,
+        receptionsAvailable: Array.isArray(receptions),
+      });
       const pendingActions = pending.map((item) => item.label);
       if (!order && commercialStatus === QUOTE_STATUSES.ACCEPTED) {
         pendingActions.unshift('Crear OT');
@@ -465,7 +483,7 @@ export function getBusinessProjects({
           || order?.cliente,
         'Cliente no registrado',
       );
-      const recentActivity = getProjectOperationalActivity({
+      const projectActivity = getProjectOperationalActivity({
         quote,
         order,
         purchases: [...purchaseViews.active, ...purchaseViews.received],
@@ -473,6 +491,24 @@ export function getBusinessProjects({
         projectName,
         operationalStatus,
       });
+      const receptionActivity = availableInput(receptionSummary.activity)
+        .map((event) => operationalEvent({
+          projectId,
+          projectName,
+          eventType: event.type,
+          description: event.summary,
+          occurredAt: event.occurredAt,
+          destination: 'recepcion',
+          source: 'reception-summary',
+          sourceId: event.id,
+        }))
+        .filter(Boolean);
+      const recentActivity = [...projectActivity, ...receptionActivity]
+        .sort((left, right) => (
+          Date.parse(right.occurredAt) - Date.parse(left.occurredAt)
+          || left.id.localeCompare(right.id)
+        ))
+        .slice(0, 6);
 
       return {
         id: projectId,
@@ -493,6 +529,7 @@ export function getBusinessProjects({
         updatedAt: updatedAtValue ? new Date(updatedAtValue).toISOString() : null,
         readOnly,
         purchasesPending: positiveCount(purchaseSummary.pending),
+        reception: receptionSummary,
         purchaseIds: relatedPurchases.map((purchase) => text(purchase?.id)).filter(Boolean),
         production: order ? {
           id: text(order.id),
@@ -518,6 +555,7 @@ export function getBusinessRiskSummary({ summaries = {}, availability = {} } = {
   const customers = summaries.customers || {};
   const production = summaries.production || {};
   const purchases = summaries.purchases || {};
+  const receptions = summaries.receptions || {};
   const workflow = summaries.projectOperations || {};
   const inventory = summaries.inventory || {};
 
@@ -565,13 +603,59 @@ export function getBusinessRiskSummary({ summaries = {}, availability = {} } = {
     ));
   }
 
+  if (
+    availability.receptions
+    && availableInput(receptions.alerts).some((item) => item.id === 'reception-damaged')
+  ) {
+    const damaged = receptions.alerts.find((item) => item.id === 'reception-damaged');
+    risks.push(derivedItem(
+      'reception-damaged',
+      'Material recibido con daño',
+      damaged.count,
+      'reception-summary',
+      'Recepción reporta material dañado.',
+    ));
+  }
+
+  if (
+    availability.receptions
+    && availableInput(receptions.alerts).some((item) => item.id === 'reception-rejected')
+  ) {
+    const rejected = receptions.alerts.find((item) => item.id === 'reception-rejected');
+    risks.push(derivedItem(
+      'reception-rejected',
+      'Material recibido rechazado',
+      rejected.count,
+      'reception-summary',
+      'Recepción reporta material rechazado.',
+    ));
+  }
+
+  if (
+    availability.receptions
+    && availableInput(receptions.alerts).some((item) => item.id === 'reception-missing')
+  ) {
+    const missing = receptions.alerts.find((item) => item.id === 'reception-missing');
+    risks.push(derivedItem(
+      'reception-missing',
+      'Faltante detectado en recepción',
+      missing.count,
+      'reception-summary',
+      'Recepción reporta material faltante pendiente de atención.',
+    ));
+  }
+
   return risks;
 }
 
-export function getBusinessPendingSummary({ summaries = {} } = {}) {
+export function getBusinessPendingSummary({
+  summaries = {},
+  receptionsAvailable = false,
+} = {}) {
   const pending = [];
   const production = summaries.production || {};
   const purchases = summaries.purchases || {};
+  const receptions = summaries.receptions || {};
   const workflow = summaries.projectOperations || {};
 
   if (positiveCount(production.pending) > 0) {
@@ -596,7 +680,19 @@ export function getBusinessPendingSummary({ summaries = {} } = {}) {
     ));
   }
 
-  if (positiveCount(purchases.purchased) > 0) {
+  const receptionPending = positiveCount(receptions.pending)
+    + positiveCount(receptions.partial)
+    + positiveCount(receptions.rejected);
+  if (receptionsAvailable && receptionPending > 0) {
+    pending.push(derivedItem(
+      'receive-purchases',
+      'Recibir compras',
+      receptionPending,
+      'reception-summary',
+      'Compras con recepción pendiente, parcial o rechazada.',
+      'pending',
+    ));
+  } else if (!receptionsAvailable && positiveCount(purchases.purchased) > 0) {
     pending.push(derivedItem(
       'receive-purchases',
       'Recibir compras',
@@ -701,6 +797,7 @@ export function getBusinessIndicatorSummary({
   const quotes = summaries.quotes || {};
   const production = summaries.production || {};
   const purchases = summaries.purchases || {};
+  const receptions = summaries.receptions || {};
   const purchaseOperations = summaries.purchaseOperations || {};
   const inventory = summaries.inventory || {};
   const customers = summaries.customers || {};
@@ -725,6 +822,12 @@ export function getBusinessIndicatorSummary({
       purchaseOperations.activePurchasesCount,
       availability.purchases,
       'purchases-summary',
+    ),
+    receptions: domainIndicator(
+      'Recepción',
+      receptions.progress,
+      availability.receptions,
+      'reception-summary',
     ),
     inventory: domainIndicator(
       'Inventario',
@@ -800,6 +903,7 @@ export function getBusinessState({
   quotes,
   productionOrders,
   purchases,
+  receptions,
   purchaseStatusById,
   inventoryItems,
   inventoryAvailableById,
@@ -831,6 +935,7 @@ export function getBusinessState({
     quotes: availableInput(quotes),
     productionOrders: availableInput(productionOrders),
     purchases: availableInput(purchases),
+    receptions,
     now,
   });
   const deliveredQuoteIds = new Set(projects
@@ -850,6 +955,12 @@ export function getBusinessState({
       [...purchaseViews.active, ...purchaseViews.received],
       purchaseStatusById,
     ),
+    receptions: getReceptionSummary({
+      receptions: availableInput(receptions),
+      purchases: [...purchaseViews.active, ...purchaseViews.received],
+      productionOrders: availableInput(productionOrders),
+      quotes: availableInput(quotes),
+    }),
     purchaseOperations: purchaseViews.counters,
     projectOperations,
     inventory: getInventorySummary(availableInput(inventoryItems), inventoryAvailableById),
@@ -868,6 +979,7 @@ export function getBusinessState({
     quotes: hasInput(quotes),
     production: hasInput(productionOrders),
     purchases: hasInput(purchases),
+    receptions: hasInput(receptions),
     inventory: hasInput(inventoryItems),
     customers: hasInput(customerRecords, quotes),
     finances: hasInput(financeRecords, quotes),
@@ -880,7 +992,10 @@ export function getBusinessState({
     mode: readOnly ? 'read-only' : 'editable',
   };
   const risks = getBusinessRiskSummary({ summaries, availability });
-  const pending = getBusinessPendingSummary({ summaries });
+  const pending = getBusinessPendingSummary({
+    summaries,
+    receptionsAvailable: availability.receptions,
+  });
   const health = getBusinessHealthSummary({
     risks,
     readOnly,
@@ -932,6 +1047,7 @@ export function getBusinessState({
       ...summaries.purchases,
       operations: summaries.purchaseOperations,
     },
+    receptions: summaries.receptions,
     workflow: summaries.projectOperations,
     health,
     risks,

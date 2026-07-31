@@ -1,9 +1,24 @@
 import { AlertTriangle, CheckCircle2, Circle, Clock3, UserRound } from 'lucide-react';
 import { getNextRecommendation, getProjectStage, getWarnings, WORKFLOW_STAGES } from '../lib/workflow/workflow.js';
 
-export default function ProjectCompanion({ form, quote, dataHealth, decimal }) {
+export default function ProjectCompanion({
+  form,
+  quote,
+  dataHealth,
+  decimal,
+  receptionSummary,
+}) {
+  const receptionAlerts = new Set((receptionSummary?.alerts || []).map((item) => item.id));
   const progress = Math.min(100, Math.max(0, Number(dataHealth?.score) || 0));
-  const workflowContext = { form, quote, workflow: {} };
+  const workflowContext = {
+    form,
+    quote,
+    workflow: {
+      recepcionItems: receptionSummary?.complete
+        ? [{ status: 'recibido' }]
+        : [],
+    },
+  };
   const projectStage = getProjectStage(workflowContext);
   const recommendation = getNextRecommendation(workflowContext);
   const alerts = getWarnings(workflowContext);
@@ -48,14 +63,25 @@ export default function ProjectCompanion({ form, quote, dataHealth, decimal }) {
 
       <article className="project-companion-card project-companion-alerts">
         <h3>Alertas</h3>
-        {alerts.length ? alerts.map((alert) => <span key={alert}><AlertTriangle size={15} /> {alert}</span>) : <p>Sin alertas críticas.</p>}
+        {receptionAlerts.has('reception-damaged') && (
+          <span><AlertTriangle size={15} /> Material dañado en recepción</span>
+        )}
+        {receptionAlerts.has('reception-rejected') && (
+          <span><AlertTriangle size={15} /> Material rechazado en recepción</span>
+        )}
+        {receptionAlerts.has('reception-missing') && (
+          <span><AlertTriangle size={15} /> Faltante detectado en recepción</span>
+        )}
+        {alerts.length
+          ? alerts.map((alert) => <span key={alert}><AlertTriangle size={15} /> {alert}</span>)
+          : receptionAlerts.size === 0 && <p>Sin alertas críticas.</p>}
       </article>
 
       <article className="project-companion-card project-companion-activity">
         <h3>Actividad reciente</h3>
-        <span><strong>Hace 5 min</strong> Cotización actualizada</span>
-        <span><strong>Hace 30 min</strong> Material agregado</span>
-        <span><strong>Hoy</strong> PDF generado</span>
+        {receptionSummary?.activity?.length ? receptionSummary.activity.slice(0, 3).map((event) => (
+          <span key={event.id}><strong>{new Date(event.occurredAt).toLocaleString('es-MX')}</strong> {event.summary}</span>
+        )) : <p>Sin actividad reciente de Recepción.</p>}
       </article>
     </section>
   );

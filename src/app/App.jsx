@@ -37,7 +37,11 @@ import TextSection from '../sections/TextSection.jsx';
 import WorkspaceAccessRequestsSection, {
   WorkspaceAccessGate,
 } from '../sections/WorkspaceAccessRequestsSection.jsx';
-import { canAccessSection, canManagePurchasing } from '../lib/workspace/permissions.js';
+import {
+  canAccessSection,
+  canManageInventory,
+  canManagePurchasing,
+} from '../lib/workspace/permissions.js';
 import {
   getPurchaseMaterialState,
   getQuoteDisplayStatus,
@@ -51,6 +55,7 @@ import useQuotes from '../hooks/useQuotes.js';
 import useOptimizationSessions from '../hooks/useOptimizationSessions.js';
 import useProduction from '../hooks/useProduction.js';
 import usePurchases from '../hooks/usePurchases.js';
+import useReception from '../hooks/useReception.js';
 import useQuickCalculator from '../hooks/useQuickCalculator.js';
 import usePlanEditor from '../hooks/usePlanEditor.js';
 import useCatalog from '../hooks/useCatalog.js';
@@ -476,22 +481,39 @@ function App() {
     productionOrders,
   });
   const canEditPurchases = canManagePurchasing(currentWorkspaceRole);
+  const reception = useReception({
+    authSession,
+    activeWorkspace,
+    workspaceAccessStatus,
+    purchases,
+    productionOrders,
+    quotes: history,
+    selectedPurchaseId,
+  });
+  const canEditReceptions = canEditPurchases
+    || canManageInventory(currentWorkspaceRole);
   const businessState = useMemo(() => getBusinessState({
     settings: workspaceSettings,
     quotes: history,
     productionOrders,
     purchases,
+    receptions: reception.receptions,
     activeProductionOrder,
   }), [
     activeProductionOrder,
     history,
     productionOrders,
     purchases,
+    reception.receptions,
     workspaceSettings,
   ]);
   const focusedProject = businessState.projects.find((project) => (
     project.id === focusedProjectId
   )) || businessState.projects[0] || null;
+  const contextualReceptionSummary = businessState.projects.find((project) => (
+    project.quoteId === activeQuoteIdentity?.id
+    || project.productionOrderId === activeProductionOrder?.id
+  ))?.reception || null;
 
   useEffect(() => {
     const projects = businessState.projects;
@@ -1177,6 +1199,11 @@ function App() {
             productionError={productionError}
             productionSyncStatus={productionSyncStatus}
             onCalculateMaterial={() => openMaterialCalculator({ sourceSection: 'produccion' })}
+            receptionInbox={reception.receptionInbox}
+            onOpenReceiving={(purchaseId) => {
+              setSelectedPurchaseId(purchaseId || null);
+              setActiveSection('recepcion');
+            }}
           />
         )}
 
@@ -1196,6 +1223,11 @@ function App() {
             purchasesError={purchasesError}
             purchasesSyncStatus={purchasesSyncStatus}
             canManage={canEditPurchases}
+            onOpenReceiving={(purchase) => {
+              setSelectedPurchaseId(purchase?.id || null);
+              setActiveSection('recepcion');
+            }}
+            receptionInbox={reception.receptionInbox}
             money={money}
             decimal={decimal}
           />
@@ -1204,9 +1236,31 @@ function App() {
         {activeSection === 'recepcion' && (
           <ReceivingSection
             form={form}
-            quote={quote}
+            purchases={purchases}
+            activePurchase={reception.activePurchase}
+            activePurchaseView={reception.activePurchaseView}
+            summary={reception.receptionSummary}
+            inbox={reception.receptionInbox}
+            events={reception.receptionEvents}
+            notifications={reception.receptionNotifications}
+            receptions={reception.receptions}
+            pendingOperations={reception.pendingOperations}
+            receptionLoading={reception.receptionLoading}
+            receptionError={reception.receptionError}
+            receptionSyncStatus={reception.receptionSyncStatus}
+            conflicts={reception.receptionConflicts}
+            onSelectPurchase={setSelectedPurchaseId}
+            onOpenProject={(row) => {
+              const quote = history.find((item) => item.id === row.quoteId);
+              if (quote) loadHistoryItem(quote);
+              if (row.productionOrderId) setSelectedProductionOrderId(row.productionOrderId);
+              setActiveSection(row.productionOrderId ? 'produccion' : 'cotizador');
+            }}
+            onSave={reception.saveReception}
+            onDelete={reception.removeReception}
+            onSync={reception.syncPendingReceptions}
             decimal={decimal}
-            readOnly={projectReadOnly}
+            readOnly={!canEditReceptions}
           />
         )}
 
@@ -1292,6 +1346,7 @@ function App() {
             readOnly={getHistorySectionReadOnly(canEditWorkspaceQuotes)}
             productionOrders={productionOrders}
             purchases={purchases}
+            receptionEvents={reception.receptionEvents}
             onOpenProduction={(order) => {
               setSelectedProductionOrderId(order.id);
               setActiveSection('produccion');
@@ -1408,6 +1463,7 @@ function App() {
             openPrint={openPrint}
             openWhatsApp={openWhatsApp}
             setActiveSection={setActiveSection}
+            receptionSummary={contextualReceptionSummary}
             readOnly={projectReadOnly}
           />
         )}
