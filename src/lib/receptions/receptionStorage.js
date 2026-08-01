@@ -91,7 +91,27 @@ export function createReceptionStorage({
     return save(workspaceId, receptions);
   }
 
-  return Object.freeze({ load, save, upsert, remove, replaceWorkspace });
+  function removeByProductionOrder(workspaceId, productionOrderId) {
+    const current = load(workspaceId);
+    const removed = current.filter((item) => (
+      item.productionOrderId === productionOrderId
+    ));
+    return {
+      removed,
+      remaining: save(workspaceId, current.filter((item) => (
+        item.productionOrderId !== productionOrderId
+      ))),
+    };
+  }
+
+  return Object.freeze({
+    load,
+    save,
+    upsert,
+    remove,
+    replaceWorkspace,
+    removeByProductionOrder,
+  });
 }
 
 export const ReceptionStorage = createReceptionStorage();

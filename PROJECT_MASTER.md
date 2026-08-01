@@ -4,7 +4,7 @@
 
 - **Workspace operativo actual:** ALUXOR / BosqueReal
 - **Etapa activa:** Etapa III — ERP operativo
-- **Fase oficial:** 25.5C — Validación remota de Recepción; 25.5B implementada en código y validada automáticamente
+- **Fase oficial:** 25.5D — Eliminación Segura y Transversal de Órdenes de Producción; implementación local preparada, validación remota pendiente
 - **Última actualización:** 31/07/2026
 
 ## 1. Identidad del proyecto
@@ -144,7 +144,7 @@ Durante una sesión abierta, `workingInput` es la única fuente de verdad editab
 | Estado comercial | `quote.status` / `estadoCotizacion`, limitado por Quote Adapter | Cotización, Historial y estado visible previo a una OT. |
 | Estado operacional | `productionOrder.estado` y `PRODUCTION_STATUSES` | Workflow, Producción, summaries, Business State y estado visible del proyecto. |
 | Disponibilidad de materiales | Compra y estados de `purchase_items` | `getPurchaseMaterialState()`, Workflow, Producción y summaries. |
-| Recepción física | Contratos `receptions` y `reception_items`, ligados por UUID a Compra y sus partidas; migración remota todavía no aplicada | Bandeja global, captura rápida y detallada, selectors, Reception Summary, Business State, Inicio, Compras, Producción, Inspector, Project Companion e Historial. Los acumulados, incidencias, eventos, notificaciones y estados `pending`, `partial`, `complete` y `rejected` son derivados. |
+| Recepción física | Contratos `receptions` y `reception_items`, ligados por UUID a Compra y sus partidas; migración, RLS, Broadcast y operación remota validados | Bandeja global, captura rápida y detallada, selectors, Reception Summary, Business State, Inicio, Compras, Producción, Inspector, Project Companion e Historial. Los acumulados, incidencias, eventos, notificaciones y estados `pending`, `partial`, `complete` y `rejected` son derivados. |
 | Proyecto entregado | `isProjectReadOnly(productionOrder)` cuando el estado canónico es `Entregado` | Guardas de hooks, controles de secciones, Inspector, Historial y Business State. |
 | Identidad técnica | UUID de `entity.id` dentro de `workspace_id` | Adapters, repositories, storage, relaciones y auditoría. El folio no participa como identidad. |
 | Integridad | Colecciones locales reales y lecturas Supabase bajo RLS | `runIntegrityAudit()` y su reporte; Business State no es fuente de auditoría. |
@@ -647,10 +647,10 @@ La fase no incluye sincronización automática, reintentos automáticos, Backgro
 | Histórico | 25.3 — Business State 2.0 | Cerrada e integrada en `main` mediante `660a217ba73f4845f68047d88ec551663f22d5cd` |
 | 1 | Revisión final de Smart Cut, documentación, commit y push | Completada mediante `73349ce` (`feat(smart-cut): complete Smart Cut Engine architecture through Optimization Sessions`) |
 | 2 | 25.4 — Operational Center | Completada mediante `3c7affb` (`feat(operations): add operational center and BR Material Studio`) |
-| 3 | 25.5 — Recepción Durable | Completada en código y validada automáticamente; validación operacional remota pendiente |
+| 3 | 25.5 — Recepción Durable | Completada y validada local y remotamente |
 | 3B | 25.5B — Centro Operativo de Recepción | Implementada en código y validada automáticamente |
-| 3C | 25.5C — Validación remota de Recepción | Siguiente fase oficial |
-| 3D | 25.5D — Eliminación Segura y Transversal de Órdenes de Producción | Planeada; posterior a 25.5C y previa a 25.6 |
+| 3C | 25.5C — Validación remota de Recepción | Completada e integrada en `main` mediante `751a074` |
+| 3D | 25.5D — Eliminación Segura y Transversal de Órdenes de Producción | Implementada localmente; migración, RPC y validación operacional remotas pendientes |
 | 4 | 25.6 — Inventario por Movimientos | Siguiente fase funcional después de consolidar Recepción |
 | 5 | Optimization Sessions — nueva fase de Smart Cut | Completada |
 | 6 | Optimization Sessions Remote Persistence, Realtime y referencia activa | Completada mediante `6a61cfc`; CRUD y `activeSessionId` validados bidireccionalmente |
@@ -669,7 +669,7 @@ Este orden es oficial. El adelanto técnico de Smart Cut no renumera Recepción 
 | Cotización | Operativo y durable | Repository, offline queue, versionado, Realtime, Presence, historial e identidad canónica. Conserva únicamente `material.optimization.activeSessionId` como referencia activa canónica y la sincroniza entre ventanas mediante su propio Realtime. Sus comandos de edición, guardado, estado, eliminación e importación se bloquean cuando la OT relacionada está entregada. `useQuotes.js` y `QuoteSection.jsx` requieren reducción progresiva. |
 | Producción | Operativo y durable, con evolución pendiente | Motor, storage, repository, Supabase, sincronización, Realtime, versionado y summary. `Entregado` es terminal mediante `isProjectReadOnly()` y `canAdvanceProductionOrder()`. Falta completar evidencia operacional e historial transversal. |
 | Compras | Operativo y durable | Persistencia local/remota, partidas, offline, Realtime, versionado y relaciones UUID con Producción y Cotización. La edición, autosave, sincronización pendiente y creación se bloquean para la OT entregada. |
-| Recepción | Operativo y durable; centro transversal implementado | Engine, Adapter, Repository local/remoto, versionado optimista, storage por workspace, Pending Operations, Sync Engine manual, Realtime en código, Hook, Section, selectors, guards y summary implementados. 25.5B aporta bandeja global independiente del proyecto activo, filtros, recepción rápida y detallada, incidencias, actividad, notificaciones derivadas e integración con Inicio, Compras, Producción, Inspector, Project Companion e Historial. Persiste eventos parciales por UUID, conserva conflictos sin merge automático y alimenta Business State sin crear stock. La migración remota y la validación operacional permanecen pendientes en 25.5C. |
+| Recepción | Operativo y durable; centro transversal validado | Engine, Adapter, Repository local/remoto, versionado optimista, storage por workspace, Pending Operations, Sync Engine manual, Realtime, Hook, Section, selectors, guards y summary implementados. 25.5B aporta bandeja global independiente del proyecto activo, filtros, recepción rápida y detallada, incidencias, actividad, notificaciones derivadas e integración con Inicio, Compras, Producción, Inspector, Project Companion e Historial. 25.5C validó migración, RLS, Broadcast, Realtime, offline, reconexión, conflictos e idempotencia contra Supabase. Persiste eventos parciales por UUID, conserva conflictos sin merge automático y alimenta Business State sin crear stock. |
 | Inventario | Interfaz existente y fuente reutilizable; dominio incompleto | Summary puro disponible; la pantalla calcula sobre datos de cotización y estado React y deshabilita edición en proyectos entregados. Falta modelo por movimientos y persistencia. |
 | Fabricación | Interfaz existente y fuente reutilizable; dominio incompleto | Consume el summary oficial Legacy o Smart Cut activo y válido sin recalcular geometría, candidatos ni costos. Respeta el modo de solo lectura; checklist, progreso y notas no son todavía un dominio durable. |
 | Smart Cut Engine / Cut Optimizer | Motor congelado y dominio de sesiones durable local/remoto con Realtime | Motor, Shelf, Best Fit, candidatos, evaluación, ranking, selección, recomendación, UI comparativa, Proposal y Active Mode tienen cierre técnico. Optimization Session conserva identidad de ejecución, Working Input, referencias y summary sin duplicar candidatos completos ni geometría; Quote conserva únicamente `activeSessionId`. Source, Adapter, repositories, Supabase Client Adapter, Repository Provider, versionado, storage, colas, Sync Engine manual, Realtime, Hook, Section, Summary y Selectors están implementados. CRUD, selección activa y consolidación de experiencia y ciclo de vida están implementados. Faltan sincronización automática, resolución avanzada de conflictos, historial remoto, remanentes e integración definitiva con Inventario; Smart Cut Optimizer completo no se declara finalizado. |
@@ -710,12 +710,12 @@ Las tarjetas implementadas muestran estados y conteos derivados de Business Stat
 
 ### Panel izquierdo
 
-Compras y Recepción ya tienen base durable en código; Recepción completó su consolidación transversal en 25.5B y conserva pendiente la validación operacional remota de 25.5C. Inventario y Fabricación deben completar, según corresponda: modelo canónico, UUID, workspace, storage local, repository, Supabase, RLS, offline, sincronización, Realtime, versionado, summary, Business State y actualización de Inicio e Inspector. Smart Cut ya completó motor, UI, Proposal y Active Mode; su evolución durable conserva el orden específico documentado a continuación.
+Compras y Recepción ya tienen base durable; Recepción completó su consolidación transversal en 25.5B y su validación operacional remota en 25.5C. Inventario y Fabricación deben completar, según corresponda: modelo canónico, UUID, workspace, storage local, repository, Supabase, RLS, offline, sincronización, Realtime, versionado, summary, Business State y actualización de Inicio e Inspector. Smart Cut ya completó motor, UI, Proposal y Active Mode; su evolución durable conserva el orden específico documentado a continuación.
 
 ### Recepción
 
 - 25.5B convirtió la experiencia en un centro transversal del workspace sin duplicar responsabilidades de Compras ni adelantar Inventario.
-- 25.5C debe aplicar y validar la infraestructura remota real antes de declarar RLS, Broadcast, Realtime, reconexión y sincronización operacionalmente cerrados.
+- 25.5C cerró RLS, Broadcast, Realtime, reconexión y sincronización de Recepción contra la infraestructura remota real.
 - Inventario por Movimientos permanece en 25.6 y no se adelanta durante estas consolidaciones.
 
 ### Smart Cut
@@ -835,11 +835,9 @@ La sincronización bidireccional entre **Notas internas** y **Observaciones** pu
 - Diseñar una resolución explícita de operaciones `failed` y `conflict` sin merge automático.
 - Mantener el dominio desacoplado de Supabase.
 - Incorporar historial remoto consolidado manteniendo Quote como fuente de verdad de la entrada de material y de la referencia activa.
-- Definir un Application Command canónico para eliminación destructiva de órdenes.
-- Diseñar una RPC transaccional protegida para 25.5D.
-- Inspeccionar todas las foreign keys reales que referencian `production_orders`.
-- Implementar tombstones o un contrato equivalente contra resurrección.
-- Retirar operaciones pendientes de entidades eliminadas.
+- Aplicar y validar remotamente la migración y RPC de 25.5D.
+- Validar la eliminación real y la reconciliación Realtime en dos sesiones del mismo workspace.
+- Confirmar en Supabase el rollback, los conteos y el aislamiento cross-workspace del comando destructivo.
 - Proteger credenciales y secretos exclusivamente fuera del frontend.
 - No sustituir el análisis de relaciones por cascadas indiscriminadas.
 - Delegar la propiedad durable de remanentes a Inventario; Smart Cut solo podrá consumirlos y proponer su uso.
@@ -968,8 +966,8 @@ Este cambio no forma parte de la actualización documental actual.
 | 31/07/2026 | Compras consulta el estado recibido, pero Recepción es la única autoridad para confirmar físicamente cantidades aceptadas, dañadas, rechazadas y faltantes. | Evitar duplicidad funcional y conservar una sola fuente de verdad sobre la llegada de materiales. | Implementada en 25.5B |
 | 31/07/2026 | Recepción debe operar como centro transversal del workspace y no quedar limitada al proyecto activo. | Permitir recibir materiales de cualquier compra o proyecto y convertir Recepción en un área operativa real. | Implementada en 25.5B |
 | 31/07/2026 | Los eventos y notificaciones de Recepción serán vistas derivadas del dominio propietario, no copias editables en cada módulo. | Comunicar incidencias y resultados sin escrituras cruzadas ni fuentes duplicadas. | Implementada en 25.5B |
-| 31/07/2026 | La eliminación definitiva de una Orden de Producción será un comando destructivo transaccional y transversal, no un DELETE directo desde la interfaz. | Evitar relaciones huérfanas, borrados parciales y reapariciones por almacenamiento local, sincronización o Realtime. | Planeada para 25.5D |
-| 31/07/2026 | Solo un propietario autenticado podrá eliminar una OT y deberá superar una segunda verificación protegida del lado servidor. | La credencial no debe residir en el bundle del navegador y conocerla no sustituye el rol canónico del workspace. | Planeada para 25.5D |
+| 31/07/2026 | La eliminación definitiva de una Orden de Producción será un comando destructivo transaccional y transversal, no un DELETE directo desde la interfaz. | Evitar relaciones huérfanas, borrados parciales y reapariciones por almacenamiento local, sincronización o Realtime. | Implementada localmente; validación remota pendiente |
+| 31/07/2026 | Solo un propietario autenticado y con membresía activa podrá eliminar una OT; la RPC repetirá la autorización con `auth.uid()`. | El rol canónico del workspace es la autorización destructiva; no se almacenan contraseñas, secretos ni códigos adicionales en el frontend. | Implementada localmente; validación remota pendiente |
 | Pendiente de validación | Inventario se basará en movimientos. | Garantizar trazabilidad de existencias. | Pendiente |
 | 26/07/2026 | Shelf seguirá siendo el fallback oficial. | Mantener continuidad total con cotizaciones Legacy y garantizar una optimización disponible ante candidatos ausentes u obsoletos. | Implementada |
 | 26/07/2026 | No duplicar geometría. | El motor es la única autoridad del cálculo físico; Optimization Sessions conserva referencias y summary, mientras UI, Proposal, Quote y Fabricación solo consumen sus resultados. | Vigente |
@@ -1008,30 +1006,26 @@ Las fechas no verificables se mantienen como **Pendiente de validación**; no se
 
 ## 16. Próximo sprint oficial
 
-### 25.5C — Validación remota de Recepción
+### 25.5D — Eliminación Segura y Transversal de Órdenes de Producción
 
 **Estado:** SIGUIENTE FASE OFICIAL.
 
-**Propósito:** aplicar la migración versionada y validar operacionalmente el dominio durable y el Centro Operativo de Recepción sobre el proyecto Supabase correcto.
+**Propósito:** aplicar y validar de forma controlada la migración y RPC transaccional preparadas localmente, sin adelantar Inventario.
 
 Prioridades:
 
-- verificar el enlace y el historial de migraciones del proyecto remoto;
-- aplicar `receptions` y `reception_items` exclusivamente mediante Supabase CLI;
-- validar RLS, permisos, auditoría e aislamiento por `workspace_id`;
-- validar relaciones canónicas e inmutabilidad;
-- validar Broadcast privado y Realtime en dos ventanas;
-- validar operación online, offline, reconexión, conflictos e idempotencia;
-- confirmar ausencia de duplicados y de escrituras originadas por eventos remotos;
+- confirmar mediante dry run que únicamente se aplicará la migración de 25.5D;
+- validar la RPC con owner activo, no-owner y aislamiento por `workspace_id`;
+- comprobar conteos, auditoría, rollback, idempotencia y conservación de Quote;
+- validar limpieza de Producción, Compras, Recepción y operaciones pendientes;
+- validar Realtime y ausencia de resurrección en dos ventanas;
 - no crear Inventario.
 
-**Condición de cierre:** la existencia de tablas no basta; Recepción debe validarse con una sesión autenticada y pruebas operacionales reales.
+**Condición de cierre:** la implementación local no basta; la RPC debe estar aplicada y validada operacionalmente con dependencias reales y dos sesiones autenticadas.
 
 Secuencia posterior oficial:
 
 ```text
-25.5C — Validación remota de Recepción
-↓
 25.5D — Eliminación Segura y Transversal de Órdenes de Producción
 ↓
 25.6 — Inventario por Movimientos
@@ -1217,27 +1211,17 @@ Validación automática de 25.5B:
 
 ### Fase 25.5C — Validación remota de Recepción
 
-**Estado:** PENDIENTE.
+**Estado:** COMPLETADA E INTEGRADA EN `main` MEDIANTE `751a074`.
 
-Alcance:
-
-- aplicar las migraciones remotas y validar `receptions` y `reception_items`;
-- validar RLS, permisos, `workspace_id` e inmutabilidad del workspace;
-- validar Broadcast privado y Realtime en dos ventanas;
-- validar INSERT, UPDATE y DELETE cuando aplique;
-- validar eventos antiguos, duplicados y ecos;
-- validar offline, reconexión y `syncPendingOperations()`;
-- validar conflictos, idempotencia y ausencia de recepciones duplicadas.
-
-Ninguna de estas validaciones remotas se declara realizada.
+Se validaron contra Supabase `receptions` y `reception_items`, RLS, permisos, aislamiento e inmutabilidad de `workspace_id`, Broadcast privado, Realtime, operaciones online/offline, reconexión, `syncPendingOperations()`, conflictos, idempotencia y ausencia de duplicados. Este cierre habilita 25.5D sin modificar el contrato durable de Recepción.
 
 ### Fase 25.5D — Eliminación Segura y Transversal de Órdenes de Producción
 
-**Estado:** PLANEADA; POSTERIOR A 25.5C Y PREVIA A 25.6.
+**Estado:** IMPLEMENTADA Y VALIDADA LOCALMENTE; MIGRACIÓN, RPC Y PRUEBA OPERACIONAL REMOTAS PENDIENTES.
 
 **Objetivo:** permitir que únicamente el propietario autorizado del workspace elimine definitivamente una orden de producción y sus datos operativos dependientes, sin errores de foreign keys, borrados parciales, resurrección por sincronización ni eliminación de la cotización original.
 
-La fase se ejecutará después de validar operacionalmente Recepción en Supabase, porque el comando deberá conocer y gestionar las relaciones durables reales de Producción, Compras y Recepción.
+La auditoría confirmó dependencias `RESTRICT` desde Compras y Recepción, y relaciones descendentes hacia sus partidas. Quote conserva la relación desde `production_orders.quote_id`; no almacena una segunda referencia a OT.
 
 Principio central:
 
@@ -1250,40 +1234,28 @@ Modal destructivo de confirmación
 ↓
 Application Command
 ↓
-Supabase Edge Function
-↓
-Validación de sesión
-↓
-Validación de workspace
-↓
-Validación de rol owner
-↓
-Validación de credencial adicional
-↓
 RPC SQL transaccional protegida
-↓
-Auditoría previa
 ↓
 Eliminación ordenada de dependencias
 ↓
-Tombstone o protección contra resurrección
+Auditoría mínima
 ↓
-Realtime y reconciliación
+Limpieza local y de operaciones pendientes
 ↓
-Limpieza local y actualización transversal
+Tombstone local
+↓
+Realtime y reconciliación derivada
 ```
 
 Autorización obligatoria:
 
 - solo un usuario autenticado con rol canónico `owner` podrá ejecutar el comando;
 - la opción se ocultará a usuarios sin permiso, pero el servidor repetirá toda validación;
-- conocer la credencial adicional no sustituirá el rol de propietario;
 - usuario, orden y workspace deberán coincidir;
 - una orden de otro workspace nunca podrá eliminarse;
-- la credencial adicional permanecerá como Supabase Secret o hash seguro accesible únicamente desde servidor;
-- contraseña, hash o secreto no podrán almacenarse en React, JavaScript público, variables `VITE_*`, localStorage, sessionStorage, logs, respuestas públicas ni bundles;
+- no existe contraseña, secreto ni código de autorización adicional en el frontend;
 - la service role key nunca se expondrá al frontend;
-- los errores serán genéricos, los intentos se limitarán y la credencial recibida nunca se registrará.
+- la RPC valida `auth.uid()`, membresía activa y rol `owner`, usa `search_path` vacío y no está disponible para `anon`.
 
 Interfaz prevista:
 
@@ -1292,11 +1264,11 @@ Más opciones
 └── Eliminar orden
 ```
 
-El modal mostrará nombre o folio, advertencia permanente, resumen de datos relacionados, campo de autorización, botones **Cancelar** y **Eliminar definitivamente**, estado de procesamiento y protección contra doble envío. Comunicará expresamente que la cotización original se conservará. La interfaz no será una barrera de seguridad suficiente por sí sola.
+El modal muestra el folio, la advertencia permanente, el alcance relacionado y exige escribir manualmente el folio antes de habilitar **Eliminar definitivamente**. Incluye estado de procesamiento, errores y protección contra doble envío. La interfaz no sustituye la autorización del servidor.
 
 Alcance transversal:
 
-Antes de implementar se inspeccionarán todas las foreign keys reales que referencian `production_orders`, comenzando por `purchases.production_order_id`, y las relaciones reales o indirectas con partidas de Compra, recepciones, partidas recibidas, historial, eventos, notas, notificaciones, operaciones pendientes, cachés, selecciones, summaries y auxiliares exclusivos de la orden.
+Se inspeccionaron todas las foreign keys reales que referencian `production_orders`, comenzando por `purchases.production_order_id`, y las relaciones directas o indirectas con partidas de Compra, recepciones, partidas recibidas, historial derivado, auditoría, operaciones pendientes, cachés, selecciones y summaries.
 
 Para cada relación se decidirá explícitamente si corresponde eliminar, conservar, desvincular, archivar o auditar. No se convertirán indiscriminadamente todas las foreign keys a `ON DELETE CASCADE`.
 
@@ -1306,16 +1278,22 @@ Regla sobre Cotización:
 - no se eliminarán automáticamente sesiones de optimización compartidas o no exclusivas de la orden;
 - eliminar también la cotización requerirá un comando destructivo independiente y otra decisión arquitectónica.
 
-Transacción prevista:
+Transacción implementada:
 
 ```text
 Validar autorización
 ↓
 Validar workspace y existencia
 ↓
-Guardar auditoría
+Eliminar `reception_items`
 ↓
-Eliminar dependencias hijas
+Eliminar `receptions`
+↓
+Eliminar `purchase_items`
+↓
+Eliminar `purchases`
+↓
+Guardar auditoría mínima
 ↓
 Eliminar production_orders
 ↓
@@ -1324,17 +1302,17 @@ Confirmar transacción
 Propagar eliminación
 ```
 
-Si falla cualquier dependencia se ejecutará rollback completo. La RPC recibirá el UUID canónico, resolverá workspace y actor desde contexto confiable, verificará existencia y pertenencia, eliminará en el orden correcto, devolverá un resultado controlado, no estará disponible para `anon` y no confiará en roles enviados por el frontend.
+Si falla cualquier dependencia, PostgreSQL ejecuta rollback completo. La RPC recibe UUID canónicos, obtiene el actor desde `auth.uid()`, bloquea la OT con `FOR UPDATE`, verifica owner activo y workspace, devuelve conteos estructurados y responde idempotentemente cuando la OT ya no existe.
 
 Auditoría mínima previa:
 
 - UUID y folio de la orden;
 - workspace y usuario autorizador;
-- fecha, hora y motivo;
+- fecha y hora;
 - resumen de entidades eliminadas;
 - resultado controlado.
 
-La auditoría nunca incluirá contraseña, hash, token, service role key ni encabezados de autenticación.
+La auditoría reutiliza `workspace_audit_log` con la acción `delete_production_order`; nunca incluye tokens, secretos, service role key ni encabezados de autenticación.
 
 Sincronización y Realtime:
 
@@ -1345,7 +1323,7 @@ Sincronización y Realtime:
 
 Protección contra resurrección:
 
-Una tombstone o contrato equivalente deberá hacer prevalecer la eliminación definitiva sobre copias locales antiguas. El sistema retirará operaciones pendientes, rechazará updates posteriores, reconocerá el UUID eliminado, impedirá recreaciones accidentales y reconciliará ventanas y dispositivos. No habrá merge automático de una orden eliminada.
+`ProductionDeletionRegistry` registra por workspace el UUID y `deletedAt` de la OT eliminada. Production Storage excluye esas identidades al cargar, guardar, fusionar o recibir eventos tardíos. La misma limpieza retira Compras, Recepciones y operaciones pendientes relacionadas. No existe expiración porque el UUID canónico no se reutiliza.
 
 Consumidores que deberán actualizarse:
 
@@ -1363,40 +1341,28 @@ Consumidores que deberán actualizarse:
 
 Business State continuará como adapter derivado: no ejecutará eliminaciones ni será fuente de verdad.
 
-Pruebas futuras obligatorias:
+Validación local implementada:
 
-1. Un owner autenticado con credencial correcta puede eliminar una orden de su workspace.
-2. Un owner con credencial incorrecta no puede eliminar.
-3. Un usuario no owner no puede eliminar aunque conozca la credencial.
-4. Un usuario no puede eliminar una orden de otro workspace.
-5. Una orden inexistente devuelve un resultado controlado.
-6. Las compras relacionadas se eliminan sin error `23503`.
-7. Las partidas de Compras relacionadas se eliminan correctamente.
-8. Las recepciones y partidas relacionadas se eliminan correctamente.
-9. Si falla una dependencia, toda la transacción se revierte.
-10. La cotización original permanece.
-11. La orden desaparece del estado local.
-12. La orden desaparece en otra ventana mediante Realtime.
-13. La orden desaparece en otro dispositivo.
-14. La orden no reaparece al recargar.
-15. La orden no reaparece al reconectar.
-16. La orden no reaparece al sincronizar operaciones pendientes.
-17. No quedan referencias huérfanas.
-18. No quedan selecciones activas relacionadas.
-19. No quedan operaciones pendientes de create o update de la orden.
-20. Realtime no genera loops ni nuevas escrituras.
-21. La auditoría conserva el actor y la referencia eliminada.
-22. Los logs no contienen la credencial.
-23. La opción no aparece para usuarios sin rol owner.
-24. El backend rechaza igualmente una llamada manual de un usuario no owner.
-25. `npm test` pasa.
-26. `npm run build` pasa.
-27. `git diff --check` pasa.
+- pruebas del comando: entradas, owner, confirmación manual, rechazo offline, error remoto, idempotencia y doble ejecución;
+- pruebas estructurales de SQL: `auth.uid()`, owner activo, workspace, `FOR UPDATE`, orden de eliminación, conservación de Quote, auditoría, resultado estructurado y grants;
+- pruebas de limpieza local: Producción, Compras, Recepción, selecciones y operaciones pendientes por identidad;
+- pruebas anti-resurrección: tombstone aislada por workspace y rechazo de caché, merge o evento tardío;
+- pruebas de UI: acción exclusiva para owner y separación respecto de `isProjectReadOnly()`;
+- `npm test`: 106 archivos y 829 pruebas aprobadas;
+- `npm run build`: correcto;
+- `git diff --check`: limpio.
+
+Validación todavía pendiente en Supabase real:
+
+- autorización del backend para owner, no-owner y otro workspace;
+- conteos, rollback e idempotencia con dependencias reales;
+- conservación de Quote y ausencia de huérfanos;
+- propagación Realtime y ausencia de resurrección en dos ventanas y otro dispositivo.
 
 Condición de cierre:
 
 - comando seguro ejecutado en servidor;
-- propietario y segunda verificación validados;
+- propietario activo y aislamiento por workspace validados;
 - dependencias reales gestionadas transaccionalmente;
 - auditoría independiente y cotización conservada;
 - eliminación visible en toda la aplicación mediante Realtime;
@@ -1405,7 +1371,7 @@ Condición de cierre:
 - validación con Supabase real y dos sesiones;
 - pruebas, build y whitespace correctos.
 
-25.5D no está implementada. No se ha creado Edge Function, RPC, migración, secreto, tombstone ni cambio funcional asociado.
+La implementación local existe, pero 25.5D no se declara cerrada. Falta aplicar únicamente esta nueva migración, validar la RPC contra Supabase, ejecutar una eliminación real con dependencias y confirmar Realtime y ausencia de resurrección en dos sesiones. No se ha realizado `db push`.
 
 ## Infraestructura visual y Brand System
 
@@ -1466,7 +1432,7 @@ Ambos contratos son independientes:
 | Inspector Inteligente | Media | Bajo | Componentes |
 | Project Companion | Media | Bajo | Componentes |
 | Centro del Proyecto | Media | Bajo | Componentes |
-| Recepción | Baja | Media | 25.5 durable y 25.5B implementadas en código; 25.5C y 25.5D pendientes |
+| Recepción | Baja | Media | 25.5, 25.5B y 25.5C completadas; 25.5D implementada localmente y pendiente de validación remota |
 | Inventario | Baja | Media | Fase 25.6 |
 | Smart Cut | Baja | Bajo | Persistencia remota, Realtime, referencia activa y consolidación de experiencia y ciclo de vida completados; remanentes e integración con Inventario siguen pendientes |
 | Fabricación | Baja | Media | Hito 8 — Fabricación Durable |
@@ -1527,10 +1493,11 @@ El congelamiento aplica únicamente a la infraestructura visual. No limita la ev
 | 30/07/2026 | Optimization Sessions — cierre de consolidación del dominio | Working Input y Working State canónicos; baseline, dirty y `expectedVersion` estables; guardado y actualización repetitiva; persistencia separada de `selectedPieceIds`, `selectedCandidateId`, `strategy` y `pieceOrder`; recuperación, reconciliación Realtime y compatibilidad legacy consolidadas. Material Calculator y Cut Optimizer consumen `workingInput`; Shelf y Best Fit cambian de inmediato sin modificar el Smart Cut Engine. Validación: 90 archivos, 758 pruebas, build correcto y `git diff --check` limpio; sin commit ni push. |
 | 30/07/2026 | 25.5 — Recepción Durable | Dominio durable implementado en código con eventos parciales, relaciones UUID, adapters, repositories, versionado, storage/offline, Sync Engine manual, Realtime, Hook, Section, Summary y Business State. La migración SQL, RLS y Broadcast están preparados localmente, no aplicados ni validados contra Supabase. Validación automática: 99 archivos, 793 pruebas, build correcto y `git diff --check` limpio; sin commit ni push. |
 | 31/07/2026 | 25.5B — Centro Operativo de Recepción | Implementada en código con bandeja global por workspace, recepción rápida y detallada, filtros, incidencias, eventos, notificaciones derivadas e integración con Inicio, Compras, Producción, Inspector, Project Companion, Historial y Business State. La migración durable fue endurecida localmente. Validación automática: 101 archivos, 807 pruebas, build correcto y `git diff --check` limpio; validación remota pendiente. |
-| 31/07/2026 | 25.5D — Eliminación Segura y Transversal de Órdenes de Producción | Subfase planeada como comando destructivo transaccional de servidor, exclusiva para owner, con segunda verificación, auditoría, limpieza transversal y protección contra resurrección. No implementada. |
+| 31/07/2026 | 25.5C — Validación remota de Recepción | Migración, RLS, Broadcast, Realtime, offline, reconexión, conflictos e idempotencia validados e integrados en `main` mediante `751a074`. |
+| 31/07/2026 | 25.5D — Eliminación Segura y Transversal de Órdenes de Producción | Implementación local preparada con RPC transaccional exclusiva para owner activo, auditoría mínima, orden explícito de dependencias, Application Command, confirmación por folio, limpieza local y de colas, tombstone y reconciliación Realtime. Validación local: 106 archivos y 829 pruebas, build correcto; aplicación y validación remotas pendientes. |
 | Consolidación funcional | 25.5B | Centro Operativo de Recepción implementado y validado automáticamente. |
-| Próximo sprint oficial | 25.5C | Aplicación de migración y validación real de RLS, workspace, Broadcast, Realtime, offline, reconexión, sync, conflictos e idempotencia. |
-| Fase planeada posterior | 25.5D | Eliminación Segura y Transversal de Órdenes de Producción, posterior a 25.5C y previa a 25.6. |
+| Próximo sprint oficial | 25.5D | Aplicación controlada de la migración, validación real de RPC, rollback, auditoría, aislamiento, Realtime y ausencia de resurrección. |
+| Fase activa | 25.5D | Implementada localmente; no cerrada ni aplicada remotamente. |
 | Próxima fase funcional posterior | 25.6 | Inventario por Movimientos, sin adelantarlo antes de consolidar Recepción. |
 
 ## Estado del núcleo del ERP
@@ -1539,13 +1506,16 @@ Identidad ............. Estable
 Workspace ............. Estable
 Producción ............ Durable
 Compras ............... Durable
-Recepción ............. Durable; centro transversal implementado en código
+Recepción ............. Durable y validada local/remotamente
 Reception Offline ..... Implementado y probado automáticamente
 Reception Sync Engine . Manual implementado en código
-Reception Realtime .... Implementado en código; validación remota pendiente
-Reception Migration ... Preparada localmente; no aplicada en Supabase
-Reception RLS ......... Preparada localmente; validación real pendiente
+Reception Realtime .... Implementado y validado remotamente
+Reception Migration ... Aplicada en Supabase
+Reception RLS ......... Aplicada y validada
 Reception Summary ..... Integrado con Business State
+OT Delete Command ..... Implementado localmente; validación remota pendiente
+OT Delete RPC ......... Migración preparada; no aplicada
+OT Tombstone .......... Implementada localmente
 Read-only ............. Estable
 Integrity Audit ....... Certificada
 Hardening ............. Completado

@@ -1,4 +1,5 @@
 import { normalizeProductionOrder } from './productionEngine.js';
+import { ProductionDeletionRegistry } from './productionDeletionRegistry.js';
 
 const STORAGE_KEY = 'aluxor.productionOrders';
 
@@ -54,6 +55,7 @@ function normalizeOrders(orders) {
   orders.forEach((order) => {
     const normalized = normalizeStoredOrder(order);
     if (!normalized.id || !normalized.quoteId || !normalized.workspaceId) return;
+    if (ProductionDeletionRegistry.contains(normalized.workspaceId, normalized.id)) return;
 
     const idKey = `${normalized.workspaceId}:${normalized.id}`;
     const previousById = byId.get(idKey);
@@ -165,12 +167,15 @@ export function upsertProductionOrder(order) {
   )) || null;
 }
 
-export function removeProductionOrder(id) {
+export function removeProductionOrder(id, workspaceId = null) {
   const normalizedId = String(id || '').trim();
   if (!normalizedId) return loadProductionOrders();
 
   return saveProductionOrders(
-    loadProductionOrders().filter((order) => order.id !== normalizedId)
+    loadProductionOrders().filter((order) => (
+      order.id !== normalizedId
+      || (workspaceId && order.workspaceId !== workspaceId)
+    ))
   );
 }
 

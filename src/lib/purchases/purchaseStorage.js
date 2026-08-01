@@ -115,6 +115,23 @@ export function findPurchasesByProductionOrder(workspaceId, productionOrderId) {
   ));
 }
 
+export function removePurchasesByProductionOrder(workspaceId, productionOrderId) {
+  const removed = loadPurchases(workspaceId).filter((purchase) => (
+    purchase.productionOrderId === productionOrderId
+  ));
+  const remaining = savePurchases(
+    workspaceId,
+    loadPurchases(workspaceId).filter((purchase) => (
+      purchase.productionOrderId !== productionOrderId
+    )),
+  );
+  const selectedId = loadSelectedPurchaseId(workspaceId);
+  if (removed.some((purchase) => purchase.id === selectedId)) {
+    saveSelectedPurchaseId(workspaceId, null);
+  }
+  return { removed, remaining };
+}
+
 export function loadSelectedPurchaseId(workspaceId) {
   if (!workspaceId) return null;
   try {
@@ -147,6 +164,7 @@ export const PurchaseStorage = {
   replacePurchase,
   replaceWorkspacePurchases,
   findPurchasesByProductionOrder,
+  removePurchasesByProductionOrder,
   loadSelectedPurchaseId,
   saveSelectedPurchaseId,
   findPendingPurchases,

@@ -106,4 +106,27 @@ describe('PurchaseStorage y offline queue', () => {
       'cancelled', 'received', 'deleted',
     ]);
   });
+
+  it('retira compras, selección y cola solo para la OT eliminada', () => {
+    PurchaseStorage.savePurchases('ws-1', [
+      purchase,
+      { ...purchase, id: 'purchase-2', productionOrderId: 'ot-2', quoteId: 'q-2' },
+    ]);
+    PurchaseStorage.saveSelectedPurchaseId('ws-1', 'purchase-1');
+    PurchaseOfflineQueue.enqueue('ws-1', {
+      type: 'update', purchaseId: 'purchase-1', expectedVersion: 1,
+    });
+    PurchaseOfflineQueue.enqueue('ws-1', {
+      type: 'update', purchaseId: 'purchase-2', expectedVersion: 1,
+    });
+
+    const result = PurchaseStorage.removePurchasesByProductionOrder('ws-1', 'ot-1');
+    result.removed.forEach((entry) => PurchaseOfflineQueue.remove('ws-1', entry.id));
+
+    expect(result.removed.map((entry) => entry.id)).toEqual(['purchase-1']);
+    expect(result.remaining.map((entry) => entry.id)).toEqual(['purchase-2']);
+    expect(PurchaseStorage.loadSelectedPurchaseId('ws-1')).toBeNull();
+    expect(PurchaseOfflineQueue.load('ws-1').map((entry) => entry.purchaseId))
+      .toEqual(['purchase-2']);
+  });
 });

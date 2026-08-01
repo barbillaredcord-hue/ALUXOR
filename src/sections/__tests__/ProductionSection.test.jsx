@@ -171,4 +171,25 @@ describe('ProductionSection filters', () => {
     expect(markup).not.toContain('Crear compra');
     expect(markup).toMatch(/<select disabled=""/);
   });
+
+  it('solo ofrece eliminación administrativa al owner y conserva read only separado', () => {
+    const ownerMarkup = renderToStaticMarkup(<ProductionSection
+      productionOrders={[{
+        id: 'delivered', quoteId: 'quote-1', folio: 'OT-E', estado: 'Entregado',
+      }]}
+      selectedProductionOrderId="delivered"
+      canDeleteProductionOrder
+      purchasesForOrder={() => []}
+    />);
+    const editorMarkup = renderToStaticMarkup(<ProductionSection
+      productionOrders={[{
+        id: 'delivered', quoteId: 'quote-1', folio: 'OT-E', estado: 'Entregado',
+      }]}
+      selectedProductionOrderId="delivered"
+      purchasesForOrder={() => []}
+    />);
+    expect(ownerMarkup).toContain('Eliminar orden');
+    expect(ownerMarkup).toContain('Proyecto entregado.');
+    expect(editorMarkup).not.toContain('Eliminar orden');
+  });
 });

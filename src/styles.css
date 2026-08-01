@@ -8514,6 +8514,22 @@ body,
   cursor: pointer;
 }
 
+.production-delete-modal {
+  width: min(520px, calc(100vw - 32px));
+  display: grid;
+  gap: 16px;
+  border-color: color-mix(in srgb, var(--danger, #b42318) 35%, transparent);
+}
+
+.production-delete-modal > svg {
+  color: var(--danger, #b42318);
+}
+
+.production-delete-modal h2,
+.production-delete-modal p {
+  margin: 0;
+}
+
 .production-detail-placeholder,
 .production-empty-state {
   display: grid;

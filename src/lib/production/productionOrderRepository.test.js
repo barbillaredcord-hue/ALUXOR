@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   maybeSingle: vi.fn(),
   single: vi.fn(),
   getUser: vi.fn(),
+  rpc: vi.fn(),
   awaited: [],
 }));
 
@@ -16,6 +17,7 @@ vi.mock('../supabase/client', () => ({
   supabase: {
     from: mocks.from,
     auth: { getUser: mocks.getUser },
+    rpc: mocks.rpc,
   },
 }));
 
@@ -104,5 +106,24 @@ describe('ProductionOrderRepository identidad', () => {
     expect(result.data.folio).toBe('OT-20260723-002');
     expect(mocks.insert).toHaveBeenCalledTimes(2);
     expect(mocks.insert.mock.calls[1][0].folio).toBe('OT-20260723-002');
+  });
+
+  it('elimina mediante la RPC protegida con UUID y workspace', async () => {
+    mocks.rpc.mockResolvedValue({
+      data: { success: true, deleted: true, production_order_id: ORDER_ID },
+      error: null,
+    });
+    const result = await ProductionOrderRepository.deleteProductionOrderSafely('ws', ORDER_ID);
+    expect(mocks.rpc).toHaveBeenCalledWith('delete_production_order_safely', {
+      p_workspace_id: 'ws',
+      p_production_order_id: ORDER_ID,
+    });
+    expect(result.data.deleted).toBe(true);
+  });
+
+  it('no invoca la RPC sin identificadores', async () => {
+    const result = await ProductionOrderRepository.deleteProductionOrderSafely('', ORDER_ID);
+    expect(result.error.code).toBe('PRODUCTION_ORDER_DELETE_INPUT_INVALID');
+    expect(mocks.rpc).not.toHaveBeenCalled();
   });
 });

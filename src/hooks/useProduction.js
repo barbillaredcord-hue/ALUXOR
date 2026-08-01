@@ -7,6 +7,8 @@ import {
 } from '../lib/production/productionEngine.js';
 import { ProductionStorage } from '../lib/production/productionStorage.js';
 import { ProductionOrderRepository } from '../lib/production/productionOrderRepository.js';
+import { DeleteProductionOrderCommand } from '../lib/production/deleteProductionOrderCommand.js';
+import { cleanupDeletedProductionOrder } from '../lib/production/productionDeletionCleanup.js';
 import { QuoteAdapter } from '../lib/quotes/quoteAdapter.js';
 import {
   normalizeSharedProjectNote,
@@ -77,12 +79,15 @@ export default function useProduction({
   setSyncStatus,
   setActiveSection,
   syncQuoteNoteFromProduction,
+  currentWorkspaceRole,
+  onProductionOrderDeleted,
 }) {
   const [productionOrders, setProductionOrders] = useState([]);
   const [selectedProductionOrderId, setSelectedProductionOrderId] = useState(null);
   const [productionLoading, setProductionLoading] = useState(false);
   const [productionError, setProductionError] = useState('');
   const [productionSyncStatus, setProductionSyncStatus] = useState('Producción local');
+  const [productionDeleteInFlight, setProductionDeleteInFlight] = useState(false);
   const productionOrdersRef = useRef(productionOrders);
   const productionRemoteRequestRef = useRef({ id: 0, inFlight: false, pending: false });
   const productionMigrationRef = useRef(null);
@@ -468,7 +473,25 @@ export default function useProduction({
     let subscriptionActive = true;
     const unsubscribe = ProductionOrderRepository.subscribeProductionOrders(
       workspaceId,
-      () => {
+      (payload) => {
+        if (payload?.eventType === 'DELETE' && payload?.old?.id) {
+          cleanupDeletedProductionOrder({
+            workspaceId,
+            productionOrderId: payload.old.id,
+            deletedAt: new Date().toISOString(),
+          });
+          setActiveProductionOrders(
+            workspaceId,
+            ProductionStorage.loadProductionOrders().filter((order) => (
+              order.workspaceId === workspaceId
+            )),
+          );
+          void onProductionOrderDeleted?.({
+            workspace_id: workspaceId,
+            production_order_id: payload.old.id,
+            source: 'realtime',
+          });
+        }
         if (debounceId !== null) window.clearTimeout(debounceId);
         debounceId = window.setTimeout(() => {
           debounceId = null;
@@ -672,6 +695,51 @@ function syncProductionOrderFromQuote(
     return true;
   }
 
+  async function handleDeleteProductionOrder(orderId, confirmation) {
+    const workspaceId = activeWorkspace?.id;
+    const userId = authSession?.user?.id;
+    const currentOrder = productionOrdersRef.current.find((order) => (
+      order.id === orderId && order.workspaceId === workspaceId
+    ));
+    if (!currentOrder) {
+      return {
+        data: null,
+        error: { code: 'PRODUCTION_ORDER_NOT_FOUND', message: 'La orden ya no está disponible.' },
+      };
+    }
+
+    setProductionDeleteInFlight(true);
+    setProductionError('');
+    try {
+      const result = await DeleteProductionOrderCommand.execute({
+        workspaceId,
+        productionOrderId: currentOrder.id,
+        userId,
+        workspaceRole: currentWorkspaceRole,
+        folio: currentOrder.folio,
+        confirmation,
+      });
+      if (result.error) {
+        setProductionError(result.error.message || 'No fue posible eliminar la orden.');
+        return result;
+      }
+      setActiveProductionOrders(
+        workspaceId,
+        ProductionStorage.loadProductionOrders().filter((order) => (
+          order.workspaceId === workspaceId
+        )),
+      );
+      setSelectedProductionOrderId(null);
+      setProductionSyncStatus('Orden eliminada de forma segura');
+      setSyncStatus('Orden de producción eliminada');
+      await onProductionOrderDeleted?.(result.data);
+      setActiveSection('cotizador');
+      return result;
+    } finally {
+      setProductionDeleteInFlight(false);
+    }
+  }
+
   async function generateProductionOrderFromCurrentQuote() {
     const workspaceId = activeWorkspace?.id;
     const userId = authSession?.user?.id;
@@ -841,6 +909,8 @@ function syncProductionOrderFromQuote(
     setSelectedProductionOrderId,
     createProductionOrder: generateProductionOrderFromCurrentQuote,
     updateProductionOrder: handleUpdateProductionOrder,
+    deleteProductionOrder: handleDeleteProductionOrder,
+    productionDeleteInFlight,
     refreshProduction: loadRemoteProductionOrders,
     syncProductionOrderFromQuote,
   };

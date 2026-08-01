@@ -285,6 +285,27 @@ export async function updateProductionOrderRemote(
 
   return adaptSingle(result);
 }
+
+export async function deleteProductionOrderSafely(workspaceId, productionOrderId) {
+  if (!workspaceId || !productionOrderId) {
+    return {
+      data: null,
+      error: readableError(
+        'Faltan identificadores para eliminar la orden de producción.',
+        'PRODUCTION_ORDER_DELETE_INPUT_INVALID',
+      ),
+    };
+  }
+
+  const result = await execute(() => supabase.rpc(
+    'delete_production_order_safely',
+    {
+      p_workspace_id: workspaceId,
+      p_production_order_id: productionOrderId,
+    },
+  ));
+  return { data: result.data || null, error: result.error || null };
+}
 export function subscribeProductionOrders(workspaceId, callback, onStatus) {
   if (!workspaceId || typeof callback !== 'function') {
     return function unsubscribe() {};
@@ -331,5 +352,6 @@ export const ProductionOrderRepository = {
   getProductionOrderByQuoteId,
   createProductionOrderRemote,
   updateProductionOrderRemote,
+  deleteProductionOrderSafely,
   subscribeProductionOrders,
 };

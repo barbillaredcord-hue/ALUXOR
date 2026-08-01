@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { Calculator, ClipboardList, ExternalLink, PackageOpen, ShoppingCart } from 'lucide-react';
+import {
+  AlertTriangle,
+  Calculator,
+  ClipboardList,
+  ExternalLink,
+  PackageOpen,
+  ShoppingCart,
+  Trash2,
+} from 'lucide-react';
 import {
   PRODUCTION_STATUSES,
   canAdvanceProductionOrder,
@@ -136,6 +144,9 @@ export default function ProductionSection({
   onCalculateMaterial,
   receptionInbox = [],
   onOpenReceiving,
+  onDeleteProductionOrder,
+  canDeleteProductionOrder = false,
+  productionDeleteInFlight = false,
 }) {
   const sortedOrders = [...productionOrders].sort((a, b) => (
     dateTimestamp(b.updatedAt || b.fechaCreacion)
@@ -144,6 +155,9 @@ export default function ProductionSection({
   const metrics = getProductionSummary(sortedOrders);
   const [activeFilter, setActiveFilter] = useState(PRODUCTION_FILTERS.ALL);
   const [draft, setDraft] = useState(() => productionDraftFromOrder(null));
+  const [deleteDialogOrder, setDeleteDialogOrder] = useState(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const [deleteMessage, setDeleteMessage] = useState('');
   const filteredOrders = filterProductionOrders(sortedOrders, activeFilter);
   const selectedOrder = sortedOrders.find((order) => order.id === selectedProductionOrderId) || null;
   const selectedOrderCanAdvance = canAdvanceProductionOrder(selectedOrder);
@@ -227,6 +241,32 @@ export default function ProductionSection({
   function selectProductionOrder(orderId) {
     if (orderId !== selectedProductionOrderId) flushDraftAutosave();
     onSelectProductionOrder?.(orderId);
+  }
+
+  function openDeleteDialog(order) {
+    if (!canDeleteProductionOrder || productionDeleteInFlight) return;
+    if (autoSaveTimerRef.current !== null) {
+      window.clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    setDeleteDialogOrder(order);
+    setDeleteConfirmation('');
+    setDeleteMessage('');
+  }
+
+  async function confirmDeleteProductionOrder() {
+    if (!deleteDialogOrder || productionDeleteInFlight) return;
+    setDeleteMessage('');
+    const result = await onDeleteProductionOrder?.(
+      deleteDialogOrder.id,
+      deleteConfirmation,
+    );
+    if (result?.error) {
+      setDeleteMessage(result.error.message || 'No fue posible eliminar la orden.');
+      return;
+    }
+    setDeleteDialogOrder(null);
+    setDeleteConfirmation('');
   }
 
   useEffect(() => {
@@ -510,6 +550,16 @@ export default function ProductionSection({
                 >
                   <ExternalLink size={17} /> Ver cotización
                 </button>
+                {canDeleteProductionOrder && (
+                  <button
+                    type="button"
+                    className="danger"
+                    disabled={productionDeleteInFlight}
+                    onClick={() => openDeleteDialog(selectedOrder)}
+                  >
+                    <Trash2 size={17} /> Eliminar orden
+                  </button>
+                )}
               </div>
             </>
           ) : (
@@ -520,6 +570,56 @@ export default function ProductionSection({
           )}
         </aside>
       </div>
+      {deleteDialogOrder && (
+        <div className="modal-backdrop" role="presentation">
+          <section
+            className="production-delete-modal panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="production-delete-title"
+          >
+            <AlertTriangle size={34} aria-hidden="true" />
+            <h2 id="production-delete-title">Eliminar {deleteDialogOrder.folio}</h2>
+            <p>
+              Se eliminarán la orden, sus compras, partidas y recepciones. La cotización se conservará.
+              Esta operación no se puede deshacer.
+            </p>
+            <label>
+              Escribe <strong>{deleteDialogOrder.folio}</strong> para confirmar
+              <input
+                autoFocus
+                value={deleteConfirmation}
+                disabled={productionDeleteInFlight}
+                onChange={(event) => setDeleteConfirmation(event.target.value)}
+                aria-label="Confirmar folio de la orden"
+              />
+            </label>
+            {deleteMessage && <p className="error" role="alert">{deleteMessage}</p>}
+            <div className="actions compact">
+              <button
+                type="button"
+                className="ghost"
+                disabled={productionDeleteInFlight}
+                onClick={() => setDeleteDialogOrder(null)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="danger"
+                disabled={
+                  productionDeleteInFlight
+                  || deleteConfirmation.trim() !== String(deleteDialogOrder.folio || '').trim()
+                }
+                onClick={() => void confirmDeleteProductionOrder()}
+              >
+                <Trash2 size={17} />
+                {productionDeleteInFlight ? 'Eliminando…' : 'Eliminar definitivamente'}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </section>
   );
 }

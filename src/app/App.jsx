@@ -210,6 +210,7 @@ function App() {
   const productionQuoteSyncRef = useRef(null);
   const productionQuoteNoteSyncRef = useRef(null);
   const quoteDeletionRefreshRef = useRef(null);
+  const productionDeletionRefreshRef = useRef(null);
   const projectProductionRef = useRef({ active: null, orders: [] });
   const {
     authSession,
@@ -438,6 +439,8 @@ function App() {
     setSelectedProductionOrderId,
     createProductionOrder: generateProductionOrderFromCurrentQuote,
     updateProductionOrder: handleUpdateProductionOrder,
+    deleteProductionOrder: handleDeleteProductionOrder,
+    productionDeleteInFlight,
     refreshProduction,
     syncProductionOrderFromQuote,
   } = useProduction({
@@ -450,6 +453,10 @@ function App() {
     setActiveSection,
     syncQuoteNoteFromProduction: (...args) => (
       productionQuoteNoteSyncRef.current?.(...args)
+    ),
+    currentWorkspaceRole,
+    onProductionOrderDeleted: (...args) => (
+      productionDeletionRefreshRef.current?.(...args)
     ),
   });
   projectProductionRef.current = {
@@ -490,6 +497,10 @@ function App() {
     quotes: history,
     selectedPurchaseId,
   });
+  productionDeletionRefreshRef.current = () => Promise.allSettled([
+    refreshPurchases(),
+    reception.refreshReceptions(),
+  ]);
   const canEditReceptions = canEditPurchases
     || canManageInventory(currentWorkspaceRole);
   const businessState = useMemo(() => getBusinessState({
@@ -1190,6 +1201,9 @@ function App() {
             onSelectProductionOrder={handleSelectProductionOrder}
             onOpenQuote={openQuoteFromProduction}
             onUpdateProductionOrder={handleUpdateProductionOrder}
+            onDeleteProductionOrder={handleDeleteProductionOrder}
+            canDeleteProductionOrder={currentWorkspaceRole === 'owner'}
+            productionDeleteInFlight={productionDeleteInFlight}
             onCreatePurchase={createPurchase}
             onOpenPurchase={openPurchase}
             purchaseStatusForOrder={purchaseStatusForOrder}
