@@ -30,4 +30,73 @@
     font-size: 1.05rem;
     line-height: 1.15;
   }
+
+  .workspace-layout-sidebar {
+    overflow: hidden;
+    transition: max-height 220ms ease, padding-bottom 220ms ease;
+  }
+
+  .mobile-sidebar-toggle {
+    display: grid;
+    grid-template-columns: 72px minmax(0, 1fr) 36px;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    min-height: 92px;
+    margin: 0 0 14px;
+    padding: 10px 14px;
+    border: 1px solid rgba(218, 171, 54, 0.68);
+    border-radius: 18px;
+    background: linear-gradient(135deg, rgba(8, 48, 38, 0.98), rgba(8, 35, 29, 0.98));
+    color: #f7f5ed;
+    text-align: left;
+  }
+
+  .mobile-sidebar-toggle-logo {
+    width: 72px;
+    height: 72px;
+    object-fit: contain;
+  }
+
+  .mobile-sidebar-toggle-copy {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+  }
+
+  .mobile-sidebar-toggle-copy strong {
+    font-size: 1rem;
+    line-height: 1.15;
+  }
+
+  .mobile-sidebar-toggle-copy small {
+    color: rgba(247, 245, 237, 0.72);
+    font-size: 0.78rem;
+  }
+
+  .mobile-sidebar-toggle-chevron {
+    justify-self: end;
+    font-size: 1.7rem;
+    line-height: 1;
+  }
+
+  .mobile-sidebar-content {
+    max-height: 5000px;
+    opacity: 1;
+    overflow: visible;
+    transition: max-height 240ms ease, opacity 180ms ease;
+  }
+
+  .workspace-layout-sidebar.is-mobile-collapsed .mobile-sidebar-content {
+    max-height: 0;
+    opacity: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
+}
+
+@media (min-width: 601px) {
+  .mobile-sidebar-toggle {
+    display: none;
+  }
 }
