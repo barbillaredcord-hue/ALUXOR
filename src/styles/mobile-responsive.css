@@ -338,4 +338,64 @@ textarea {
   .quote-accordion > .advanced-note {
     margin-inline: 10px;
   }
+
+  /* Cotizador: cards legibles sin comprimir titulo/estado en tres columnas. */
+  .quote-operational-layout .dashboard-summary,
+  .material-studio-launcher .dashboard-summary {
+    display: grid;
+    grid-template-columns: 52px minmax(0, 1fr);
+    grid-template-areas:
+      "number title"
+      "status status";
+    align-items: center;
+    gap: 10px 12px;
+    width: 100%;
+    padding: 14px;
+    text-align: left;
+  }
+
+  .quote-operational-layout .dashboard-number,
+  .material-studio-launcher .dashboard-number {
+    grid-area: number;
+    align-self: center;
+    justify-self: start;
+  }
+
+  .quote-operational-layout .dashboard-title,
+  .material-studio-launcher .dashboard-title {
+    grid-area: title;
+    min-width: 0;
+  }
+
+  .quote-operational-layout .dashboard-title strong,
+  .material-studio-launcher .dashboard-title strong {
+    display: block;
+    font-size: 1.12rem;
+    line-height: 1.12;
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+
+  .quote-operational-layout .dashboard-title small,
+  .material-studio-launcher .dashboard-title small {
+    display: block;
+    margin-top: 4px;
+    line-height: 1.3;
+  }
+
+  .quote-operational-layout .dashboard-summary > em,
+  .material-studio-launcher .dashboard-summary > em {
+    grid-area: status;
+    width: 100%;
+    margin: 0;
+    padding: 8px 12px;
+    text-align: center;
+    white-space: normal;
+  }
+
+  .material-studio-launcher,
+  .quote-operational-layout .quote-accordion {
+    width: 100%;
+    max-width: 100%;
+  }
 }
