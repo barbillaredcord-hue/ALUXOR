@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import './styles.css';
 import './styles/settings.css';
 import './styles/mobile-responsive.css';
+import './styles/mobile-summary-fix.css';
 import App from './app/App.jsx';
 
 createRoot(document.getElementById('root')).render(
