@@ -1,0 +1,341 @@
+/* BRTuNegocio mobile hardening
+   Loaded after the main styles so these responsive rules remain authoritative. */
+
+html,
+body,
+#root {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+img,
+svg,
+canvas,
+video {
+  max-width: 100%;
+}
+
+button,
+input,
+select,
+textarea {
+  max-width: 100%;
+}
+
+@media (max-width: 900px) {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  body {
+    min-width: 0;
+  }
+
+  .app,
+  .workspace-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+    min-width: 0;
+    min-height: 100dvh;
+  }
+
+  .workspace-shell,
+  .workspace-layout-sidebar,
+  .workspace-layout-content,
+  .workspace-layout-inspector,
+  .content,
+  main,
+  section,
+  article,
+  .panel,
+  .summary-card,
+  .output-card,
+  .row-card,
+  .history-row,
+  .catalog-row,
+  .feature-card {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .sidebar,
+  .workspace-layout-sidebar {
+    position: static;
+    width: 100%;
+    min-height: auto;
+    padding: 14px;
+    box-shadow: none;
+  }
+
+  .workspace-sidebar-stack {
+    min-height: auto;
+  }
+
+  .workspace-layout-content,
+  .content {
+    width: 100%;
+    padding: 14px;
+    margin: 0;
+  }
+
+  .workspace-layout-inspector {
+    width: 100%;
+    padding: 0 14px 14px;
+  }
+
+  .workspace-temp-inspector,
+  .inspector-panel,
+  .summary-card,
+  .panel-grid.two-cols > .summary-card {
+    position: static;
+    top: auto;
+  }
+
+  .hero,
+  .section-head,
+  .measure-head,
+  .suggested-price,
+  .footer-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .hero-actions,
+  .actions,
+  .summary-panel-actions,
+  .inspector-tools,
+  .form-actions-row,
+  .history-backup-actions {
+    width: 100%;
+  }
+
+  .hero-actions {
+    justify-content: stretch;
+    max-width: none;
+  }
+
+  .hero-actions > *,
+  .actions > *,
+  .section-head > button,
+  .summary-panel-actions > button,
+  .inspector-tools > button,
+  .form-actions-row > button,
+  .history-backup-actions > * {
+    width: 100%;
+  }
+
+  .panel-grid,
+  .panel-grid.two-cols,
+  .form-grid,
+  .grid,
+  .grid.three,
+  .grid.four,
+  .grid.five,
+  .quote-grid,
+  .quick-actions,
+  .quick-quote,
+  .template-grid,
+  .main-menu,
+  .inspector-metrics,
+  .summary-panel-actions,
+  .inspector-tools,
+  .form-actions-row,
+  .professional-breakdown-grid,
+  .data-health-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .panel-grid.two-cols > .panel,
+  .panel-grid.two-cols > .summary-card,
+  .panel-grid.two-cols > .output-card,
+  .summary-card,
+  .output-card {
+    width: 100%;
+    max-width: none;
+    justify-self: stretch;
+  }
+
+  .row-card,
+  .row-card.material-row,
+  .row-card.accessory-row,
+  .row-card.plan-row,
+  .catalog-row,
+  .history-row,
+  .type-editor-row,
+  .line-row,
+  .line-row.measure-row,
+  .line-row.accessory-row,
+  .plan-row {
+    grid-template-columns: minmax(0, 1fr);
+    min-width: 0;
+  }
+
+  .catalog-head,
+  .line-head,
+  .plan-head {
+    display: none;
+  }
+
+  .table-list,
+  .catalog-table,
+  .line-editor,
+  .type-editor-list,
+  .plan-editor,
+  .quote-table,
+  .calculation-table,
+  .svg-preview {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .quote-table-header,
+  .quote-table-row,
+  .calculation-table-grid {
+    max-width: none;
+  }
+
+  .brand-card strong,
+  .hero h1,
+  .panel h1,
+  .panel h2,
+  .panel h3,
+  .feature-card strong,
+  .history-row strong,
+  .summary-panel-head strong,
+  .inspector-project strong,
+  p,
+  span,
+  strong,
+  small,
+  dd,
+  dt,
+  li,
+  label,
+  button {
+    overflow-wrap: anywhere;
+    word-break: normal;
+  }
+
+  .quote-collaboration-status {
+    max-width: 100%;
+    white-space: normal;
+  }
+
+  .mini-row,
+  .professional-row,
+  .breakdown-line {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  input,
+  select,
+  textarea {
+    width: 100%;
+    min-width: 0;
+    font-size: 16px;
+  }
+
+  .measure-area,
+  .suggested-price button,
+  .fit-button {
+    width: 100%;
+  }
+
+  .live-quote-summary {
+    position: static;
+  }
+}
+
+@media (max-width: 600px) {
+  .workspace-layout-content,
+  .content {
+    padding: 10px;
+  }
+
+  .workspace-layout-inspector {
+    padding: 0 10px 10px;
+  }
+
+  .sidebar,
+  .workspace-layout-sidebar {
+    padding: 12px;
+  }
+
+  .panel,
+  .summary-card,
+  .output-card,
+  .feature-card,
+  .row-card,
+  .history-row,
+  .catalog-row,
+  .inspector-card,
+  .summary-panel {
+    padding: 12px;
+    border-radius: 10px;
+  }
+
+  .hero {
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .hero h1 {
+    font-size: clamp(1.55rem, 8vw, 2rem);
+  }
+
+  .hero p:not(.eyebrow),
+  .panel p,
+  .panel li {
+    font-size: 0.95rem;
+    line-height: 1.45;
+  }
+
+  .brand-logo,
+  .brand-mark {
+    width: 46px;
+    height: 46px;
+  }
+
+  .brand-card strong {
+    font-size: 1.25rem;
+  }
+
+  .menu button,
+  .sidebar .ghost,
+  .access-button,
+  .hero-actions button,
+  .actions button,
+  .catalog-row button,
+  .history-row button,
+  .output-card button,
+  .section-head button {
+    min-height: 48px;
+  }
+
+  .total-number {
+    font-size: 2rem;
+  }
+
+  .live-summary-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .quote-accordion summary {
+    padding: 12px;
+    font-size: 1rem;
+  }
+
+  .quote-accordion > .form-grid,
+  .quote-accordion > .quote-table,
+  .quote-accordion > .data-health-panel,
+  .quote-accordion > .advanced-note {
+    margin-inline: 10px;
+  }
+}
