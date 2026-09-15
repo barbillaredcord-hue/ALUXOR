@@ -2,6 +2,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
 import './styles/settings.css';
+import './styles/mobile-responsive.css';
 import App from './app/App.jsx';
 
 createRoot(document.getElementById('root')).render(
