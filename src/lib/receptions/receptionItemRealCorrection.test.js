@@ -1,0 +1,5 @@
+import { describe, expect, it } from 'vitest';
+import { RECEPTION_ITEM_REAL_CORRECTION_TYPES, validateReceptionItemRealCorrection } from './receptionItemRealCorrection.js';
+const id=(n)=>`00000000-0000-4000-8000-${String(n).repeat(12)}`;
+const correction={id:id('1'),workspaceId:id('2'),receptionId:id('3'),receptionItemId:id('4'),purchaseId:id('5'),purchaseItemId:id('6'),createdBy:id('7'),idempotencyKey:id('8'),correctionType:'REAL_DATA_CORRECTION',status:'active',version:1,reason:'Datos reales',previousValues:{acceptedQuantity:7},newValues:{receivedQuantity:7,acceptedQuantity:5}};
+describe('reception item real correction',()=>{it('acepta contrato válido y tipos oficiales',()=>{expect(validateReceptionItemRealCorrection(correction)).toBe(true);expect(RECEPTION_ITEM_REAL_CORRECTION_TYPES).toContain(correction.correctionType)});it('rechaza cantidades e identidad inválidas',()=>{expect(validateReceptionItemRealCorrection({...correction,newValues:{receivedQuantity:4,acceptedQuantity:5}})).toBe(false);expect(validateReceptionItemRealCorrection({...correction,id:'x'})).toBe(false)})});

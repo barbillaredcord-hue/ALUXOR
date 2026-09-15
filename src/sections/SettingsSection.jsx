@@ -22,6 +22,14 @@ export default function SettingsSection({
   onLogoUpload,
   onRemoveLogo,
   activeProductionOrder,
+  availableWorkspaces,
+  activeWorkspaceId,
+  onSelectWorkspace,
+  onCreateWorkspace,
+  canCreateWorkspace,
+  creatingWorkspace,
+  workspaceCreationError,
+  workspaceCreationSuccess,
 }) {
   const [activeTab, setActiveTab] = useState('general');
   // TODO: Reemplazar esta validación por is_system_workspace cuando exista soporte multiempresa.
@@ -142,6 +150,14 @@ export default function SettingsSection({
               onSaveCompanyName={onSaveCompanyName}
               onLogoUpload={onLogoUpload}
               onRemoveLogo={onRemoveLogo}
+              availableWorkspaces={availableWorkspaces}
+              activeWorkspaceId={activeWorkspaceId}
+              onSelectWorkspace={onSelectWorkspace}
+              onCreateWorkspace={onCreateWorkspace}
+              canCreateWorkspace={canCreateWorkspace}
+              creatingWorkspace={creatingWorkspace}
+              workspaceCreationError={workspaceCreationError}
+              workspaceCreationSuccess={workspaceCreationSuccess}
             />
           )}
           {activeTab === 'users' && <UsersSettings />}

@@ -490,7 +490,8 @@ export default function CutOptimizerSection({
     : material?.alto || 244;
   const piezas = useMemo(() => quote.measureRows
     .filter((item) => (
-      workingInputActive || transferActive ? selectedIds.has(item.id) : true
+      item.optimizationExcluded !== true
+      && (workingInputActive || transferActive ? selectedIds.has(item.id) : true)
     ))
     .map((item) => ({
       id: item.id,

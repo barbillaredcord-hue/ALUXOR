@@ -1,4 +1,15 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+
+const productionSource = readFileSync(new URL('../ProductionSection.jsx', import.meta.url), 'utf8');
+
+describe('estado operacional visible de Producción', () => {
+  it('usa una sola etiqueta derivada para badge y detalle', () => {
+    expect(productionSource).toContain('operationalLabel(selectedOperationalState)');
+    expect(productionSource).toContain('operationalLabel(operationalStateForOrder(order))');
+    expect(productionSource).toContain('selectedReceptionState');
+  });
+});
 import { renderToStaticMarkup } from 'react-dom/server';
 import ProductionSection, {
   filterProductionOrders,

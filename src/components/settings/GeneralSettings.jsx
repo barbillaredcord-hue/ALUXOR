@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 
+const roleLabels = { owner: 'Propietario', admin: 'Administrador', editor: 'Editor', sales: 'Ventas', production: 'Producción', purchasing: 'Compras', warehouse: 'Almacén', installer: 'Instalación', viewer: 'Consulta' };
+
 export default function GeneralSettings({
   appLogo,
   settings,
@@ -8,8 +10,17 @@ export default function GeneralSettings({
   onSaveCompanyName,
   onLogoUpload,
   onRemoveLogo,
+  availableWorkspaces = [],
+  activeWorkspaceId = '',
+  onSelectWorkspace,
+  onCreateWorkspace,
+  canCreateWorkspace = false,
+  creatingWorkspace = false,
+  workspaceCreationError = '',
+  workspaceCreationSuccess = '',
 }) {
   const [companyName, setCompanyName] = useState(settings?.company_name || 'ALUXOR / BosqueReal');
+  const [newWorkspaceName, setNewWorkspaceName] = useState('');
 
   useEffect(() => {
     setCompanyName(settings?.company_name || 'ALUXOR / BosqueReal');
@@ -17,6 +28,27 @@ export default function GeneralSettings({
 
   return (
     <>
+      {availableWorkspaces.length > 0 && (
+        <div className="settings-grid">
+          <div>
+            <label htmlFor="workspaceSelector">Cambiar negocio</label>
+            <select id="workspaceSelector" value={activeWorkspaceId} onChange={(event) => onSelectWorkspace?.(event.target.value)}>
+              {availableWorkspaces.map(({ workspace, membership }) => (
+                <option key={workspace.id} value={workspace.id}>{workspace.name} · {roleLabels[membership.role] || 'Consulta'}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="newWorkspaceName">Crear negocio</label>
+            <input id="newWorkspaceName" value={newWorkspaceName} maxLength={160} disabled={!canCreateWorkspace || creatingWorkspace} onChange={(event) => setNewWorkspaceName(event.target.value)} placeholder="Nombre del negocio" />
+            <button type="button" disabled={!canCreateWorkspace || creatingWorkspace || !newWorkspaceName.trim()} onClick={() => void onCreateWorkspace?.(newWorkspaceName)}>
+              {creatingWorkspace ? 'Creando…' : 'Crear negocio'}
+            </button>
+            {workspaceCreationSuccess && <p role="status">{workspaceCreationSuccess}</p>}
+            {workspaceCreationError && <p role="alert">{workspaceCreationError}</p>}
+          </div>
+        </div>
+      )}
       <div className="settings-grid">
         <div className="logo-preview-box">
           <img

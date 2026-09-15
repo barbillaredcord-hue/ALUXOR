@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { WorkspaceService } from '../lib/workspace/workspaceService.js';
 import { applyWorkspaceBranding } from '../lib/workspace/branding.js';
 import {
@@ -8,6 +8,26 @@ import {
 } from '../lib/workspace/permissions.js';
 import { storageHelpers } from '../app/config/helpers.js';
 import { isProjectReadOnly } from '../lib/production/productionEngine.js';
+
+const SELECTED_WORKSPACE_KEY = 'aluxor.selectedWorkspaceId';
+
+function readSelectedWorkspaceId() {
+  try { return globalThis.localStorage?.getItem(SELECTED_WORKSPACE_KEY) || ''; } catch { return ''; }
+}
+
+function saveSelectedWorkspaceId(id) {
+  try { if (id) globalThis.localStorage?.setItem(SELECTED_WORKSPACE_KEY, id); } catch { /* best effort */ }
+}
+
+export function shouldBootstrapWorkspace(result, listed) {
+  return Boolean(
+    !result?.error
+      && !result?.workspace
+      && !listed?.error
+      && (listed?.data || []).length === 0,
+  );
+}
+
 export default function useWorkspace({
   authSession,
   catalogDefaults,
@@ -28,6 +48,11 @@ export default function useWorkspace({
   const [workspaceSettingsError, setWorkspaceSettingsError] = useState('');
   const [hydratedWorkspaceId, setHydratedWorkspaceId] = useState(null);
   const [appLogo, setAppLogo] = useState('');
+  const [availableWorkspaces, setAvailableWorkspaces] = useState([]);
+  const [workspaceCreationLoading, setWorkspaceCreationLoading] = useState(false);
+  const [workspaceCreationError, setWorkspaceCreationError] = useState('');
+  const [workspaceCreationSuccess, setWorkspaceCreationSuccess] = useState('');
+  const workspaceCreationInFlightRef = useRef(false);
 
   function refreshWorkspace(options = {}) {
     if (options.reset) {
@@ -57,6 +82,7 @@ export default function useWorkspace({
       setWorkspaceLoading(false);
       setWorkspaceError('');
       setWorkspaceAccessStatus(null);
+      setAvailableWorkspaces([]);
       return () => { active = false; };
     }
 
@@ -64,9 +90,12 @@ export default function useWorkspace({
     setWorkspaceError('');
 
     async function resolveWorkspace() {
-      let result = await WorkspaceService.getCurrentWorkspace(userId);
+      const listed = await WorkspaceService.listWorkspaces(userId);
+      if (!listed.error) setAvailableWorkspaces(listed.data || []);
+      const preferredId = readSelectedWorkspaceId();
+      let result = await WorkspaceService.getCurrentWorkspace(userId, preferredId);
 
-      if (!result.error && !result.workspace?.is_shared) {
+      if (shouldBootstrapWorkspace(result, listed)) {
         result = await WorkspaceService.createInitialWorkspace({
           name: 'ALUXOR / BosqueReal',
         });
@@ -84,6 +113,7 @@ export default function useWorkspace({
 
       setActiveWorkspace(result.workspace);
       setActiveMembership(result.membership);
+      if (result.workspace?.id) saveSelectedWorkspaceId(result.workspace.id);
       setWorkspaceAccessStatus(
         result.workspace
           ? 'approved'
@@ -106,6 +136,46 @@ export default function useWorkspace({
 
     return () => { active = false; };
   }, [authSession?.user?.id, workspaceResolutionVersion]);
+
+  async function createWorkspace(name) {
+    if (workspaceCreationInFlightRef.current || workspaceCreationLoading) {
+      return { workspace: null, membership: null, error: new Error('CREATION_IN_PROGRESS') };
+    }
+    workspaceCreationInFlightRef.current = true;
+    setWorkspaceCreationLoading(true);
+    setWorkspaceCreationError('');
+    setWorkspaceCreationSuccess('');
+    let result;
+    try {
+      result = await WorkspaceService.createWorkspace(name);
+    } catch (error) {
+      result = { workspace: null, membership: null, error };
+    }
+    if (result.error) {
+      setWorkspaceCreationError(result.error.message || 'No fue posible crear el negocio.');
+      setWorkspaceCreationLoading(false);
+      workspaceCreationInFlightRef.current = false;
+      return result;
+    }
+    saveSelectedWorkspaceId(result.workspace?.id);
+    setWorkspaceCreationSuccess(`Negocio creado: ${result.workspace?.name || String(name).trim()}`);
+    setWorkspaceCreationLoading(false);
+    workspaceCreationInFlightRef.current = false;
+    setActiveWorkspace(null);
+    setActiveMembership(null);
+    setWorkspaceResolutionVersion((version) => version + 1);
+    return result;
+  }
+
+  function selectWorkspace(workspaceId) {
+    const selected = availableWorkspaces.find((entry) => entry.workspace?.id === workspaceId);
+    if (!selected) return false;
+    saveSelectedWorkspaceId(workspaceId);
+    setActiveWorkspace(null);
+    setActiveMembership(null);
+    setWorkspaceResolutionVersion((version) => version + 1);
+    return true;
+  }
 
   useEffect(() => {
     const userId = authSession?.user?.id;
@@ -261,6 +331,10 @@ export default function useWorkspace({
     workspaceLoading,
     workspaceError,
     workspaceAccessStatus,
+    availableWorkspaces,
+    workspaceCreationLoading,
+    workspaceCreationError,
+    workspaceCreationSuccess,
     workspaceSettings,
     workspaceSettingsSaving,
     workspaceSettingsError,
@@ -271,6 +345,8 @@ export default function useWorkspace({
     canEditWorkspaceQuotes,
     canEditWorkspaceSettings,
     refreshWorkspace,
+    createWorkspace,
+    selectWorkspace,
     saveWorkspaceSettings,
     handleLogoUpload,
     removeAppLogo,

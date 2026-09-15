@@ -1,4 +1,5 @@
 import { isProjectReadOnly } from '../production/productionEngine.js';
+import { getPurchaseItemFulfillment } from '../purchases/materialFulfillment.js';
 
 export const RECEPTION_TYPE = 'reception';
 export const RECEPTION_ITEM_TYPE = 'reception-item';
@@ -8,6 +9,13 @@ export const RECEPTION_STATUSES = Object.freeze({
   PARTIAL: 'partial',
   COMPLETE: 'complete',
   REJECTED: 'rejected',
+});
+
+export const RECEPTION_EXCESS_DECISIONS = Object.freeze({
+  NONE: 'none',
+  ACCEPT: 'accept',
+  REJECT: 'reject',
+  PENDING: 'pending_authorization',
 });
 
 export const RECEPTION_ERROR_CODES = Object.freeze({
@@ -31,6 +39,11 @@ function timestamp(value) {
 function nonNegative(value) {
   const number = Number(value);
   return Number.isFinite(number) && number >= 0 ? number : null;
+}
+
+function optionalNonNegative(value) {
+  if (value === '' || value === null || value === undefined) return null;
+  return nonNegative(value);
 }
 
 function positiveVersion(value) {
@@ -68,6 +81,14 @@ export function normalizeReceptionItem(item = {}) {
     damagedQuantity: nonNegative(item.damagedQuantity) ?? 0,
     rejectedQuantity: nonNegative(item.rejectedQuantity) ?? 0,
     missingQuantity: nonNegative(item.missingQuantity) ?? 0,
+    excessDecision: Object.values(RECEPTION_EXCESS_DECISIONS).includes(item.excessDecision)
+      ? item.excessDecision
+      : RECEPTION_EXCESS_DECISIONS.NONE,
+    shortageClosed: item.shortageClosed === true,
+    shortageReason: text(item.shortageReason),
+    actualUnitCost: optionalNonNegative(item.actualUnitCost),
+    additionalCharges: nonNegative(item.additionalCharges) ?? 0,
+    discounts: nonNegative(item.discounts) ?? 0,
     observations: text(item.observations),
     evidence: stringList(item.evidence),
     version: positiveVersion(item.version),
@@ -95,6 +116,9 @@ export function normalizeReception(reception = {}) {
     updatedAt: timestamp(reception.updatedAt),
     createdBy: text(reception.createdBy),
     lastModifiedBy: text(reception.lastModifiedBy || reception.createdBy),
+    revertedAt: timestamp(reception.revertedAt),
+    revertedBy: text(reception.revertedBy),
+    reversalReason: text(reception.reversalReason),
     items: (Array.isArray(reception.items) ? reception.items : [])
       .map(normalizeReceptionItem),
   };
@@ -114,8 +138,7 @@ export function receptionItemAccountedQuantity(item = {}) {
   const normalized = normalizeReceptionItem(item);
   return normalized.acceptedQuantity
     + normalized.damagedQuantity
-    + normalized.rejectedQuantity
-    + normalized.missingQuantity;
+    + normalized.rejectedQuantity;
 }
 
 export function validateReceptionItemQuantities(item = {}) {
@@ -159,13 +182,16 @@ function purchaseItems(purchase) {
 function purchasedQuantityById(purchase) {
   return new Map(purchaseItems(purchase).map((item) => [
     text(item.id),
-    Math.max(0, Number(item.quantity) || 0),
+    getPurchaseItemFulfillment(item).purchasedQuantity,
   ]));
 }
+
+import { projectEffectiveReceptionItems } from './receptionEffectiveItems.js';
 
 export function getReceptionAccumulatedQuantities(
   receptions = [],
   purchaseItemId = null,
+  corrections = [],
 ) {
   const result = {
     received: 0,
@@ -175,7 +201,8 @@ export function getReceptionAccumulatedQuantities(
     missing: 0,
   };
   (Array.isArray(receptions) ? receptions : []).forEach((reception) => {
-    normalizeReception(reception).items.forEach((item) => {
+    if (reception?.revertedAt) return;
+    projectEffectiveReceptionItems({ receptionItems: normalizeReception(reception).items, corrections }).forEach((item) => {
       if (purchaseItemId && item.purchaseItemId !== purchaseItemId) return;
       result.received += item.receivedQuantity;
       result.accepted += item.acceptedQuantity;
@@ -209,12 +236,12 @@ export function getReceptionItemStatus({
   return RECEPTION_STATUSES.PARTIAL;
 }
 
-export function getReceptionStatus({ purchase, receptions = [] } = {}) {
+export function getReceptionStatus({ purchase, receptions = [], corrections = [] } = {}) {
   const items = purchaseItems(purchase);
   if (!items.length) return RECEPTION_STATUSES.PENDING;
   const statuses = items.map((item) => getReceptionItemStatus({
-    purchasedQuantity: item.quantity,
-    accumulated: getReceptionAccumulatedQuantities(receptions, item.id),
+    purchasedQuantity: getPurchaseItemFulfillment(item).purchasedQuantity,
+    accumulated: getReceptionAccumulatedQuantities(receptions, item.id, corrections),
   }));
   if (statuses.every((status) => status === RECEPTION_STATUSES.COMPLETE)) {
     return RECEPTION_STATUSES.COMPLETE;
@@ -339,14 +366,36 @@ export function validateReception(
       [...existing, value],
       item.purchaseItemId,
     );
+    const previous = getReceptionAccumulatedQuantities(existing, item.purchaseItemId);
+    const hasPurchasedQuantity = quantities.has(item.purchaseItemId);
+    const purchased = quantities.get(item.purchaseItemId) || 0;
+    const remaining = Math.max(0, purchased - previous.accepted);
+    const excess = Math.max(0, item.receivedQuantity - remaining);
+    if (hasPurchasedQuantity
+      && excess > 0
+      && item.excessDecision === RECEPTION_EXCESS_DECISIONS.NONE) {
+      errors.push({
+        code: RECEPTION_ERROR_CODES.OVER_RECEIPT,
+        field: `items.${index}.excessDecision`,
+        message: 'El excedente requiere una decisión explícita.',
+      });
+    }
     if (
       quantities.has(item.purchaseItemId)
       && accumulated.accepted > quantities.get(item.purchaseItemId)
+      && item.excessDecision !== RECEPTION_EXCESS_DECISIONS.ACCEPT
     ) {
       errors.push({
         code: RECEPTION_ERROR_CODES.OVER_RECEIPT,
         field: `items.${index}.acceptedQuantity`,
         message: 'La cantidad aceptada acumulada supera lo comprado.',
+      });
+    }
+    if (item.shortageClosed && !item.shortageReason) {
+      errors.push({
+        code: RECEPTION_ERROR_CODES.INVALID_INPUT,
+        field: `items.${index}.shortageReason`,
+        message: 'Cerrar con faltante requiere un motivo.',
       });
     }
   });
@@ -428,7 +477,7 @@ export function normalizeLegacyReceptionRows({
   const items = purchaseItems(purchase).flatMap((purchaseItem) => {
     const legacy = rows?.[purchaseItem.id] || rows?.[`mat-${purchaseItem.id}`];
     if (!legacy || legacy.status === 'pendiente') return [];
-    const quantity = Math.max(0, Number(purchaseItem.quantity) || 0);
+    const quantity = getPurchaseItemFulfillment(purchaseItem).purchasedQuantity;
     const complete = legacy.status === 'recibido';
     const acceptedQuantity = complete ? quantity : 0;
     return [{

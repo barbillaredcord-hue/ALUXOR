@@ -1,12 +1,15 @@
 const RECEPTION_COLUMNS = `
   id, workspace_id, purchase_id, production_order_id, quote_id,
   received_at, received_by, observations, evidence, version,
-  created_at, updated_at, created_by, last_modified_by
+  created_at, updated_at, created_by, last_modified_by,
+  reverted_at, reverted_by, reversal_reason
 `;
 const RECEPTION_ITEM_COLUMNS = `
   id, workspace_id, reception_id, purchase_id, purchase_item_id,
   received_quantity, accepted_quantity, damaged_quantity,
   rejected_quantity, missing_quantity, observations, evidence, version,
+  excess_decision, shortage_closed, shortage_reason, actual_unit_cost,
+  additional_charges, discounts,
   created_at, updated_at, created_by, last_modified_by
 `;
 
@@ -87,6 +90,9 @@ export function createReceptionSupabaseClient({ supabase, workspaceId } = {}) {
         received_by: row.received_by,
         observations: row.observations,
         evidence: row.evidence,
+        reverted_at: row.reverted_at,
+        reverted_by: row.reverted_by,
+        reversal_reason: row.reversal_reason,
         last_modified_by: row.last_modified_by,
       })
       .eq('workspace_id', workspaceId)
@@ -169,6 +175,12 @@ export function createReceptionSupabaseClient({ supabase, workspaceId } = {}) {
         damaged_quantity: row.damaged_quantity,
         rejected_quantity: row.rejected_quantity,
         missing_quantity: row.missing_quantity,
+        excess_decision: row.excess_decision,
+        shortage_closed: row.shortage_closed,
+        shortage_reason: row.shortage_reason,
+        actual_unit_cost: row.actual_unit_cost,
+        additional_charges: row.additional_charges,
+        discounts: row.discounts,
         observations: row.observations,
         evidence: row.evidence,
         last_modified_by: row.last_modified_by,

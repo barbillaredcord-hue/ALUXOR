@@ -1,0 +1,5 @@
+import { describe, expect, it } from 'vitest';
+import { projectEffectiveReceptionItems } from './receptionEffectiveItems.js';
+const id=(n)=>`00000000-0000-4000-8000-${String(n).repeat(12)}`;
+const item=(n,accepted=7)=>({id:id(n),workspaceId:id('2'),receptionId:id('3'),purchaseId:id('4'),purchaseItemId:id(n),receivedQuantity:7,acceptedQuantity:accepted,version:1});
+describe('effective reception item collection',()=>it('proyecta solo la partida corregida sin crear ni mutar otras',()=>{const source=[item('1'),item('5')];const correction={id:id('6'),workspaceId:id('2'),receptionId:id('3'),receptionItemId:id('1'),purchaseId:id('4'),purchaseItemId:id('1'),createdBy:id('7'),idempotencyKey:id('8'),correctionType:'REAL_DATA_CORRECTION',status:'active',version:2,reason:'Real',previousValues:{},newValues:{receivedQuantity:7,acceptedQuantity:5}};const result=projectEffectiveReceptionItems({receptionItems:source,corrections:[correction]});expect(result).toHaveLength(2);expect(result.map(x=>x.acceptedQuantity)).toEqual([5,7]);expect(source.map(x=>x.acceptedQuantity)).toEqual([7,7])}));

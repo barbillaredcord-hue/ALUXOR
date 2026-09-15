@@ -547,6 +547,50 @@ describe('quote.js', () => {
     }, helpers)).toEqual([{ id: 'group-1', name: 'Mueble bajo' }]);
   });
 
+  it('conserva trazabilidad opcional de una resolución sobredimensionada', () => {
+    expect(Quote.normalizeMeasureItem({
+      id: 'section-1',
+      nombre: 'Panel · sección 1',
+      ancho: 67,
+      alto: 131.5,
+      cantidad: 1,
+      sourcePieceId: 'panel',
+      resolutionProposalId: 'proposal-1',
+      resolutionAlternativeId: 'balanced-1',
+      sectionIndex: 1,
+      sectionCount: 2,
+      stripIndex: 5,
+      stripCount: 5,
+      modularCoverage: true,
+      finishedCoverageWidth: 3,
+      grossCutWidth: 16,
+      trimRequired: true,
+      trimWidth: 13,
+      installationOrientation: 'vertical',
+      oversizeResolutionStatus: 'generated-section',
+      optimizationExcluded: true,
+    }, 0, {}, helpers)).toMatchObject({
+      sourcePieceId: 'panel',
+      resolutionProposalId: 'proposal-1',
+      resolutionAlternativeId: 'balanced-1',
+      sectionIndex: 1,
+      sectionCount: 2,
+      stripIndex: 5,
+      stripCount: 5,
+      modularCoverage: true,
+      finishedCoverageWidth: 3,
+      grossCutWidth: 16,
+      trimRequired: true,
+      trimWidth: 13,
+      installationOrientation: 'vertical',
+      oversizeResolutionStatus: 'generated-section',
+      optimizationExcluded: true,
+    });
+    expect(Quote.normalizeMeasureItem({
+      id: 'legacy', nombre: 'Legacy', ancho: 10, alto: 10, cantidad: 1,
+    }, 0, {}, helpers)).not.toHaveProperty('resolutionProposalId');
+  });
+
   it('calcula cada material únicamente con sus piezas asignadas', () => {
     const quote = Quote.calculateQuote({
       giro: 'Carpintería',

@@ -91,3 +91,5 @@ export function getInventorySummary(items = [], availableById = {}) {
 
   return summary;
 }
+
+export { summarizeInventory as getMovementInventorySummary } from './inventoryEngine.js';

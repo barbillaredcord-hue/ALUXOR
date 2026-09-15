@@ -29,6 +29,14 @@ import {
   optimizationSessionPieceOrder,
 } from '../../lib/optimization-session/index.js';
 import SmartCutComparison from '../smart-cut/SmartCutComparison.jsx';
+import OversizeResolutionPanel from '../OversizeResolutionPanel.jsx';
+import {
+  createOversizeResolutionProposal,
+  listOversizedPieces,
+  MATERIAL_LAYOUT_TYPES,
+  resolveOversizePiece,
+  suggestMaterialLayoutType,
+} from '../../lib/oversize-resolution/index.js';
 
 const TYPE_OPTIONS = [
   {
@@ -71,6 +79,11 @@ const initialConfig = {
   marginPercent: 35,
   allowRotation: true,
   grainDirection: false,
+  allowSplit: false,
+  materialLayoutType: MATERIAL_LAYOUT_TYPES.SHEET,
+  installationOrientation: 'vertical',
+  jointGap: 0,
+  allowSideTrim: true,
   kerf: 0.3,
   pieceOrder: 'largest-first',
   treatment: '',
@@ -449,6 +462,8 @@ export default function MaterialCalculator({
   onApplySelectionToSession,
   onApplySelectionToLegacy,
   onClearLegacySelection,
+  onApplyOversizeProposal,
+  onRevertOversizeProposal,
   onCreateGroup,
   onApply,
   onBack,
@@ -483,6 +498,15 @@ export default function MaterialCalculator({
   const [selectedCandidateId, setSelectedCandidateId] = useState(
     effectiveOptimizationInput?.selectedCandidateId || null,
   );
+  const [alternativeFormats, setAlternativeFormats] = useState([]);
+  const [alternativeFormatDraft, setAlternativeFormatDraft] = useState({
+    width: '',
+    height: '',
+    price: '',
+  });
+  const [oversizeProposals, setOversizeProposals] = useState([]);
+  const [oversizeResolutionRecords, setOversizeResolutionRecords] = useState([]);
+  const [oversizePanelExpanded, setOversizePanelExpanded] = useState(false);
   const hasOpenedOptimizationSession = Boolean(
     optimizationSessionInput && onApplySelectionToSession,
   );
@@ -531,10 +555,11 @@ export default function MaterialCalculator({
     type,
   ]);
 
-  const availablePieces = mode === 'quick' ? [quickPiece] : pieces;
+  const projectPieces = pieces.filter((piece) => piece.optimizationExcluded !== true);
+  const availablePieces = mode === 'quick' ? [quickPiece] : projectPieces;
   const effectiveSelection = mode === 'quick' ? ['quick-piece'] : selectedPieceIds;
   const selectedSet = useMemo(() => new Set(effectiveSelection), [effectiveSelection]);
-  const ungrouped = pieces.filter((piece) => (
+  const ungrouped = projectPieces.filter((piece) => (
     !piece.groupId || !pieceGroups.some((group) => group.id === piece.groupId)
   ));
   const selectedPieces = availablePieces.filter((piece) => selectedSet.has(piece.id));
@@ -557,6 +582,101 @@ export default function MaterialCalculator({
     ));
   }, [appliedCandidateId, calculation]);
 
+  const currentSheetMaterialId = config.materialId || draftMaterialId;
+  const oversizeResolutions = useMemo(() => {
+    if (mode !== 'project' || type !== CALCULATION_TYPES.SHEET) return [];
+    const sourceIds = new Set([
+      ...selectedPieceIds,
+      ...pieces.filter((piece) => piece.resolutionProposalId).map((piece) => piece.id),
+    ]);
+    return listOversizedPieces(
+      pieces
+        .filter((piece) => sourceIds.has(piece.id) && !piece.sourcePieceId)
+        .map((piece) => {
+          const sheetWidth = piece.resolutionOriginalSheetWidth
+            ? convertLength(piece.resolutionOriginalSheetWidth, 'cm', config.unit)
+            : config.formatWidth;
+          const sheetHeight = piece.resolutionOriginalSheetHeight
+            ? convertLength(piece.resolutionOriginalSheetHeight, 'cm', config.unit)
+            : config.formatHeight;
+          return resolveOversizePiece({
+            piece: { ...piece, unit: 'cm' },
+            sheet: {
+              id: `current:${currentSheetMaterialId}:${sheetWidth}x${sheetHeight}`,
+              materialId: currentSheetMaterialId,
+              width: sheetWidth,
+              height: sheetHeight,
+              unit: config.unit,
+              price: config.price,
+              margins: config.margins,
+            },
+            alternativeFormats,
+            config: {
+              unit: config.unit,
+              allowRotation: config.allowRotation,
+              allowSplit: config.allowSplit === true,
+              maxJoints: 1,
+              kerf: config.kerf,
+              grainRequired: config.grainDirection,
+              materialLayoutType: config.materialLayoutType,
+              installationOrientation: config.installationOrientation,
+              jointGap: config.jointGap,
+              allowSideTrim: config.allowSideTrim,
+              pieceOrder: optimizationSessionPieceOrder(config),
+              blockedRegions: config.blockedRegions,
+              reservedRegions: config.reservedRegions,
+            },
+          });
+        }),
+    );
+  }, [
+    alternativeFormats,
+    config,
+    currentSheetMaterialId,
+    mode,
+    pieces,
+    selectedPieceIds,
+    type,
+  ]);
+  const panelResolutions = useMemo(() => {
+    const byPiece = new Map(
+      oversizeResolutionRecords.map((resolution) => [resolution.sourcePiece.id, resolution]),
+    );
+    oversizeResolutions.forEach((resolution) => byPiece.set(resolution.sourcePiece.id, resolution));
+    return [...byPiece.values()].sort((left, right) => (
+      left.sourcePiece.id.localeCompare(right.sourcePiece.id)
+    ));
+  }, [oversizeResolutionRecords, oversizeResolutions]);
+  const reconstructedProposals = useMemo(() => pieces
+    .filter((piece) => piece.resolutionProposalId && !piece.sourcePieceId)
+    .map((piece) => ({
+      id: piece.resolutionProposalId,
+      sourcePieceId: piece.id,
+      alternativeId: piece.resolutionAlternativeId,
+      alternativeType: piece.resolutionAlternativeType,
+      inputSignature: piece.resolutionInputSignature,
+      resultingPieces: pieces.filter((section) => (
+        section.sourcePieceId === piece.id
+        && section.resolutionProposalId === piece.resolutionProposalId
+      )).map((section) => ({ id: section.id })),
+      originalSheetFormat: piece.resolutionOriginalSheetWidth
+        ? {
+          width: piece.resolutionOriginalSheetWidth,
+          height: piece.resolutionOriginalSheetHeight,
+        }
+        : null,
+      status: 'applied',
+    })), [pieces]);
+  const panelProposals = useMemo(() => {
+    const byId = new Map(reconstructedProposals.map((proposal) => [proposal.id, proposal]));
+    oversizeProposals.forEach((proposal) => byId.set(proposal.id, proposal));
+    return [...byId.values()];
+  }, [oversizeProposals, reconstructedProposals]);
+
+  useEffect(() => {
+    if (!panelResolutions.length) setOversizePanelExpanded(false);
+  }, [panelResolutions.length]);
+
   function updateConfig(field, value) {
     setHasInteracted(true);
     setConfig((current) => ({ ...current, [field]: value }));
@@ -576,7 +696,7 @@ export default function MaterialCalculator({
 
   function toggleGroup(groupId) {
     setHasInteracted(true);
-    const groupPieceIds = pieceIdsForGroups(pieces, [groupId]);
+    const groupPieceIds = pieceIdsForGroups(projectPieces, [groupId]);
     const allSelected = groupPieceIds.length
       && groupPieceIds.every((id) => selectedSet.has(id));
     setSelectedPieceIds((current) => (
@@ -600,29 +720,32 @@ export default function MaterialCalculator({
     setCalculation(null);
   }
 
-  function calculationInput(optimize = false) {
+  function calculationInput(optimize = false, overrides = {}) {
+    const nextConfig = overrides.config || config;
+    const nextPieces = overrides.pieces || availablePieces;
+    const nextSelection = overrides.selectedPieceIds || effectiveSelection;
     return {
       type,
-      pieces: availablePieces,
-      selectedPieceIds: effectiveSelection,
+      pieces: nextPieces,
+      selectedPieceIds: nextSelection,
       pieceUnit: 'cm',
-      unit: config.unit,
-      formatWidth: config.formatWidth,
-      formatHeight: config.formatHeight,
-      barLength: config.barLength,
-      price: config.price,
-      wastePercent: config.wastePercent,
-      marginPercent: config.marginPercent,
-      allowRotation: config.allowRotation,
-      grainDirection: config.grainDirection,
-      kerf: config.kerf,
-      strategy: optimizationSessionPieceOrder(config),
-      treatment: config.treatment,
-      quantityPerPiece: config.quantityPerPiece,
-      reserveQuantity: config.reserveQuantity,
-      margins: config.margins,
-      blockedRegions: config.blockedRegions,
-      reservedRegions: config.reservedRegions,
+      unit: nextConfig.unit,
+      formatWidth: nextConfig.formatWidth,
+      formatHeight: nextConfig.formatHeight,
+      barLength: nextConfig.barLength,
+      price: nextConfig.price,
+      wastePercent: nextConfig.wastePercent,
+      marginPercent: nextConfig.marginPercent,
+      allowRotation: nextConfig.allowRotation,
+      grainDirection: nextConfig.grainDirection,
+      kerf: nextConfig.kerf,
+      strategy: optimizationSessionPieceOrder(nextConfig),
+      treatment: nextConfig.treatment,
+      quantityPerPiece: nextConfig.quantityPerPiece,
+      reserveQuantity: nextConfig.reserveQuantity,
+      margins: nextConfig.margins,
+      blockedRegions: nextConfig.blockedRegions,
+      reservedRegions: nextConfig.reservedRegions,
       optimize,
     };
   }
@@ -730,6 +853,118 @@ export default function MaterialCalculator({
       : 'Selección temporal compartida con Cut Optimizer.');
   }
 
+  function addAlternativeFormat() {
+    const width = number(alternativeFormatDraft.width);
+    const height = number(alternativeFormatDraft.height);
+    if (width <= 0 || height <= 0) {
+      setFeedback('Captura ancho y largo válidos para el formato alternativo.');
+      return;
+    }
+    const id = `compatible:${currentSheetMaterialId}:${width}x${height}`;
+    setAlternativeFormats((current) => [
+      ...current.filter((format) => format.id !== id),
+      {
+        id,
+        materialId: currentSheetMaterialId,
+        width,
+        height,
+        price: alternativeFormatDraft.price === ''
+          ? null
+          : number(alternativeFormatDraft.price),
+        unit: config.unit,
+        active: true,
+      },
+    ]);
+    setAlternativeFormatDraft({ width: '', height: '', price: '' });
+    setFeedback('Formato compatible agregado a esta sesión de Material Calculator.');
+  }
+
+  function shareResolvedWorkingInput(nextConfig, nextSelectedPieceIds) {
+    const input = buildOptimizationSessionInputFromCalculator({
+      type,
+      config: nextConfig,
+      selectedPieceIds: nextSelectedPieceIds,
+      selectedCandidateId: null,
+    });
+    if (hasOpenedOptimizationSession) onApplySelectionToSession(input);
+    else onApplySelectionToLegacy?.(input);
+  }
+
+  function applyOversizeAlternative(resolution, alternative) {
+    const proposal = createOversizeResolutionProposal({
+      resolution,
+      alternativeId: alternative.id,
+      createdAt: new Date().toISOString(),
+    });
+    const result = proposal ? onApplyOversizeProposal?.(proposal) : null;
+    if (!result?.applied) {
+      setFeedback('No fue posible aplicar la propuesta a la cotización.');
+      return;
+    }
+    const nextConfig = alternative.type === 'larger-format' && alternative.sheetFormat
+      ? {
+        ...config,
+        formatWidth: convertLength(alternative.sheetFormat.width, 'cm', config.unit),
+        formatHeight: convertLength(alternative.sheetFormat.height, 'cm', config.unit),
+      }
+      : config;
+    const nextSelectedPieceIds = [
+      ...selectedPieceIds.filter((id) => id !== proposal.sourcePieceId),
+      ...result.selectedPieceIds,
+    ].filter((id, index, values) => values.indexOf(id) === index);
+    const nextPieces = result.form.measureItems.filter((piece) => piece.optimizationExcluded !== true);
+    const nextCalculation = calculateMaterial(calculationInput(true, {
+      config: nextConfig,
+      pieces: nextPieces,
+      selectedPieceIds: nextSelectedPieceIds,
+    }));
+    setConfig(nextConfig);
+    setSelectedPieceIds(nextSelectedPieceIds);
+    setSelectedCandidateId(resolveInitialSmartCutCandidateId(nextCalculation.optimization));
+    setCalculation(nextCalculation);
+    setResultView('optimization');
+    setOversizeProposals((current) => [
+      ...current.filter((item) => item.sourcePieceId !== proposal.sourcePieceId),
+      result.proposal,
+    ]);
+    setOversizeResolutionRecords((current) => [
+      ...current.filter((item) => item.sourcePiece.id !== resolution.sourcePiece.id),
+      resolution,
+    ]);
+    shareResolvedWorkingInput(nextConfig, nextSelectedPieceIds);
+    setFeedback('Propuesta aplicada. Smart Cut recalculó las piezas resueltas.');
+  }
+
+  function revertOversizeResolution(proposal) {
+    const result = onRevertOversizeProposal?.(proposal);
+    if (!result?.reverted) {
+      setFeedback('No fue posible deshacer la resolución.');
+      return;
+    }
+    const generatedIds = new Set(proposal.resultingPieces?.map((piece) => piece.id) || []);
+    const nextSelectedPieceIds = [
+      ...selectedPieceIds.filter((id) => !generatedIds.has(id)),
+      proposal.sourcePieceId,
+    ].filter((id, index, values) => values.indexOf(id) === index);
+    const nextConfig = proposal.alternativeType === 'larger-format' && proposal.originalSheetFormat
+      ? {
+        ...config,
+        formatWidth: convertLength(proposal.originalSheetFormat.width, 'cm', config.unit),
+        formatHeight: convertLength(proposal.originalSheetFormat.height, 'cm', config.unit),
+      }
+      : config;
+    setConfig(nextConfig);
+    setSelectedPieceIds(nextSelectedPieceIds);
+    setSelectedCandidateId(null);
+    setCalculation(null);
+    setOversizeProposals((current) => current.filter((item) => item.id !== proposal.id));
+    setOversizeResolutionRecords((current) => (
+      current.filter((item) => item.sourcePiece.id !== proposal.sourcePieceId)
+    ));
+    shareResolvedWorkingInput(nextConfig, nextSelectedPieceIds);
+    setFeedback('Resolución deshecha. La pieza original volvió a ser calculable.');
+  }
+
   function clearTemporaryCalculation() {
     setMode(initialMode);
     setSelectedPieceIds([]);
@@ -742,14 +977,17 @@ export default function MaterialCalculator({
     setResultView('calculation');
     setMaterialEditorOpen(false);
     setHasInteracted(false);
+    setOversizeProposals([]);
+    setOversizeResolutionRecords([]);
+    setOversizePanelExpanded(false);
     if (!hasOpenedOptimizationSession) onClearLegacySelection?.();
   }
 
   const groupedPieces = pieceGroups.map((group) => ({
     ...group,
-    pieces: pieces.filter((piece) => piece.groupId === group.id),
+    pieces: projectPieces.filter((piece) => piece.groupId === group.id),
     organization: groupPiecesByCategory(
-      pieces.filter((piece) => piece.groupId === group.id),
+      projectPieces.filter((piece) => piece.groupId === group.id),
     ),
   }));
   const selectedGroupNames = groupedPieces
@@ -947,7 +1185,7 @@ export default function MaterialCalculator({
                     <span>{context.customerName || 'Cliente no registrado'}</span>
                   </div>
                   <div className="calculator-selection-actions">
-                    <button type="button" className="ghost" onClick={() => { setHasInteracted(true); setSelectedPieceIds(pieces.map((piece) => piece.id)); setCalculation(null); }}>Seleccionar todo</button>
+                    <button type="button" className="ghost" onClick={() => { setHasInteracted(true); setSelectedPieceIds(projectPieces.map((piece) => piece.id)); setCalculation(null); }}>Seleccionar todo</button>
                     <button type="button" className="ghost" onClick={() => { setHasInteracted(true); setSelectedPieceIds([]); setCalculation(null); }}>Limpiar selección</button>
                     <label>
                       Seleccionar por material
@@ -991,7 +1229,7 @@ export default function MaterialCalculator({
                   {!pieceGroups.length && (
                     <div className="calculator-empty-state">
                       <strong>Esta cotización todavía no tiene conjuntos.</strong>
-                      {pieces.length ? (
+                      {projectPieces.length ? (
                         <div>
                           <label>Nombre del primer conjunto
                             <input value={newGroupName} onChange={(event) => setNewGroupName(event.target.value)} />
@@ -1002,7 +1240,7 @@ export default function MaterialCalculator({
                             onClick={() => {
                               onCreateGroup?.({
                                 name: newGroupName.trim(),
-                                pieceIds: pieces.map((piece) => piece.id),
+                                pieceIds: projectPieces.map((piece) => piece.id),
                               });
                               setNewGroupName('');
                             }}
@@ -1154,6 +1392,7 @@ export default function MaterialCalculator({
                         barLength: material?.largo || current.barLength,
                         price: material?.costoUnitario || current.price,
                         wastePercent: material?.merma ?? current.wastePercent,
+                        materialLayoutType: suggestMaterialLayoutType(material || {}),
                       }));
                       setCalculation(null);
                     }}
@@ -1193,10 +1432,19 @@ export default function MaterialCalculator({
                 </label>
                 {[CALCULATION_TYPES.SHEET].includes(type) && (
                   <>
-                    <label>Ancho de hoja ({config.unit})
+                    <label>Comportamiento del material
+                      <select
+                        value={config.materialLayoutType || MATERIAL_LAYOUT_TYPES.SHEET}
+                        onChange={(event) => updateConfig('materialLayoutType', event.target.value)}
+                      >
+                        <option value={MATERIAL_LAYOUT_TYPES.SHEET}>Hoja completa</option>
+                        <option value={MATERIAL_LAYOUT_TYPES.MODULAR_PLANK}>Cobertura modular</option>
+                      </select>
+                    </label>
+                    <label>{config.materialLayoutType === MATERIAL_LAYOUT_TYPES.MODULAR_PLANK ? 'Ancho comercial de tira' : 'Ancho de hoja'} ({config.unit})
                       <input type="number" min="0" value={config.formatWidth} onChange={(event) => updateConfig('formatWidth', number(event.target.value))} />
                     </label>
-                    <label>Largo de hoja ({config.unit})
+                    <label>{config.materialLayoutType === MATERIAL_LAYOUT_TYPES.MODULAR_PLANK ? 'Largo comercial de tira' : 'Largo de hoja'} ({config.unit})
                       <input type="number" min="0" value={config.formatHeight} onChange={(event) => updateConfig('formatHeight', number(event.target.value))} />
                     </label>
                     <label>Kerf ({config.unit})
@@ -1204,6 +1452,23 @@ export default function MaterialCalculator({
                     </label>
                     <label className="calculator-check"><input type="checkbox" checked={config.allowRotation} onChange={(event) => updateConfig('allowRotation', event.target.checked)} /> Permitir rotación</label>
                     <label className="calculator-check"><input type="checkbox" checked={config.grainDirection} onChange={(event) => updateConfig('grainDirection', event.target.checked)} /> Respetar orientación de veta</label>
+                    {config.materialLayoutType === MATERIAL_LAYOUT_TYPES.SHEET && (
+                      <label className="calculator-check"><input type="checkbox" checked={config.allowSplit === true} onChange={(event) => updateConfig('allowSplit', event.target.checked)} /> Permitir propuestas de una división</label>
+                    )}
+                    {config.materialLayoutType === MATERIAL_LAYOUT_TYPES.MODULAR_PLANK && (
+                      <>
+                        <label>Orientación de instalación
+                          <select value={config.installationOrientation || 'vertical'} onChange={(event) => updateConfig('installationOrientation', event.target.value)}>
+                            <option value="vertical">Vertical</option>
+                            <option value="horizontal">Horizontal</option>
+                          </select>
+                        </label>
+                        <label>Separación o junta ({config.unit})
+                          <input type="number" min="0" step="0.1" value={config.jointGap ?? 0} onChange={(event) => updateConfig('jointGap', number(event.target.value))} />
+                        </label>
+                        <label className="calculator-check"><input type="checkbox" checked={config.allowSideTrim !== false} onChange={(event) => updateConfig('allowSideTrim', event.target.checked)} /> Permitir recorte lateral</label>
+                      </>
+                    )}
                   </>
                 )}
                 {type === CALCULATION_TYPES.LINEAR && (
@@ -1236,6 +1501,37 @@ export default function MaterialCalculator({
                   <input type="number" min="0" value={config.marginPercent} onChange={(event) => updateConfig('marginPercent', number(event.target.value))} />
                 </label>
               </div>
+              {type === CALCULATION_TYPES.SHEET && (
+                <div className="calculator-compatible-formats">
+                  <strong>Formatos comerciales compatibles</strong>
+                  <p>Configuración temporal para este material. No consulta proveedores ni cambia el formato actual automáticamente.</p>
+                  <div>
+                    <label>Ancho ({config.unit})
+                      <input type="number" min="0" value={alternativeFormatDraft.width} onChange={(event) => setAlternativeFormatDraft((current) => ({ ...current, width: event.target.value }))} />
+                    </label>
+                    <label>Largo ({config.unit})
+                      <input type="number" min="0" value={alternativeFormatDraft.height} onChange={(event) => setAlternativeFormatDraft((current) => ({ ...current, height: event.target.value }))} />
+                    </label>
+                    <label>Precio opcional
+                      <input type="number" min="0" value={alternativeFormatDraft.price} onChange={(event) => setAlternativeFormatDraft((current) => ({ ...current, price: event.target.value }))} />
+                    </label>
+                    <button type="button" className="ghost" onClick={addAlternativeFormat}>Agregar formato compatible</button>
+                  </div>
+                  {alternativeFormats.map((format) => (
+                    <label key={format.id} className="calculator-check">
+                      <input
+                        type="checkbox"
+                        checked={format.active !== false}
+                        onChange={(event) => setAlternativeFormats((current) => current.map((item) => (
+                          item.id === format.id ? { ...item, active: event.target.checked } : item
+                        )))}
+                      />
+                      {format.width} × {format.height} {format.unit}
+                      {format.price !== null ? ` · ${money(format.price)}` : ' · sin precio'}
+                    </label>
+                  ))}
+                </div>
+              )}
               </div>
               {!materials.length && <p className="calculator-inline-empty">No hay materiales disponibles. Puedes calcular uno nuevo sin modificar el catálogo.</p>}
             </div>
@@ -1309,7 +1605,7 @@ export default function MaterialCalculator({
             </div>
           </section>
 
-          <section className="calculator-step calculator-step--result">
+          <section className={`calculator-step calculator-step--result${oversizePanelExpanded ? ' has-expanded-resolution' : ''}`}>
             <div className="calculator-step__number">5</div>
             <div>
               <div className="calculator-result-head">
@@ -1418,6 +1714,16 @@ export default function MaterialCalculator({
                   )}
                 </>
               )}
+
+              <OversizeResolutionPanel
+                resolutions={panelResolutions}
+                proposals={panelProposals}
+                readOnly={readOnly || mode !== 'project' || !onApplyOversizeProposal}
+                onApplyAlternative={applyOversizeAlternative}
+                onKeepUnresolved={applyOversizeAlternative}
+                onRevert={revertOversizeResolution}
+                onExpandedChange={setOversizePanelExpanded}
+              />
 
               {conflicts.length > 0 && (
                 <div className="calculator-conflicts" role="alert">

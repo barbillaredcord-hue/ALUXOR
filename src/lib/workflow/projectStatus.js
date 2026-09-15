@@ -2,6 +2,7 @@ import { QUOTE_STATUSES, quoteRecordStatus } from '../quotes/quoteAdapter.js';
 import { productionOrderMatchesQuote } from '../quotes/quoteReference.js';
 import { PRODUCTION_STATUSES } from '../production/productionEngine.js';
 import { PURCHASE_STATUSES, normalizePurchaseStatus } from '../purchases/purchaseSummary.js';
+import { getPurchaseItemFulfillment } from '../purchases/materialFulfillment.js';
 
 export const PURCHASE_MATERIAL_STATES = Object.freeze({
   NOT_REQUIRED: 'Sin compra requerida',
@@ -16,6 +17,7 @@ export const PURCHASE_MATERIAL_STATES = Object.freeze({
 export const PRODUCTION_OPERATIONAL_STATES = Object.freeze({
   PENDING: 'Pendiente',
   WAITING_PURCHASES: 'Esperando compras',
+  WAITING_RECEPTION: 'Esperando recepción',
   MATERIAL_AVAILABLE: 'Material disponible',
   CUTTING: 'En corte',
   FABRICATING: 'Fabricando',
@@ -25,6 +27,12 @@ export const PRODUCTION_OPERATIONAL_STATES = Object.freeze({
   DELIVERED: 'Entregado',
   REJECTED: 'Rechazado',
 });
+
+export function getProductionOperationalLabel(state) {
+  return state === PRODUCTION_OPERATIONAL_STATES.MATERIAL_AVAILABLE
+    ? 'Materiales disponibles'
+    : state;
+}
 
 function list(value) {
   return Array.isArray(value) ? value : [];
@@ -67,6 +75,24 @@ export function getPurchaseMaterialState(purchases = [], productionOrder = null)
       : PURCHASE_MATERIAL_STATES.NOT_REQUIRED;
   }
 
+  // La compra se considera cubierta por cantidades, no por el estado histórico
+  // de la partida. La recepción se deriva por separado más adelante.
+  const hasQuantityContract = items.some((item) => (
+    ['requiredQuantity', 'orderedQuantity', 'quantity', 'purchasedQuantity']
+      .some((field) => Object.prototype.hasOwnProperty.call(item || {}, field))
+  ));
+  if (hasQuantityContract) {
+    const fulfillments = items.map((item) => getPurchaseItemFulfillment(item));
+    const requiredItems = fulfillments.filter((fulfillment) => fulfillment.requiredQuantity > 0);
+    if (requiredItems.length && requiredItems.every(
+      (fulfillment) => fulfillment.purchasePendingQuantity === 0,
+    )) return PURCHASE_MATERIAL_STATES.RECEIVED;
+    if (fulfillments.some((fulfillment) => fulfillment.purchasedQuantity > 0)) {
+      return PURCHASE_MATERIAL_STATES.PARTIALLY_PURCHASED;
+    }
+    return PURCHASE_MATERIAL_STATES.PENDING;
+  }
+
   const counts = items.reduce((result, item) => {
     result[normalizePurchaseStatus(item?.status)] += 1;
     return result;
@@ -79,7 +105,7 @@ export function getPurchaseMaterialState(purchases = [], productionOrder = null)
   return PURCHASE_MATERIAL_STATES.PENDING;
 }
 
-export function getProductionOperationalState(productionOrder, purchaseState) {
+export function getProductionOperationalState(productionOrder, purchaseState, receptionState = null) {
   if (!productionOrder) return null;
   const status = productionOrder.estado ?? productionOrder.status;
 
@@ -95,7 +121,12 @@ export function getProductionOperationalState(productionOrder, purchaseState) {
   if (status === PRODUCTION_STATUSES.FABRICATING) return PRODUCTION_OPERATIONAL_STATES.FABRICATING;
   if (status === PRODUCTION_STATUSES.CUTTING) return PRODUCTION_OPERATIONAL_STATES.CUTTING;
 
-  if (purchaseState === PURCHASE_MATERIAL_STATES.RECEIVED) {
+  const receptionComplete = !receptionState
+    || (receptionState.status === 'complete' && Number(receptionState.incidents || 0) === 0);
+  if (purchaseState === PURCHASE_MATERIAL_STATES.RECEIVED && !receptionComplete) {
+    return PRODUCTION_OPERATIONAL_STATES.WAITING_RECEPTION;
+  }
+  if (purchaseState === PURCHASE_MATERIAL_STATES.RECEIVED && receptionComplete) {
     return PRODUCTION_OPERATIONAL_STATES.MATERIAL_AVAILABLE;
   }
   if ([
@@ -118,6 +149,7 @@ export function getQuoteDisplayStatus(quote, productionOrder = null, purchaseSta
   const displayByOperationalStatus = {
     [PRODUCTION_OPERATIONAL_STATES.PENDING]: 'Aceptada · Pendiente de producción',
     [PRODUCTION_OPERATIONAL_STATES.WAITING_PURCHASES]: 'Esperando materiales',
+    [PRODUCTION_OPERATIONAL_STATES.WAITING_RECEPTION]: 'Esperando recepción',
     [PRODUCTION_OPERATIONAL_STATES.MATERIAL_AVAILABLE]: 'Lista para fabricar',
     [PRODUCTION_OPERATIONAL_STATES.CUTTING]: 'En producción',
     [PRODUCTION_OPERATIONAL_STATES.FABRICATING]: 'En fabricación',

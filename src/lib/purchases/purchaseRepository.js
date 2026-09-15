@@ -11,6 +11,7 @@ import {
   nextAvailableCommercialReference,
   normalizeEntityId,
 } from '../identity/entityIdentity.js';
+import { materialTraceEventRowToModel } from '../material-traceability/materialTraceabilityAdapter.js';
 
 const purchaseColumns = `
   id, workspace_id, production_order_id, production_order_folio, quote_id,
@@ -20,7 +21,9 @@ const purchaseColumns = `
 `;
 const itemColumns = `
   id, workspace_id, purchase_id, source_type, source_id, item_group, name,
-  unit, quantity, unit_cost, total_cost, status, supplier, item_date, notes, created_by, version,
+  unit, quantity, required_quantity, purchased_quantity, purchased_at, estimated_unit_cost, estimated_total_cost, unit_cost,
+  additional_charges, discounts, total_cost,
+  status, supplier, item_date, notes, created_by, version,
   created_at, updated_at, deleted_at
 `;
 
@@ -327,6 +330,35 @@ export async function updatePurchaseItemRemote(workspaceId, item, expectedVersio
   return { data: purchaseItemRowToModel(result.data), error: null };
 }
 
+export async function amendPurchaseItemRemote(command) {
+  if (!command?.workspaceId || !command?.purchaseItemId) return { data: null, error: error('Falta la corrección.') };
+  const result = await execute(() => supabase.rpc('amend_purchase_item', {
+    p_event_id: command.eventId,
+    p_workspace_id: command.workspaceId,
+    p_purchase_id: command.purchaseId,
+    p_purchase_item_id: command.purchaseItemId,
+    p_expected_version: command.expectedVersion,
+    p_previous_values: command.previousValues,
+    p_requested_changes: command.requestedChanges,
+    p_reason: command.reason,
+    p_notes: command.notes || null,
+    p_source_module: command.sourceModule,
+    p_actor_id: command.actorId || null,
+    p_timestamp: command.timestamp,
+  }));
+  if (result.error) {
+    if (/PURCHASE_(VERSION|PREVIOUS_VALUES)_CONFLICT/.test(String(result.error.message || ''))) {
+      result.error.code = 'PURCHASE_VERSION_CONFLICT';
+    }
+    return { data: null, event: null, error: result.error };
+  }
+  return {
+    data: result.data?.item ? purchaseItemRowToModel(result.data.item) : null,
+    event: result.data?.event ? materialTraceEventRowToModel(result.data.event) : null,
+    error: null,
+  };
+}
+
 export function subscribePurchases(workspaceId, callback, onStatus) {
   if (!workspaceId || typeof callback !== 'function') return () => {};
   let channel;
@@ -335,18 +367,32 @@ export function subscribePurchases(workspaceId, callback, onStatus) {
       .channel(`purchases:${workspaceId}`)
       .on('postgres_changes', {
         event: 'INSERT', schema: 'public', table: 'purchases', filter: `workspace_id=eq.${workspaceId}`,
-      }, (payload) => callback({
+      }, (payload) => {
+        if (import.meta.env?.DEV) console.info('[purchases.realtime]', {
+          channel: `purchases:${workspaceId}`, eventType: payload.eventType,
+          table: 'purchases', schema: 'public', workspaceId,
+          rowId: payload.new?.id || payload.old?.id, version: payload.new?.version,
+        });
+        callback({
         table: 'purchases', eventType: payload.eventType,
         record: payload.new ? purchaseRowToModel(payload.new, []) : null,
         oldRecord: payload.old || null,
-      }))
+        });
+      })
       .on('postgres_changes', {
         event: 'UPDATE', schema: 'public', table: 'purchases', filter: `workspace_id=eq.${workspaceId}`,
-      }, (payload) => callback({
+      }, (payload) => {
+        if (import.meta.env?.DEV) console.info('[purchases.realtime]', {
+          channel: `purchases:${workspaceId}`, eventType: payload.eventType,
+          table: 'purchases', schema: 'public', workspaceId,
+          rowId: payload.new?.id || payload.old?.id, version: payload.new?.version,
+        });
+        callback({
         table: 'purchases', eventType: payload.eventType,
         record: payload.new ? purchaseRowToModel(payload.new, []) : null,
         oldRecord: payload.old || null,
-      }))
+        });
+      })
       .on('postgres_changes', {
         event: 'DELETE', schema: 'public', table: 'purchases',
       }, (payload) => callback({
@@ -356,18 +402,32 @@ export function subscribePurchases(workspaceId, callback, onStatus) {
       }))
       .on('postgres_changes', {
         event: 'INSERT', schema: 'public', table: 'purchase_items', filter: `workspace_id=eq.${workspaceId}`,
-      }, (payload) => callback({
+      }, (payload) => {
+        if (import.meta.env?.DEV) console.info('[purchases.realtime]', {
+          channel: `purchases:${workspaceId}`, eventType: payload.eventType,
+          table: 'purchase_items', schema: 'public', workspaceId,
+          rowId: payload.new?.id || payload.old?.id, version: payload.new?.version,
+        });
+        callback({
         table: 'purchase_items', eventType: payload.eventType,
         record: payload.new ? purchaseItemRowToModel(payload.new) : null,
         oldRecord: payload.old || null,
-      }))
+        });
+      })
       .on('postgres_changes', {
         event: 'UPDATE', schema: 'public', table: 'purchase_items', filter: `workspace_id=eq.${workspaceId}`,
-      }, (payload) => callback({
+      }, (payload) => {
+        if (import.meta.env?.DEV) console.info('[purchases.realtime]', {
+          channel: `purchases:${workspaceId}`, eventType: payload.eventType,
+          table: 'purchase_items', schema: 'public', workspaceId,
+          rowId: payload.new?.id || payload.old?.id, version: payload.new?.version,
+        });
+        callback({
         table: 'purchase_items', eventType: payload.eventType,
         record: payload.new ? purchaseItemRowToModel(payload.new) : null,
         oldRecord: payload.old || null,
-      }))
+        });
+      })
       .on('postgres_changes', {
         event: 'DELETE', schema: 'public', table: 'purchase_items',
       }, (payload) => callback({
@@ -375,7 +435,13 @@ export function subscribePurchases(workspaceId, callback, onStatus) {
         record: null,
         oldRecord: payload.old || null,
       }))
-      .subscribe((status, caught) => onStatus?.(status, caught || null));
+      .subscribe((status, caught) => {
+        if (import.meta.env?.DEV) console.info('[purchases.realtime]', {
+          channel: `purchases:${workspaceId}`, status,
+          subscribed: status === 'SUBSCRIBED', workspaceId,
+        });
+        onStatus?.(status, caught || null);
+      });
   } catch (caught) {
     onStatus?.('CHANNEL_ERROR', caught);
     return () => {};
@@ -398,5 +464,6 @@ export const PurchaseRepository = {
   updatePurchaseRemote,
   getPurchaseItem,
   updatePurchaseItemRemote,
+  amendPurchaseItemRemote,
   subscribePurchases,
 };

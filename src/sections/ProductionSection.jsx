@@ -112,6 +112,12 @@ function priorityClass(priority) {
   return 'normal';
 }
 
+function operationalLabel(state) {
+  return state === PRODUCTION_OPERATIONAL_STATES.MATERIAL_AVAILABLE
+    ? 'Materiales disponibles'
+    : state;
+}
+
 export function filterProductionOrders(orders = [], filter = PRODUCTION_FILTERS.ALL) {
   if (!Array.isArray(orders)) return [];
   if (filter === PRODUCTION_FILTERS.ALL) return orders;
@@ -140,6 +146,7 @@ export default function ProductionSection({
   onUpdateProductionOrder,
   productionLoading = false,
   productionError = '',
+  productionNavigationError = '',
   productionSyncStatus = '',
   onCalculateMaterial,
   receptionInbox = [],
@@ -164,17 +171,19 @@ export default function ProductionSection({
   const relatedPurchases = selectedOrder ? purchasesForOrder(selectedOrder.id) : [];
   const relatedPurchase = relatedPurchases[0] || null;
   const selectedPurchaseState = getPurchaseMaterialState(relatedPurchases, selectedOrder);
-  const selectedOperationalState = getProductionOperationalState(
-    selectedOrder ? { ...selectedOrder, estado: draft?.estado || selectedOrder.estado } : null,
-    selectedPurchaseState,
-  );
   const selectedReceptionState = getProductionReceptionStatusView(
     receptionInbox,
     selectedOrder?.id,
   );
+  const selectedOperationalState = getProductionOperationalState(
+    selectedOrder ? { ...selectedOrder, estado: draft?.estado || selectedOrder.estado } : null,
+    selectedPurchaseState,
+    selectedReceptionState,
+  );
   const operationalStateForOrder = (order) => getProductionOperationalState(
     order,
     getPurchaseMaterialState(purchasesForOrder(order.id), order),
+    getProductionReceptionStatusView(receptionInbox, order.id),
   );
   const selectedOrderQuoteAvailable = quoteReferencesFromProductionOrder(selectedOrder).length > 0;
   const metricFilters = [
@@ -318,6 +327,9 @@ export default function ProductionSection({
                 {productionError}
               </p>
             )}
+            {productionNavigationError && (
+              <p className="production-cloud-status error" role="alert">{productionNavigationError}</p>
+            )}
             {productionSyncStatus && !productionError && (
               <p className="production-cloud-status" role="status">
                 {productionSyncStatus}
@@ -356,6 +368,9 @@ export default function ProductionSection({
             <p className="production-cloud-status error" role="alert">
               {productionError}
             </p>
+          )}
+          {productionNavigationError && (
+            <p className="production-cloud-status error" role="alert">{productionNavigationError}</p>
           )}
           {productionSyncStatus && !productionError && (
             <p className="production-cloud-status" role="status">
@@ -402,7 +417,7 @@ export default function ProductionSection({
                   <strong>{order.folio}</strong>
                 </span>
                 <span className="production-order-badges">
-                  <em className={`production-order-badge status-${statusClass(operationalStateForOrder(order))}`}>{operationalStateForOrder(order)}</em>
+                  <em className={`production-order-badge status-${statusClass(operationalStateForOrder(order))}`}>{operationalLabel(operationalStateForOrder(order))}</em>
                   <em className={`production-order-badge priority-${priorityClass(order.prioridad)}`}>{order.prioridad}</em>
                 </span>
               </span>
@@ -437,7 +452,7 @@ export default function ProductionSection({
                   <h3>{selectedOrder.folio}</h3>
                 </div>
                 <div className="production-order-badges">
-                  <em className={`production-order-badge status-${statusClass(selectedOperationalState)}`}>{selectedOperationalState}</em>
+                  <em className={`production-order-badge status-${statusClass(selectedOperationalState)}`}>{operationalLabel(selectedOperationalState)}</em>
                   <em className={`production-order-badge priority-${priorityClass(draft.prioridad)}`}>{draft.prioridad}</em>
                 </div>
               </div>
@@ -445,7 +460,7 @@ export default function ProductionSection({
                 <div><dt>Cliente</dt><dd>{selectedOrder.cliente || 'Cliente pendiente'}</dd></div>
                 <div><dt>Proyecto</dt><dd>{selectedOrder.producto || 'Proyecto sin nombre'}</dd></div>
                 <div><dt>Folio OT</dt><dd>{selectedOrder.folio}</dd></div>
-                <div><dt>Estado</dt><dd>{selectedOperationalState}</dd></div>
+                <div><dt>Estado</dt><dd>{operationalLabel(selectedOperationalState)}</dd></div>
                 <div><dt>Prioridad</dt><dd>{draft.prioridad}</dd></div>
                 <div><dt>Responsable</dt><dd>{draft.responsable || 'Sin asignar'}</dd></div>
                 <div><dt>Fecha creación</dt><dd>{formatDate(selectedOrder.fechaCreacion)}</dd></div>

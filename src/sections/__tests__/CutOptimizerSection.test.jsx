@@ -40,6 +40,44 @@ import {
 } from '../../lib/optimization-session/index.js';
 
 describe('CutOptimizerSection calculator transfer', () => {
+  it('no envía a Smart Cut una pieza original marcada como excluida', () => {
+    const markup = renderToStaticMarkup(
+      <CutOptimizerSection
+        quote={{
+          measureRows: [
+            {
+              id: 'original', nombre: 'Panel original', ancho: 67, alto: 263,
+              cantidad: 1, optimizationExcluded: true,
+            },
+            {
+              id: 'section-1', nombre: 'Panel · sección 1', ancho: 67, alto: 131.5,
+              cantidad: 1, sourcePieceId: 'original',
+            },
+            {
+              id: 'section-2', nombre: 'Panel · sección 2', ancho: 67, alto: 131.5,
+              cantidad: 1, sourcePieceId: 'original',
+            },
+          ],
+          materialRows: [],
+        }}
+        calculatorTransfer={{
+          quoteId: 'q1',
+          selectedPieceIds: ['original', 'section-1', 'section-2'],
+          material: { id: 'm1', nombre: 'Melamina' },
+          config: {
+            unit: 'cm', formatWidth: 122, formatHeight: 244,
+            kerf: 0.3, allowRotation: false,
+          },
+        }}
+        contextQuoteId="q1"
+        decimal={(value) => String(value)}
+      />,
+    );
+    expect(markup).toContain('Calculando únicamente 2 pieza(s)');
+    expect(markup).toContain('Panel · sección 1');
+    expect(markup).not.toContain('Panel original');
+  });
+
   it('optimiza únicamente las piezas enviadas por la calculadora', () => {
     const markup = renderToStaticMarkup(
       <CutOptimizerSection

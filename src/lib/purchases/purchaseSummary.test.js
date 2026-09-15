@@ -19,7 +19,7 @@ describe('getPurchasesSummary', () => {
 
     const summary = getPurchasesSummary(purchases, statuses);
 
-    expect(summary).toEqual({
+    expect(summary).toMatchObject({
       purchases: 3,
       total: 3,
       pending: 1,
@@ -39,7 +39,7 @@ describe('getPurchasesSummary', () => {
   });
 
   it('devuelve un resumen vacío para entradas inexistentes', () => {
-    expect(getPurchasesSummary(null)).toEqual({
+    expect(getPurchasesSummary(null)).toMatchObject({
       purchases: 0,
       total: 0,
       pending: 0,
@@ -49,6 +49,7 @@ describe('getPurchasesSummary', () => {
       totalCost: 0,
       updatedAt: null,
     });
+    expect(getPurchasesSummary(null).totalItems).toBe(0);
   });
 
   it('resume partidas persistentes y sus costos', () => {
@@ -57,13 +58,27 @@ describe('getPurchasesSummary', () => {
       updatedAt: '2026-07-20T10:00:00.000Z',
       items: [
         { id: 'item-1', status: 'comprado', quantity: 2, unitCost: 50 },
-        { id: 'item-2', status: 'pendiente', totalCost: 25 },
+        { id: 'item-2', status: 'pendiente', quantity: 1, totalCost: 25 },
       ],
     }]);
 
     expect(summary.purchases).toBe(1);
     expect(summary.total).toBe(2);
     expect(summary.totalCost).toBe(125);
+    expect(summary.pendingItems).toBe(1);
+    expect(summary.purchasedItems).toBe(1);
     expect(summary.updatedAt).toBe('2026-07-20T10:00:00.000Z');
+  });
+
+  it('calcula compra real, pendiente monetario, cargos y descuentos sin usar recepción', () => {
+    const summary = getPurchasesSummary([{ id: 'purchase-1', items: [{
+      id: 'item-1', originalQuotedQuantity: 4, requiredQuantity: 10, purchasedQuantity: 6,
+      quantity: 10, unitCost: 20, additionalCharges: 8, discounts: 3,
+    }] }]);
+    expect(summary).toMatchObject({
+      estimatedOriginalCost: 80, currentRequiredCost: 200, actualPurchasedCost: 120,
+      purchasePendingCost: 80, additionalCharges: 8, discounts: 3, totalPurchaseSpend: 125,
+      priceDifference: 45, partiallyPurchasedItems: 1,
+    });
   });
 });

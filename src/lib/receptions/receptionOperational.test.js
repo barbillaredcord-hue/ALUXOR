@@ -141,7 +141,7 @@ describe('Centro Operativo de Recepción', () => {
       productionOrderId: 'order-a',
       acceptedQuantity: 7,
       damagedQuantity: 1,
-      pendingQuantity: 3,
+      receptionPendingQuantity: 3,
       receptionCount: 2,
       status: 'partial',
     });
@@ -156,7 +156,7 @@ describe('Centro Operativo de Recepción', () => {
     });
     expect(result.find((row) => row.purchaseItemId === 'item-c')).toMatchObject({
       status: 'complete',
-      pendingQuantity: 0,
+      receptionPendingQuantity: 0,
       readOnly: true,
     });
   });
@@ -249,7 +249,7 @@ describe('Centro Operativo de Recepción', () => {
       partial: 1,
       rejected: 1,
       incidents: 2,
-      pendingQuantity: 7,
+      receptionPendingQuantity: 7,
       status: 'partial',
     });
     expect(getProductionReceptionStatusView(rows, 'order-b')).toMatchObject({

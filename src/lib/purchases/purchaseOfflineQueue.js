@@ -31,6 +31,10 @@ function sanitize(operation, workspaceId) {
       : null,
     createdAt: Number(operation.createdAt) || Date.now(),
     attempts: Number.isInteger(Number(operation.attempts)) ? Number(operation.attempts) : 0,
+    ...(operation.blockedReason ? { blockedReason: String(operation.blockedReason) } : {}),
+    ...(operation.type === 'updateItem' && operation.payload && typeof operation.payload === 'object'
+      ? { payload: structuredClone(operation.payload) }
+      : {}),
   };
 }
 
@@ -85,6 +89,16 @@ export function enqueuePurchaseOperation(workspaceId, operation) {
   )) || null;
 }
 
+export function blockPurchaseOperation(workspaceId, purchaseId, itemId, reason) {
+  const queue = loadPurchaseQueue(workspaceId).map((operation) => (
+    operation.purchaseId === purchaseId
+      && (!itemId || operation.itemId === itemId)
+      ? { ...operation, blockedReason: String(reason || 'SYNC_BLOCKED') }
+      : operation
+  ));
+  return savePurchaseQueue(workspaceId, queue);
+}
+
 export function removePurchaseOperation(workspaceId, purchaseId, itemId = null) {
   return savePurchaseQueue(
     workspaceId,
@@ -107,6 +121,7 @@ export const PurchaseOfflineQueue = {
   load: loadPurchaseQueue,
   save: savePurchaseQueue,
   enqueue: enqueuePurchaseOperation,
+  block: blockPurchaseOperation,
   remove: removePurchaseOperation,
   removeHeader: removePurchaseHeaderOperation,
 };

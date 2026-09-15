@@ -1,4 +1,5 @@
 import { PURCHASE_STATUSES, normalizePurchaseStatus } from './purchaseSummary.js';
+import { createUuid } from '../identity/createUuid.js';
 
 function object(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -84,6 +85,9 @@ export function buildPurchaseItems(quote = {}) {
         name: item.nombre,
         unit: quantity.unit,
         quantity: quantity.quantity,
+        requiredQuantity: quantity.quantity,
+        estimatedUnitCost: quantity.quantity > 0 ? totalCost / quantity.quantity : 0,
+        estimatedTotalCost: totalCost,
         unitCost: quantity.quantity > 0 ? totalCost / quantity.quantity : 0,
         totalCost,
         status: PURCHASE_STATUSES.PENDING,
@@ -101,6 +105,9 @@ export function buildPurchaseItems(quote = {}) {
         name: item.nombre,
         unit: text(item.tipoCompra || item.unidad) || 'pieza',
         quantity,
+        requiredQuantity: quantity,
+        estimatedUnitCost: quantity > 0 ? totalCost / quantity : 0,
+        estimatedTotalCost: totalCost,
         unitCost: quantity > 0 ? totalCost / quantity : 0,
         totalCost,
         status: PURCHASE_STATUSES.PENDING,
@@ -138,7 +145,18 @@ export function generatePurchaseNumber(purchases = [], value = new Date()) {
 export function normalizePurchaseItem(item = {}) {
   const source = object(item) ? item : {};
   const quantity = number(source.quantity);
+  const requiredQuantity = Object.prototype.hasOwnProperty.call(source, 'requiredQuantity')
+    ? number(source.requiredQuantity)
+    : quantity;
+  const purchasedQuantity = Object.prototype.hasOwnProperty.call(source, 'purchasedQuantity')
+    ? number(source.purchasedQuantity)
+    : (normalizePurchaseStatus(source.status) === PURCHASE_STATUSES.PENDING ? 0 : quantity);
   const unitCost = number(source.unitCost);
+  const additionalCharges = number(source.additionalCharges);
+  const discounts = number(source.discounts);
+  const estimatedUnitCost = Object.prototype.hasOwnProperty.call(source, 'estimatedUnitCost')
+    ? number(source.estimatedUnitCost)
+    : unitCost;
   return {
     id: text(source.id),
     workspaceId: text(source.workspaceId),
@@ -149,10 +167,20 @@ export function normalizePurchaseItem(item = {}) {
     name: text(source.name),
     unit: text(source.unit) || 'pieza',
     quantity,
+    orderedQuantity: quantity,
+    requiredQuantity,
+    purchasedQuantity,
+    purchasedAt: date(source.purchasedAt),
+    estimatedUnitCost,
+    estimatedTotalCost: Object.prototype.hasOwnProperty.call(source, 'estimatedTotalCost')
+      ? number(source.estimatedTotalCost)
+      : quantity * estimatedUnitCost,
     unitCost,
+    additionalCharges,
+    discounts,
     totalCost: Object.prototype.hasOwnProperty.call(source, 'totalCost')
       ? number(source.totalCost)
-      : quantity * unitCost,
+      : Math.max(0, (quantity * unitCost) + additionalCharges - discounts),
     status: normalizePurchaseStatus(source.status),
     supplier: text(source.supplier),
     itemDate: date(source.itemDate),
@@ -167,6 +195,13 @@ export function normalizePurchaseItem(item = {}) {
       : {}),
     ...(positiveInteger(source.pendingExpectedVersion, 0) > 0
       ? { pendingExpectedVersion: positiveInteger(source.pendingExpectedVersion) }
+      : {}),
+    ...(object(source.pendingAmendment)
+      ? { pendingAmendment: clone(source.pendingAmendment, {}) }
+      : {}),
+    ...(source.amendmentConflict ? { amendmentConflict: true } : {}),
+    ...(object(source.amendmentConflictDetails)
+      ? { amendmentConflictDetails: clone(source.amendmentConflictDetails, {}) }
       : {}),
   };
 }
@@ -232,7 +267,7 @@ export function createPurchaseFromProductionOrder({
   purchases = [],
   createdBy,
   now = new Date(),
-  idFactory = () => globalThis.crypto?.randomUUID?.(),
+  idFactory = createUuid,
 } = {}) {
   const order = object(productionOrder) ? productionOrder : {};
   if (!text(order.id)) throw new Error('La compra requiere una Orden de Producción.');

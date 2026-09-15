@@ -2,7 +2,10 @@ import { getCustomerSummary } from '../customers/customerSummary.js';
 import { getFabricationSummary } from '../fabrication/fabricationSummary.js';
 import { getFinanceSummary } from '../finance/financeSummary.js';
 import { getHistorySummary } from '../history/historySummary.js';
-import { getInventorySummary } from '../inventory/inventorySummary.js';
+import {
+  getInventorySummary,
+  getMovementInventorySummary,
+} from '../inventory/inventorySummary.js';
 import { getProductionSummary } from '../production/productionSummary.js';
 import {
   PRODUCTION_STATUSES,
@@ -11,12 +14,20 @@ import {
 import { getPurchasesSummary } from '../purchases/purchaseSummary.js';
 import { selectPurchaseViews } from '../purchases/purchaseSelectors.js';
 import { getReceptionSummary } from '../receptions/receptionSummary.js';
+import { getProjectProfitabilitySummary } from '../receptions/receptionCostSummary.js';
 import {
   QUOTE_STATUSES,
   quoteRecordStatus,
 } from '../quotes/quoteAdapter.js';
 import { productionOrderMatchesQuote } from '../quotes/quoteReference.js';
 import { getQuotesSummary } from '../quotes/quoteSummary.js';
+
+export function scopeRecordsToWorkspace(items, workspaceId) {
+  if (!workspaceId || !Array.isArray(items)) return [];
+  return items.filter((item) => (
+    item?.workspaceId === workspaceId || item?.workspace_id === workspaceId
+  ));
+}
 import {
   PRODUCTION_OPERATIONAL_STATES,
   getProjectStatusSummary,
@@ -271,6 +282,7 @@ function getProjectOperationalActivity({
 const projectProgressByOperationalState = Object.freeze({
   [PRODUCTION_OPERATIONAL_STATES.PENDING]: 20,
   [PRODUCTION_OPERATIONAL_STATES.WAITING_PURCHASES]: 30,
+  [PRODUCTION_OPERATIONAL_STATES.WAITING_RECEPTION]: 35,
   [PRODUCTION_OPERATIONAL_STATES.MATERIAL_AVAILABLE]: 40,
   [PRODUCTION_OPERATIONAL_STATES.CUTTING]: 50,
   [PRODUCTION_OPERATIONAL_STATES.FABRICATING]: 60,
@@ -405,8 +417,16 @@ export function getBusinessProjects({
         productionOrders: order ? [order] : [],
         quotes: [quote],
       });
+      const profitability = getProjectProfitabilitySummary({
+        quote,
+        purchases: relatedPurchases,
+        receptions: relatedReceptions,
+      });
       const purchaseState = getPurchaseMaterialState(relatedPurchases, order);
-      const operationalStatus = getProductionOperationalState(order, purchaseState);
+      const operationalStatus = getProductionOperationalState(order, purchaseState, {
+        status: receptionSummary.status,
+        incidents: receptionSummary.incidentItems,
+      });
       const commercialStatus = quoteRecordStatus(quote);
       const status = getQuoteDisplayStatus(quote, order, purchaseState);
       const readOnly = isProjectReadOnly(order);
@@ -530,6 +550,7 @@ export function getBusinessProjects({
         readOnly,
         purchasesPending: positiveCount(purchaseSummary.pending),
         reception: receptionSummary,
+        profitability,
         purchaseIds: relatedPurchases.map((purchase) => text(purchase?.id)).filter(Boolean),
         production: order ? {
           id: text(order.id),
@@ -768,7 +789,7 @@ export function getBusinessHealthSummary({
   };
 }
 
-export function getBusinessActivitySummary(projects = []) {
+export function getBusinessActivitySummary(projects = [], inventorySummary = null) {
   const uniqueEvents = new Map();
 
   availableInput(projects).flatMap((project) => (
@@ -780,6 +801,27 @@ export function getBusinessActivitySummary(projects = []) {
       event.description,
       event.occurredAt,
     ].join('|');
+    if (!uniqueEvents.has(signature)) uniqueEvents.set(signature, event);
+  });
+
+  availableInput(inventorySummary?.recentMovements).forEach((movement) => {
+    const project = availableInput(projects).find((item) => (
+      item.id === movement.projectId
+      || item.quoteId === movement.quoteId
+      || item.productionOrderId === movement.productionOrderId
+    )) || null;
+    const event = operationalEvent({
+      projectId: project?.id || movement.projectId || movement.quoteId || movement.receptionId,
+      projectName: project?.projectName || 'Inventario',
+      eventType: 'inventory_movement',
+      description: `${movement.movementType}: ${movement.quantity} ${movement.unit} de ${movement.materialName}`,
+      occurredAt: movement.occurredAt,
+      destination: 'inventario',
+      source: 'inventory-summary',
+      sourceId: movement.id,
+    });
+    if (!event) return;
+    const signature = [event.projectId, event.eventType, event.sourceId].join('|');
     if (!uniqueEvents.has(signature)) uniqueEvents.set(signature, event);
   });
 
@@ -907,13 +949,32 @@ export function getBusinessState({
   purchaseStatusById,
   inventoryItems,
   inventoryAvailableById,
+  inventoryMovements,
   customerRecords,
   financeRecords,
   fabricationProjects,
   historyRecords,
   activeProductionOrder,
+  workspaceId,
   now,
 } = {}) {
+  if (workspaceId) {
+    quotes = scopeRecordsToWorkspace(quotes, workspaceId);
+    productionOrders = scopeRecordsToWorkspace(productionOrders, workspaceId);
+    purchases = scopeRecordsToWorkspace(purchases, workspaceId);
+    receptions = scopeRecordsToWorkspace(receptions, workspaceId);
+    inventoryMovements = scopeRecordsToWorkspace(inventoryMovements, workspaceId);
+    inventoryItems = scopeRecordsToWorkspace(inventoryItems, workspaceId);
+    customerRecords = scopeRecordsToWorkspace(customerRecords, workspaceId);
+    financeRecords = scopeRecordsToWorkspace(financeRecords, workspaceId);
+    historyRecords = scopeRecordsToWorkspace(historyRecords, workspaceId);
+    fabricationProjects = scopeRecordsToWorkspace(fabricationProjects, workspaceId);
+    if (activeProductionOrder
+      && activeProductionOrder.workspaceId !== workspaceId
+      && activeProductionOrder.workspace_id !== workspaceId) {
+      activeProductionOrder = null;
+    }
+  }
   const companyName = typeof settings?.company_name === 'string'
     ? settings.company_name.trim() || null
     : null;
@@ -961,9 +1022,28 @@ export function getBusinessState({
       productionOrders: availableInput(productionOrders),
       quotes: availableInput(quotes),
     }),
+    profitability: projects.reduce((summary, project) => {
+      const value = project.profitability || {};
+      summary.projectEstimatedCost += Number(value.projectEstimatedCost || 0);
+      summary.projectActualCost += Number(value.projectActualCost || 0);
+      summary.estimatedProfit += Number(value.estimatedProfit || 0);
+      summary.actualProfit += Number(value.actualProfit || 0);
+      summary.costVariance += Number(value.costVariance || 0);
+      summary.profitVariance += Number(value.profitVariance || 0);
+      return summary;
+    }, {
+      projectEstimatedCost: 0,
+      projectActualCost: 0,
+      estimatedProfit: 0,
+      actualProfit: 0,
+      costVariance: 0,
+      profitVariance: 0,
+    }),
     purchaseOperations: purchaseViews.counters,
     projectOperations,
-    inventory: getInventorySummary(availableInput(inventoryItems), inventoryAvailableById),
+    inventory: Array.isArray(inventoryMovements)
+      ? getMovementInventorySummary(inventoryMovements)
+      : getInventorySummary(availableInput(inventoryItems), inventoryAvailableById),
     customers: getCustomerSummary(customerInput),
     finances: getFinanceSummary(financeInput),
     deliveredSales: {
@@ -980,7 +1060,7 @@ export function getBusinessState({
     production: hasInput(productionOrders),
     purchases: hasInput(purchases),
     receptions: hasInput(receptions),
-    inventory: hasInput(inventoryItems),
+    inventory: hasInput(inventoryMovements) || hasInput(inventoryItems),
     customers: hasInput(customerRecords, quotes),
     finances: hasInput(financeRecords, quotes),
     workflow: hasInput(quotes) || hasInput(productionOrders) || hasInput(purchases),
@@ -1001,7 +1081,7 @@ export function getBusinessState({
     readOnly,
     hasData: Object.values(availability).some(Boolean),
   });
-  const activity = getBusinessActivitySummary(projects);
+  const activity = getBusinessActivitySummary(projects, summaries.inventory);
   const updatedAt = latestTimestamp(
     settings?.updated_at,
     settings?.updatedAt,

@@ -83,6 +83,18 @@ describe('PurchaseStorage y offline queue', () => {
     expect(queue.find((item) => item.itemId === 'item-1').expectedVersion).toBe(2);
   });
 
+  it('conserva el snapshot vigente de una partida entre ventanas', () => {
+    PurchaseOfflineQueue.enqueue('ws-1', {
+      type: 'updateItem', purchaseId: 'purchase-1', itemId: 'item-1', expectedVersion: 50,
+      payload: { id: 'item-1', unitCost: 160, pendingSync: true,
+        pendingAmendment: { requestedChanges: { unitCost: 160 } } },
+    });
+    expect(PurchaseOfflineQueue.load('ws-1')[0].payload).toMatchObject({
+      id: 'item-1', unitCost: 160, pendingSync: true,
+      pendingAmendment: { requestedChanges: { unitCost: 160 } },
+    });
+  });
+
   it('confirma la cabecera sin eliminar operaciones offline de partidas', () => {
     PurchaseOfflineQueue.enqueue('ws-1', {
       type: 'update', purchaseId: 'purchase-1', expectedVersion: 1,

@@ -1,5 +1,26 @@
 import { describe, expect, it } from 'vitest';
-import { getBusinessProjects, getBusinessState } from './index.js';
+import { getBusinessProjects, getBusinessState, scopeRecordsToWorkspace } from './index.js';
+
+describe('aislamiento contextual por workspace', () => {
+  it('excluye registros del workspace anterior', () => {
+    expect(scopeRecordsToWorkspace([
+      { id: 'a', workspaceId: 'a' },
+      { id: 'b', workspace_id: 'b' },
+    ], 'b')).toEqual([{ id: 'b', workspace_id: 'b' }]);
+  });
+
+  it('no construye proyectos del workspace anterior', () => {
+    const state = getBusinessState({
+      workspaceId: 'workspace-b',
+      quotes: [
+        { id: 'quote-a', workspaceId: 'workspace-a', producto: 'Proyecto A' },
+        { id: 'quote-b', workspaceId: 'workspace-b', producto: 'Proyecto B' },
+      ],
+    });
+
+    expect(state.projects.map((project) => project.quoteId)).toEqual(['quote-b']);
+  });
+});
 
 describe('getBusinessState', () => {
   it('consume las ocho fuentes oficiales sin recalcular sus métricas', () => {

@@ -109,6 +109,14 @@ export function createCleanQuoteForm(baseDefaults) {
   };
 }
 
+export function historyForWorkspace(items, workspaceId) {
+  if (!workspaceId || !Array.isArray(items)) return [];
+  return items.filter((item) => (
+    item?.workspaceId === workspaceId
+      || item?.workspace_id === workspaceId
+  ));
+}
+
 export function canSyncProductionFromQuoteStatus(status) {
   return QuoteAdapter.normalizeQuoteStatus(status) !== 'Cancelada';
 }
@@ -479,11 +487,33 @@ export default function useQuotes({
   useEffect(() => {
     const workspaceId = activeWorkspace?.id;
     if (!workspaceId) {
+      setForm(defaults);
+      latestQuoteFormRef.current = defaults;
+      lastConfirmedQuoteFormRef.current = defaults;
+      dirtyQuoteFieldsRef.current.clear();
+      setHistory([]);
+      historyRef.current = [];
+      activeQuoteIdentityRef.current = null;
+      setActiveQuoteIdentity(null);
+      setSelectedHistoryPreview(null);
       setHydratedQuoteWorkspaceId(null);
       return;
     }
 
-    const storedHistory = StorageEngine.loadHistory(storageHelpers);
+    setForm(defaults);
+    latestQuoteFormRef.current = defaults;
+    lastConfirmedQuoteFormRef.current = defaults;
+    dirtyQuoteFieldsRef.current.clear();
+    setHistory([]);
+    historyRef.current = [];
+    activeQuoteIdentityRef.current = null;
+    setActiveQuoteIdentity(null);
+    setSelectedHistoryPreview(null);
+    setPdfEditor(null);
+    const storedHistory = historyForWorkspace(
+      StorageEngine.loadHistory(storageHelpers),
+      workspaceId,
+    );
     historyRef.current = storedHistory;
     setHistory(storedHistory);
     setPendingOfflineCount(OfflineQueue.getPendingCount());
@@ -3360,6 +3390,7 @@ const merge = mergeRemoteQuoteForms({
     setForm,
     history,
     activeQuoteIdentity,
+    hydratedQuoteWorkspaceId,
     selectedHistoryPreview,
     setSelectedHistoryPreview,
     syncStatus,

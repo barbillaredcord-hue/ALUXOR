@@ -30,7 +30,9 @@ import FabricationSection from '../sections/FabricationSection.jsx';
 import HistorySection from '../sections/HistorySection.jsx';
 import InventorySection from '../sections/InventorySection.jsx';
 import ProductionSection from '../sections/ProductionSection.jsx';
-import PurchasesSection from '../sections/PurchasesSection.jsx';
+import PurchasesSection, { resolvePurchaseProductionOrderId } from '../sections/PurchasesSection.jsx';
+import usePurchaseQuantityReviews from '../hooks/usePurchaseQuantityReviews.js';
+import useReceptionItemRealCorrections from '../hooks/useReceptionItemRealCorrections.js';
 import ReceivingSection from '../sections/ReceivingSection.jsx';
 import SettingsSection from '../sections/SettingsSection.jsx';
 import TextSection from '../sections/TextSection.jsx';
@@ -44,11 +46,18 @@ import {
 } from '../lib/workspace/permissions.js';
 import {
   getPurchaseMaterialState,
+  getProductionOperationalLabel,
+  getProductionOperationalState,
   getQuoteDisplayStatus,
 } from '../lib/workflow/projectStatus.js';
-import { getBusinessState } from '../lib/business-state/index.js';
+import { getProductionReceptionStatusView } from '../lib/receptions/receptionSelectors.js';
+import { getBusinessState, scopeRecordsToWorkspace } from '../lib/business-state/index.js';
 import { isProjectReadOnly } from '../lib/production/productionEngine.js';
 import { productionOrderMatchesQuote } from '../lib/quotes/quoteReference.js';
+import {
+  applyOversizeResolutionProposal,
+  revertOversizeResolutionProposal,
+} from '../lib/oversize-resolution/index.js';
 import useAuth from '../hooks/useAuth.js';
 import useWorkspace from '../hooks/useWorkspace.js';
 import useQuotes from '../hooks/useQuotes.js';
@@ -56,6 +65,8 @@ import useOptimizationSessions from '../hooks/useOptimizationSessions.js';
 import useProduction from '../hooks/useProduction.js';
 import usePurchases from '../hooks/usePurchases.js';
 import useReception from '../hooks/useReception.js';
+import useInventory from '../hooks/useInventory.js';
+import useMaterialTraceability from '../hooks/useMaterialTraceability.js';
 import useQuickCalculator from '../hooks/useQuickCalculator.js';
 import usePlanEditor from '../hooks/usePlanEditor.js';
 import useCatalog from '../hooks/useCatalog.js';
@@ -199,7 +210,15 @@ export function applyFocusedProjectSelection({
 function App() {
   const [largeText, setLargeText] = useState(false);
   const [activeSection, setActiveSection] = useState('inicio');
+  const [inventoryProjectId, setInventoryProjectId] = useState(null);
+  const [receivingProjectId, setReceivingProjectId] = useState(null);
+  const [receivingTargetReceptionId, setReceivingTargetReceptionId] = useState(null);
+  const [receivingTargetPurchaseItemId, setReceivingTargetPurchaseItemId] = useState(null);
+  const [receivingTargetReceptionItemId, setReceivingTargetReceptionItemId] = useState(null);
+  const [receivingTargetReviewRequestId, setReceivingTargetReviewRequestId] = useState(null);
+  const [receivingTargetCorrectionMode, setReceivingTargetCorrectionMode] = useState(false);
   const [focusedProjectId, setFocusedProjectId] = useState(null);
+  const [productionNavigationError, setProductionNavigationError] = useState('');
   const [materialStudioSession, setMaterialStudioSession] = useState(null);
   const [floatingSummary, setFloatingSummary] = useState({ x: 24, y: 120, compact: false, minimized: false });
   const authWorkspaceRefreshRef = useRef(null);
@@ -226,6 +245,10 @@ function App() {
     workspaceLoading,
     workspaceError,
     workspaceAccessStatus,
+    availableWorkspaces,
+    workspaceCreationLoading,
+    workspaceCreationError,
+    workspaceCreationSuccess,
     workspaceSettings,
     workspaceSettingsSaving,
     workspaceSettingsError,
@@ -239,6 +262,8 @@ function App() {
     saveWorkspaceSettings: saveWorkspaceCompanyName,
     handleLogoUpload,
     removeAppLogo,
+    createWorkspace,
+    selectWorkspace,
   } = useWorkspace({
     authSession,
     catalogDefaults,
@@ -254,6 +279,7 @@ function App() {
     setForm,
     history,
     activeQuoteIdentity,
+    hydratedQuoteWorkspaceId,
     selectedHistoryPreview,
     setSelectedHistoryPreview,
     syncStatus,
@@ -476,6 +502,9 @@ function App() {
     createPurchase,
     updatePurchase,
     updatePurchaseItem,
+    amendPurchaseItem,
+    updatePurchaseItemFromRemote,
+    syncPendingPurchases,
     flushPurchaseSave,
     purchaseStatusForOrder,
     purchasesForOrder,
@@ -488,6 +517,10 @@ function App() {
     productionOrders,
   });
   const canEditPurchases = canManagePurchasing(currentWorkspaceRole);
+  const canEditInventory = canManageInventory(currentWorkspaceRole);
+  const receptionCorrections = useReceptionItemRealCorrections({
+    workspaceId: activeWorkspace?.id || null,
+  });
   const reception = useReception({
     authSession,
     activeWorkspace,
@@ -495,28 +528,69 @@ function App() {
     purchases,
     productionOrders,
     quotes: history,
+    corrections: receptionCorrections.corrections,
     selectedPurchaseId,
   });
+  const purchaseReviews = usePurchaseQuantityReviews({ workspaceId: activeWorkspace?.id || null });
+  const inventory = useInventory({
+    workspaceId: activeWorkspace?.id || null,
+    receptions: reception.receptions,
+    purchases,
+    corrections: receptionCorrections.corrections,
+    userId: authSession?.user?.id || null,
+    receptionsReady: reception.receptionReady,
+  });
+  const materialTraceability = useMaterialTraceability({
+    workspaceId: activeWorkspace?.id || null,
+  });
+  async function syncReceptionAndInventory() {
+    const purchaseSync = await syncPendingPurchases();
+    if (purchaseSync?.synced === false && purchaseSync.reason !== 'unavailable') {
+      return { data: null, error: { message: 'No se pudieron sincronizar las correcciones de compra.' } };
+    }
+    const receptionSync = await reception.syncPendingReceptions();
+    if (receptionSync.error) return receptionSync;
+    const refreshed = await reception.refreshReceptions();
+    if (refreshed.error) return refreshed;
+    const reconciled = await inventory.reconcileReceptions({
+      receptions: refreshed.data || [],
+      purchases,
+      corrections: receptionCorrections.corrections,
+    });
+    if (reconciled.error) return reconciled;
+    if (receptionSync.data?.status === 'offline') return receptionSync;
+    const inventorySync = await inventory.syncPendingOperations();
+    return inventorySync.error ? inventorySync : receptionSync;
+  }
   productionDeletionRefreshRef.current = () => Promise.allSettled([
     refreshPurchases(),
     reception.refreshReceptions(),
   ]);
-  const canEditReceptions = canEditPurchases
-    || canManageInventory(currentWorkspaceRole);
+  const canEditReceptions = canEditPurchases || canEditInventory;
+  const workspaceId = activeWorkspace?.id || null;
+  const scopedHistory = scopeRecordsToWorkspace(history, workspaceId);
+  const scopedProductionOrders = scopeRecordsToWorkspace(productionOrders, workspaceId);
+  const scopedPurchases = scopeRecordsToWorkspace(purchases, workspaceId);
+  const scopedReceptions = scopeRecordsToWorkspace(reception.receptions, workspaceId);
+  const scopedInventoryMovements = scopeRecordsToWorkspace(inventory.movements, workspaceId);
   const businessState = useMemo(() => getBusinessState({
     settings: workspaceSettings,
-    quotes: history,
-    productionOrders,
-    purchases,
-    receptions: reception.receptions,
+    quotes: scopedHistory,
+    productionOrders: scopedProductionOrders,
+    purchases: scopedPurchases,
+    receptions: scopedReceptions,
+    inventoryMovements: scopedInventoryMovements,
     activeProductionOrder,
+    workspaceId,
   }), [
     activeProductionOrder,
-    history,
-    productionOrders,
-    purchases,
-    reception.receptions,
+    scopedHistory,
+    scopedProductionOrders,
+    scopedPurchases,
+    scopedReceptions,
+    scopedInventoryMovements,
     workspaceSettings,
+    workspaceId,
   ]);
   const focusedProject = businessState.projects.find((project) => (
     project.id === focusedProjectId
@@ -593,6 +667,32 @@ function App() {
     selectedProductionOrderId,
     history,
   ), [history, productionOrders, selectedProductionOrderId]);
+  const operationalProductionSummary = useMemo(() => {
+    if (!productionSummarySelection.order || !productionSummarySelection.summary) {
+      return productionSummarySelection;
+    }
+    const order = productionSummarySelection.order;
+    const relatedPurchases = purchases.filter((purchase) => (
+      purchase.productionOrderId === order.id
+      || purchase.production_order_id === order.id
+    ));
+    const receptionState = getProductionReceptionStatusView(
+      reception.receptionInbox,
+      order.id,
+    );
+    const operationalState = getProductionOperationalState(
+      order,
+      getPurchaseMaterialState(relatedPurchases, order),
+      receptionState,
+    );
+    return {
+      ...productionSummarySelection,
+      summary: {
+        ...productionSummarySelection.summary,
+        estado: getProductionOperationalLabel(operationalState),
+      },
+    };
+  }, [productionSummarySelection, purchases, reception.receptionInbox]);
   const selectedProductionOrder = productionSummarySelection.order;
   const purchaseSummarySelection = useMemo(() => resolvePurchaseSummary(
     purchases,
@@ -602,8 +702,8 @@ function App() {
   ), [history, productionOrders, purchases, selectedPurchaseId]);
   const emptyPurchaseSummary = useMemo(() => buildEmptyPurchaseSummary(), []);
   const summaryPanelSource = useMemo(() => (
-    activeSection === 'produccion' && productionSummarySelection.summary
-      ? productionSummarySelection.summary
+    activeSection === 'produccion' && operationalProductionSummary.summary
+      ? operationalProductionSummary.summary
       : activeSection === 'compras'
         ? purchaseSummarySelection.summary || emptyPurchaseSummary
         : contextualProjectSummary
@@ -612,7 +712,7 @@ function App() {
     contextualProjectSummary,
     emptyPurchaseSummary,
     purchaseSummarySelection,
-    productionSummarySelection,
+    operationalProductionSummary,
   ]);
 
   quoteDeletionRefreshRef.current = () => {
@@ -702,6 +802,18 @@ function App() {
     ));
   }
 
+  function applyOversizeProposal(proposal) {
+    const result = applyOversizeResolutionProposal(form, proposal);
+    if (result.applied) updateDirtyQuoteForm(result.form);
+    return result;
+  }
+
+  function revertOversizeProposal(proposal) {
+    const result = revertOversizeResolutionProposal(form, proposal);
+    if (result.reverted) updateDirtyQuoteForm(result.form);
+    return result;
+  }
+
   function handleStartNewQuote() {
     startNewQuoteAndClearProductionSelection(
       startNewQuote,
@@ -772,7 +884,10 @@ function App() {
 
   return (
     <AuthGate session={authSession} loading={authLoading}>
-      {workspaceLoading || !activeWorkspace ? (
+      {workspaceLoading
+        || !activeWorkspace
+        || hydratedWorkspaceId !== activeWorkspace.id
+        || hydratedQuoteWorkspaceId !== activeWorkspace.id ? (
         <WorkspaceAccessGate
           status={workspaceAccessStatus}
           error={workspaceError}
@@ -842,7 +957,11 @@ function App() {
               key={id}
               type="button"
               className={activeSection === id ? 'active' : ''}
-              onClick={() => setActiveSection(id)}
+              onClick={() => {
+                if (id === 'inventario') setInventoryProjectId(null);
+                if (id === 'recepcion') setReceivingProjectId(null);
+                setActiveSection(id);
+              }}
             >
               <Icon size={18} />
               {label}
@@ -1027,6 +1146,8 @@ function App() {
             )}
             onApplySelectionToLegacy={updateLegacyOptimizationInput}
             onClearLegacySelection={clearLegacyOptimizationInput}
+            onApplyOversizeProposal={applyOversizeProposal}
+            onRevertOversizeProposal={revertOversizeProposal}
             onCreateGroup={createPieceGroup}
             onApply={applyProfessionalMaterial}
             onBack={closeMaterialStudio}
@@ -1211,11 +1332,13 @@ function App() {
             canManagePurchases={canEditPurchases}
             productionLoading={productionLoading}
             productionError={productionError}
+            productionNavigationError={productionNavigationError}
             productionSyncStatus={productionSyncStatus}
             onCalculateMaterial={() => openMaterialCalculator({ sourceSection: 'produccion' })}
             receptionInbox={reception.receptionInbox}
             onOpenReceiving={(purchaseId) => {
               setSelectedPurchaseId(purchaseId || null);
+              setReceivingProjectId(purchases.find((purchase) => purchase.id === purchaseId)?.quoteId || null);
               setActiveSection('recepcion');
             }}
           />
@@ -1232,16 +1355,53 @@ function App() {
             setSelectedPurchaseId={setSelectedPurchaseId}
             updatePurchase={updatePurchase}
             updatePurchaseItem={updatePurchaseItem}
+            amendPurchaseItem={amendPurchaseItem}
+            purchaseQuantityReviewRequests={purchaseReviews.requests}
+            createPurchaseQuantityReviewRequest={purchaseReviews.createRequest}
+            reviewPurchaseQuantityReviewRequest={purchaseReviews.reviewRequest}
+            authorizePurchaseQuantityCorrection={purchaseReviews.authorizeCorrection}
+            completePurchaseQuantityReviewRequest={purchaseReviews.completeRequest}
+            cancelPurchaseQuantityReviewRequest={purchaseReviews.cancelRequest}
+            onCreateReceptionItemRealCorrection={receptionCorrections.createCorrection}
+            purchaseQuantityReviewsLoading={purchaseReviews.loading}
+            purchaseQuantityReviewsError={purchaseReviews.error}
+            currentUserId={authSession?.user?.id || null}
+            updatePurchaseItemFromRemote={updatePurchaseItemFromRemote}
+            syncPendingPurchases={syncPendingPurchases}
+            traceEvents={materialTraceability.events}
+            actorRole={currentWorkspaceRole}
             flushPurchaseSave={flushPurchaseSave}
             purchasesLoading={purchasesLoading}
             purchasesError={purchasesError}
             purchasesSyncStatus={purchasesSyncStatus}
             canManage={canEditPurchases}
+            onOpenProduction={(purchase) => {
+              const productionOrderId = resolvePurchaseProductionOrderId(purchase);
+              const relatedOrder = productionOrders.find((order) => order.id === productionOrderId);
+              if (!productionOrderId || !relatedOrder) {
+                setProductionNavigationError('No se encontró la orden de producción relacionada.');
+                setActiveSection('produccion');
+                return;
+              }
+              setProductionNavigationError('');
+              setSelectedProductionOrderId(relatedOrder.id);
+              setActiveSection('produccion');
+            }}
             onOpenReceiving={(purchase) => {
               setSelectedPurchaseId(purchase?.id || null);
+              setReceivingProjectId(purchase?.quoteId || null);
               setActiveSection('recepcion');
             }}
+            onOpenInventory={(purchase) => {
+              const relatedQuote = history.find((item) => item.id === purchase?.quoteId);
+              if (relatedQuote) loadHistoryItem(relatedQuote);
+              setInventoryProjectId(purchase?.quoteId || null);
+              setActiveSection('inventario');
+            }}
             receptionInbox={reception.receptionInbox}
+            receptions={reception.receptions}
+            corrections={receptionCorrections.corrections}
+            inventoryMovements={inventory.movements}
             money={money}
             decimal={decimal}
           />
@@ -1258,12 +1418,32 @@ function App() {
             events={reception.receptionEvents}
             notifications={reception.receptionNotifications}
             receptions={reception.receptions}
+            corrections={receptionCorrections.corrections}
             pendingOperations={reception.pendingOperations}
             receptionLoading={reception.receptionLoading}
             receptionError={reception.receptionError}
             receptionSyncStatus={reception.receptionSyncStatus}
             conflicts={reception.receptionConflicts}
             onSelectPurchase={setSelectedPurchaseId}
+            onOpenReviewReception={(review, target = {}) => {
+              const purchase = purchases.find((item) => item.id === review.purchaseId);
+              setSelectedPurchaseId(review.purchaseId);
+              setReceivingProjectId(purchase?.quoteId || review.projectId || null);
+              setReceivingTargetReceptionId(null);
+              setReceivingTargetPurchaseItemId(review.purchaseItemId);
+              setReceivingTargetReceptionItemId(target.receptionItemId || null);
+              setReceivingTargetReviewRequestId(review.id);
+              setReceivingTargetCorrectionMode(target.correctionMode === true);
+              setActiveSection('recepcion');
+              setTimeout(() => setReceivingTargetReceptionId(review.receptionId), 0);
+            }}
+            onClearCorrectionTarget={() => {
+              setReceivingTargetReceptionId(null);
+              setReceivingTargetPurchaseItemId(null);
+              setReceivingTargetReceptionItemId(null);
+              setReceivingTargetReviewRequestId(null);
+              setReceivingTargetCorrectionMode(false);
+            }}
             onOpenProject={(row) => {
               const quote = history.find((item) => item.id === row.quoteId);
               if (quote) loadHistoryItem(quote);
@@ -1272,7 +1452,24 @@ function App() {
             }}
             onSave={reception.saveReception}
             onDelete={reception.removeReception}
-            onSync={reception.syncPendingReceptions}
+            onSync={syncReceptionAndInventory}
+            onAmendPurchaseItem={amendPurchaseItem}
+            purchaseQuantityReviewRequests={purchaseReviews.requests}
+            completePurchaseQuantityReviewRequest={purchaseReviews.completeRequest}
+            onCreateReceptionItemRealCorrection={receptionCorrections.createCorrection}
+            purchaseQuantityReviewsLoading={purchaseReviews.loading}
+            purchaseQuantityReviewsError={purchaseReviews.error}
+            currentUserId={authSession?.user?.id || null}
+            traceEvents={materialTraceability.events}
+            inventoryMovements={inventory.movements}
+            workspaceId={activeWorkspace?.id || null}
+            actorRole={currentWorkspaceRole}
+            initialProjectId={receivingProjectId}
+            targetReceptionId={receivingTargetReceptionId}
+            targetPurchaseItemId={receivingTargetPurchaseItemId}
+            targetReceptionItemId={receivingTargetReceptionItemId}
+            targetReviewRequestId={receivingTargetReviewRequestId}
+            targetCorrectionMode={receivingTargetCorrectionMode}
             decimal={decimal}
             readOnly={!canEditReceptions}
           />
@@ -1285,6 +1482,29 @@ function App() {
             money={money}
             decimal={decimal}
             readOnly={projectReadOnly}
+            workspaceId={activeWorkspace?.id || null}
+            canManageDurableInventory={canEditInventory}
+            movements={inventory.movements}
+            inventorySummary={inventory.summary}
+            inventorySnapshot={inventory.snapshot}
+            inventoryKardex={inventory.kardex}
+            inventoryLoading={inventory.loading}
+            inventoryError={inventory.error}
+            createInventoryMovement={inventory.createMovement}
+            reverseInventoryMovement={inventory.reverseMovement}
+            createInventoryTransfer={inventory.createTransfer}
+            syncInventoryPendingOperations={inventory.syncPendingOperations}
+            inventoryPendingOperations={inventory.pendingOperations}
+            inventoryConflicts={inventory.conflicts}
+            inventoryConnectionState={inventory.connectionState}
+            inventoryRealtimeState={inventory.realtimeState}
+            purchases={purchases}
+            receptions={reception.receptions}
+            quotes={history}
+            initialProjectId={inventoryProjectId}
+            traceEvents={materialTraceability.events}
+            canPurgeHistory={currentWorkspaceRole === 'owner'}
+            purgeTraceEvent={materialTraceability.purgeEvent}
           />
         )}
 
@@ -1332,6 +1552,14 @@ function App() {
             onLogoUpload={handleLogoUpload}
             onRemoveLogo={removeAppLogo}
             activeProductionOrder={activeProductionOrder}
+            availableWorkspaces={availableWorkspaces}
+            activeWorkspaceId={activeWorkspace?.id || ''}
+            onSelectWorkspace={selectWorkspace}
+            onCreateWorkspace={createWorkspace}
+            canCreateWorkspace={Boolean(activeMembership?.membership_status === 'active')}
+            creatingWorkspace={workspaceCreationLoading}
+            workspaceCreationError={workspaceCreationError}
+            workspaceCreationSuccess={workspaceCreationSuccess}
           />
         )}
 

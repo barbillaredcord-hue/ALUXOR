@@ -1,0 +1,7 @@
+export const RECEPTION_ITEM_REAL_CORRECTION_TYPES=Object.freeze(['REAL_DATA_CORRECTION','RETURNED_TO_SUPPLIER','REJECTED','DAMAGED','MISSING','CORRECTION_REVERSAL']);
+export const RECEPTION_ITEM_REAL_CORRECTION_STATUSES=Object.freeze(['active','reversed']);
+const uuid=(v)=>/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(v||''));
+export const getReceptionItemCorrectionIdentity=(v={})=>`${v.workspaceId}:${v.receptionItemId}:${v.id}`;
+export const isReceptionItemRealCorrectionReversal=(v={})=>v.correctionType==='CORRECTION_REVERSAL';
+export function validateReceptionItemRealCorrection(v={}){const n=v.newValues||{};const nums=['receivedQuantity','acceptedQuantity','returnedQuantity','rejectedQuantity','damagedQuantity','missingQuantity'];if(!['id','workspaceId','receptionId','receptionItemId','purchaseId','purchaseItemId','createdBy','idempotencyKey'].every((k)=>uuid(v[k]))||!RECEPTION_ITEM_REAL_CORRECTION_TYPES.includes(v.correctionType)||!RECEPTION_ITEM_REAL_CORRECTION_STATUSES.includes(v.status)||!Number.isInteger(v.version)||v.version<1||!String(v.reason||'').trim()||typeof v.previousValues!=='object'||typeof n!=='object')return false;if(nums.some(k=>n[k]!=null&&(!Number.isFinite(Number(n[k]))||Number(n[k])<0)))return false;return !(Number(n.acceptedQuantity)>Number(n.receivedQuantity));}
+export const normalizeReceptionItemRealCorrection=(v={})=>Object.freeze({...v,newValues:{...(v.newValues||{})},previousValues:{...(v.previousValues||{})}});

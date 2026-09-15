@@ -58,7 +58,14 @@ const businessState = {
       damagedQuantity: 1,
       missingQuantity: 0,
     },
-    inventory: { total: 0, available: 0, missing: 0 },
+    inventory: {
+      materialCount: 1,
+      movementCount: 2,
+      entryCount: 1,
+      stock: 4,
+      reserved: 0,
+      available: 4,
+    },
     fabrication: { projects: 0, pieces: 0, materials: 0 },
     history: { records: 2, completed: 0, cancelled: 0, accepted: 1 },
   },
@@ -84,6 +91,7 @@ describe('DashboardSection', () => {
     expect(markup).not.toContain('Centro Operativo');
     expect(markup).not.toContain('Inicio Inteligente');
     expect(markup).not.toContain('<h1>Dashboard</h1>');
+    expect(markup).toContain('2 movimientos · 1 entradas');
   });
 
   it('renderiza las tarjetas operativas cerradas y sin modal o drawer', () => {

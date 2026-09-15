@@ -73,7 +73,10 @@ export default function DashboardSection({
           {metric('Pendientes', quotes.pending)}
           {metric('En aprobación', quotes.inReview)}
           {metric('Ventas entregadas', money(businessState?.indicators?.sales?.value || 0))}
-          {metric('Utilidad', money(businessState?.indicators?.profit?.value || 0))}
+          {metric('Utilidad estimada', money(selectedProject?.profitability?.estimatedProfit || 0))}
+          {metric('Utilidad real', money(selectedProject?.profitability?.actualProfit || 0))}
+          {metric('Costo estimado', money(selectedProject?.profitability?.projectEstimatedCost || 0))}
+          {metric('Costo real', money(selectedProject?.profitability?.projectActualCost || 0))}
         </>
       ),
       label: 'Ir a Cotizaciones',
@@ -136,13 +139,13 @@ export default function DashboardSection({
       title: 'Inventario',
       icon: Boxes,
       tone: 'glass',
-      value: inventory.total || 0,
-      detail: `${inventory.available || 0} disponibles · ${inventory.missing || 0} faltantes`,
+      value: inventory.materialCount ?? inventory.total ?? 0,
+      detail: `${inventory.movementCount || 0} movimientos · ${inventory.entryCount || 0} entradas`,
       content: (
         <>
-          {metric('Disponibles', inventory.available)}
-          {metric('Stock bajo', inventory.lowStock)}
-          {metric('Faltantes', inventory.outOfStock)}
+          {metric('Stock', inventory.stock ?? 'Por unidad')}
+          {metric('Reservado', inventory.reserved ?? 'Por unidad')}
+          {metric('Disponible', inventory.available ?? 'Por unidad')}
           {metric('Última actualización', inventory.updatedAt || 'Sin fecha')}
         </>
       ),

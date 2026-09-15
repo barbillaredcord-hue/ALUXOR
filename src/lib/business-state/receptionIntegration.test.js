@@ -65,4 +65,38 @@ describe('Business State con Recepción Durable', () => {
       }),
     ]));
   });
+
+  it('expone rentabilidad estimada y real separadas por proyecto', () => {
+    const purchase = {
+      id: 'purchase-1', quoteId: 'quote-1', active: true,
+      items: [{
+        id: 'item-1', quantity: 10, estimatedUnitCost: 8,
+        estimatedTotalCost: 80, unitCost: 10, totalCost: 100,
+        status: 'comprado',
+      }],
+    };
+    const state = getBusinessState({
+      quotes: [{ id: 'quote-1', status: 'Aceptada', total: 200, internalTotal: 80 }],
+      purchases: [purchase],
+      receptions: [{
+        id: 'reception-1', purchaseId: purchase.id,
+        items: [{
+          id: 'reception-item-1', purchaseItemId: 'item-1',
+          acceptedQuantity: 5, actualUnitCost: 9, additionalCharges: 2, discounts: 1,
+        }],
+      }],
+    });
+    expect(state.projects[0].profitability).toMatchObject({
+      projectEstimatedCost: 80,
+      projectActualCost: 46,
+      estimatedProfit: 120,
+      actualProfit: 154,
+    });
+    expect(state.summaries.profitability).toMatchObject({
+      projectEstimatedCost: 80,
+      projectActualCost: 46,
+      estimatedProfit: 120,
+      actualProfit: 154,
+    });
+  });
 });

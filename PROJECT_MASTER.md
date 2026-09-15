@@ -4,8 +4,8 @@
 
 - **Workspace operativo actual:** ALUXOR / BosqueReal
 - **Etapa activa:** Etapa III — ERP operativo
-- **Fase oficial:** 25.5D — Eliminación Segura y Transversal de Órdenes de Producción; implementación local preparada, validación remota pendiente
-- **Última actualización:** 31/07/2026
+- **Fase oficial:** 25.6C — Integración Recepción → Inventario; **COMPLETADA / CERRADA TÉCNICA Y OPERACIONALMENTE** hasta 25.6C.3.7. La validación autenticada en `ALUXOR QA` confirmó el flujo completo de compras, recepción, corrección física, proyección efectiva, Inventario, Realtime, reload, offline/online e idempotencia.
+- **Última actualización:** 09/08/2026
 
 ## 1. Identidad del proyecto
 
@@ -59,10 +59,15 @@ La meta no es acumular pantallas, sino conectar los dominios para que cada dato 
 - Business State es un adapter derivado; no es una fuente persistente ni contiene reglas del dominio.
 - Quote continúa siendo la fuente de verdad persistente de la entrada de material y de `activeSessionId`; Optimization Sessions es propietario durable de la identidad, referencias y summary de cada ejecución.
 - Smart Cut calcula, compara, recomienda y propone; nunca aplica una optimización sin confirmación explícita.
+- Las medidas comerciales nunca se reemplazan por piezas físicas. Las piezas sobredimensionadas se resuelven mediante propuestas explícitas y reversibles; la cobertura modular transforma una superficie comercial en piezas repetitivas de fabricación sin sustituir el diseño original.
 - Shelf permanece como fallback oficial y garantiza continuidad Legacy.
 - Fabricación consume el summary oficial de optimización; nunca recalcula geometría ni candidatos.
 - Compras conserva lo solicitado y comprado; Recepción conserva únicamente los eventos de llegada y sus resultados.
-- Recepción no crea existencias: Inventario continúa como dominio futuro independiente.
+- Compras y Recepción pueden iniciar correcciones, pero todas usan el mismo contrato canónico de Compras.
+- Los valores actuales son corregibles; el pasado no se reescribe. Toda enmienda incrementa versión y agrega un evento append-only con autor, rol, módulo, motivo, valor anterior y valor nuevo.
+- Solo Owner puede depurar historial mediante una RPC auditada; el frontend no ejecuta `DELETE` genérico sobre la trazabilidad.
+- Recepción registra la aceptación física, pero no crea ni posee existencias: Inventario es propietario de `ENTRY_PURCHASE`, `REVERSAL`, movimientos y saldos derivados.
+- Realtime reconcilia cambios y nunca origina escrituras; Sync permanece manual.
 - Smart Cut permanece desacoplado de React, Supabase y los dominios del ERP.
 - Las pantallas consumen información; no son fuentes de verdad.
 - Cada sprint deja una mejora real y una actualización breve de continuidad.
@@ -95,12 +100,14 @@ Componentes verificados:
 - **BR Engine:** reglas, cálculos, resumen económico e integración con optimización de corte.
 - **Workflow Engine:** etapas y derivación canónica de estados; la autoridad operativa posterior a la OT reside en Producción.
 - **Production:** motor, adapter, repository, storage, sincronización, versionado, Realtime y summary.
-- **Purchases:** motor, adapter, repository, storage, cola offline, versionado, Realtime, selectors y summary.
-- **Reception:** motor puro, adapters, repositories local y remoto, versionado optimista, storage aislado por workspace, Pending Operations, Sync Engine manual, Supabase Client Adapter, Hook, Section, selectors, guards y summary implementados en código. 25.5B añade bandeja global por workspace, filtros, captura rápida y detallada, incidencias, eventos y notificaciones derivadas, e integración con Inicio, Compras, Producción, Inspector, Project Companion e Historial. La migración local prepara tablas, RLS, validación relacional, auditoría y Broadcast privado, pero no está aplicada ni validada en Supabase. Las recepciones parciales son eventos independientes y sus acumulados y estados se derivan sin crear existencias.
+- **Purchases:** motor, adapter, repository, storage, cola offline, versionado, Realtime, selectors y summary. Distingue formalmente cantidad necesaria (`requiredQuantity`), ordenada (`orderedQuantity`/`quantity`), comprada (`purchasedQuantity`), recibida/aceptada y faltante. Sus colores no dependen de estado manual: Material Fulfillment deriva rojo para revisión/incidencia bloqueante, verde para totalmente recibido, azul para totalmente comprado pendiente de recepción, amarillo para compra parcial y gris para sin compra.
+- **Review Requests de Compras:** dominio durable con Source → Adapter → Repository → Hook → Selectors → Realtime → UI. Incluye tabla, RLS, Realtime, bandejas Owner/Admin y Recepción, relación explícita `receptionId`, deep link, resaltado y autorización final separada. Las solicitudes son append-only, no modifican Compra ni Inventario directamente.
+- **Reception:** motor puro, adapters, repositories local y remoto, versionado optimista, storage aislado por workspace, Pending Operations, Sync Engine manual, Supabase Client Adapter, Hook, Section, selectors, guards y summary implementados. La corrección de revisión trabaja exclusivamente la partida afectada; las demás partidas permanecen intactas y no se duplican recepciones. Solo la cantidad aceptada es fuente física para la integración idempotente con Inventario.
+- **Inventory:** 25.6 implementó movimientos; 25.6A lotes, ubicaciones, transferencias, Kardex y snapshots derivados; 25.6B persistencia remota, RLS, RPC, Realtime, Sync manual y reconciliación; 25.6C integró Recepción mediante `ENTRY_PURCHASE` y `REVERSAL` idempotentes. Incluye Inventario General, distribución informativa por proyecto sin duplicar stock, materiales libres y “Otros” desde Inventory Summary y trazabilidad transversal. Los saldos, existencias, reservas, disponibilidad, Kardex y snapshots nunca se persisten: se derivan de movimientos.
 - **Identity:** normalización, comparación y preservación canónica por UUID y workspace. `createUuid.js` es el generador seguro compartido por Cotizaciones y colas, pero Producción y Compras todavía conservan puntos de generación directa o inyectable que deben converger.
 - **Integrity:** `runIntegrityAudit()` es la entrada pública explícita; combina auditor local estricto, auditor remoto autenticado de solo lectura, comparación local/remota, reporte consolidado, recomendaciones y readiness conservador.
 - **Read Only:** `isProjectReadOnly()` pertenece al Production Engine y deriva únicamente de `Entregado`; los hooks de Cotización, Producción, Compras y Workspace rechazan mutaciones y las secciones existentes reflejan el mismo contrato sin duplicar pantallas.
-- **Smart Cut Engine / Cut Optimizer:** motor físico determinista, congelado y compatible con Legacy. La UI comparativa, Proposal Application Layer y Active Mode están implementados. Optimization Sessions está completado como dominio durable local y remoto con Source, Adapter, Local Repository, Remote Adapter, Remote Repository, Supabase Client Adapter, Application Repository, Repository Provider, Versioning, Storage, Offline Queue, Pending Operations Repository, Connectivity Provider, Sync Engine manual, Realtime Subscription, Reconciliation, Hook, Section, Summary y Selectors. Su experiencia y ciclo de vida están consolidados mediante Working Input y Working State canónicos, dirty determinista, baseline sincronizada, `expectedVersion` estable y recuperación segura al abrir o reconciliar una sesión. La tabla `optimization_sessions`, sus políticas RLS, el trigger de inmutabilidad de `workspace_id`, el Broadcast privado por workspace y la conexión React mediante dependencias inyectadas están implementados. La creación, actualización repetitiva y eliminación de sesiones, la selección activa por material, la recuperación tras reconexión y la sincronización bidireccional entre ventanas están validadas operacionalmente. Quote conserva únicamente `material.optimization.activeSessionId`; no existe `isActive` como fuente paralela. Permanecen pendientes la sincronización automática, resolución avanzada de conflictos e historial remoto consolidado. Este cierre no declara finalizado el Smart Cut Optimizer completo.
+- **Smart Cut Engine / Cut Optimizer:** motor físico determinista, congelado y compatible con Legacy. La UI comparativa, Proposal Application Layer y Active Mode están implementados. Optimization Sessions está completado como dominio durable local y remoto con Source, Adapter, Local Repository, Remote Adapter, Remote Repository, Supabase Client Adapter, Application Repository, Repository Provider, Versioning, Storage, Offline Queue, Pending Operations Repository, Connectivity Provider, Sync Engine manual, Realtime Subscription, Reconciliation, Hook, Section, Summary y Selectors. Su experiencia y ciclo de vida están consolidados mediante Working Input y Working State canónicos, dirty determinista, baseline sincronizada, `expectedVersion` estable y recuperación segura al abrir o reconciliar una sesión. La tabla `optimization_sessions`, sus políticas RLS, el trigger de inmutabilidad de `workspace_id`, el Broadcast privado por workspace y la conexión React mediante dependencias inyectadas están implementados. La creación, actualización repetitiva y eliminación de sesiones, la selección activa por material, la recuperación tras reconexión y la sincronización bidireccional entre ventanas están validadas operacionalmente. 25.5E añadió Oversize Resolution Engine y Modular Coverage Engine como capacidades externas al Smart Cut Engine: el primero resuelve piezas sobredimensionadas y el segundo transforma superficies modulares en piezas físicas repetitivas. Material Calculator y Quote aplican o revierten propuestas trazables; Smart Cut no divide piezas, no calcula coberturas y no conoce reglas comerciales: recibe únicamente piezas físicas ya resueltas mediante su fachada pública. Shelf, Best Fit, geometría, motor y Optimization Sessions permanecieron sin modificaciones. Quote conserva únicamente `material.optimization.activeSessionId`; no existe `isActive` como fuente paralela. Permanecen pendientes la sincronización automática, resolución avanzada de conflictos e historial remoto consolidado. Este cierre no declara finalizado el Smart Cut Optimizer completo.
 - **Business State:** adapter central derivado y sin persistencia. Agrega summaries existentes, incluido Reception Summary, y expone proyecto, cliente, cotización, producción, compras, recepción, workflow, salud, riesgos, pendientes, actividad, alertas, indicadores, última actualización y read only sin apropiarse de los dominios.
 - **Workspace:** aislamiento y permisos como contexto empresarial; el indicador permanente de workspace del sistema sigue pendiente.
 - **Brand System:** infraestructura visual consolidada en 25.2E con tokens JavaScript y CSS, tema funcional, helpers, componentes `BR*`, clases de layout y capas separadas de accesibilidad e impresión.
@@ -135,6 +142,36 @@ Sync Engine
 
 `repositoryProvider.js` es el punto único de composición. El Hook consume exclusivamente Application Repository; Application Repository delega en Sync Engine; y el Sync Engine coordina Local Repository, Pending Operations Repository, conectividad, Remote Repository y reconciliación Realtime. La suscripción utiliza un único canal Broadcast privado por workspace, valida filas mediante Remote Adapter y solo escribe en caché local cuando la comparación de versiones y operaciones pendientes lo permite. Realtime de Optimization Sessions sincroniza el contenido de las sesiones; Realtime de Cotizaciones sincroniza `material.optimization.activeSessionId` dentro de `form_data`. El adapter de cotizaciones conserva el formulario completo y `QuoteRepository.subscribeQuotes` entrega esos cambios sin retirar `form_data`. El dominio continúa dependiendo únicamente de contratos abstractos. Supabase es una implementación concreta, inyectable y sustituible, y la UI no lo importa directamente.
 
+Infraestructura remota implementada para Inventario:
+
+```text
+Inventory Engine
+↓
+Adapter
+↓
+Local Repository
+↓
+Pending Operations
+↓
+Sync Engine
+↓
+Remote Repository
+↓
+Supabase Client Adapter
+↓
+Supabase
+↓
+Realtime
+↓
+Hook
+↓
+Selectors / Summary
+↓
+Business State
+```
+
+El Remote Adapter traduce el contrato remoto sin introducir una arquitectura paralela. La UI no importa Supabase; el Hook consume Application Repository y Business State consume únicamente Inventory Summary.
+
 Durante una sesión abierta, `workingInput` es la única fuente de verdad editable. `workingState` coordina la baseline, la versión esperada, el dirty y los conflictos sin convertirlos en estado persistente paralelo. Material Calculator y Cut Optimizer reconstruyen su interfaz y su cálculo desde ese contrato: la selección aplicada se conserva al navegar, las sesiones legacy se normalizan al abrirse y una caché local incompleta puede recuperarse desde la sesión durable. La sesión abierta continúa siendo estado temporal de interfaz; la sesión activa continúa determinada exclusivamente por `material.optimization.activeSessionId` en Quote.
 
 ### Fuentes oficiales de verdad verificadas
@@ -143,15 +180,22 @@ Durante una sesión abierta, `workingInput` es la única fuente de verdad editab
 |---|---|---|
 | Estado comercial | `quote.status` / `estadoCotizacion`, limitado por Quote Adapter | Cotización, Historial y estado visible previo a una OT. |
 | Estado operacional | `productionOrder.estado` y `PRODUCTION_STATUSES` | Workflow, Producción, summaries, Business State y estado visible del proyecto. |
-| Disponibilidad de materiales | Compra y estados de `purchase_items` | `getPurchaseMaterialState()`, Workflow, Producción y summaries. |
+| Necesidad del proyecto | `purchase_items.required_quantity`, dominio `requiredQuantity` | Requerimiento calculado al crear la compra; no se sobrescribe por cambios de Compra o Recepción. |
+| Cantidad ordenada | `purchase_items.quantity`, alias `orderedQuantity` | Compromiso original de la partida. |
+| Cantidad comprada | `purchase_items.purchased_quantity`, alias `purchasedQuantity` | Valor actual corregible mediante enmiendas versionadas; `purchasedAt` conserva su referencia temporal. |
+| Cantidad aceptada | Recepciones durables activas, derivada como `acceptedQuantity` | Única cantidad que produce efectos físicos idempotentes en Inventario. |
+| Cumplimiento material | `src/lib/purchases/materialFulfillment.js` | Deriva `purchasePendingQuantity`, `receptionPendingQuantity`, `projectMissingQuantity`, `surplusPurchasedQuantity`, `surplusReceivedQuantity`, `purchaseStatus`, `receptionStatus` y `globalMaterialStatus`. |
+| Trazabilidad material | Eventos append-only y enmiendas de compra | Preserva UUID, workspace, proyecto, compra, partida, recepción, movimiento, actor, rol, módulo, motivo, valores anterior/nuevo y versión. |
 | Recepción física | Contratos `receptions` y `reception_items`, ligados por UUID a Compra y sus partidas; migración, RLS, Broadcast y operación remota validados | Bandeja global, captura rápida y detallada, selectors, Reception Summary, Business State, Inicio, Compras, Producción, Inspector, Project Companion e Historial. Los acumulados, incidencias, eventos, notificaciones y estados `pending`, `partial`, `complete` y `rejected` son derivados. |
 | Proyecto entregado | `isProjectReadOnly(productionOrder)` cuando el estado canónico es `Entregado` | Guardas de hooks, controles de secciones, Inspector, Historial y Business State. |
 | Identidad técnica | UUID de `entity.id` dentro de `workspace_id` | Adapters, repositories, storage, relaciones y auditoría. El folio no participa como identidad. |
 | Integridad | Colecciones locales reales y lecturas Supabase bajo RLS | `runIntegrityAudit()` y su reporte; Business State no es fuente de auditoría. |
 | Estado empresarial transversal | Summaries de cada dominio agregados por `getBusinessState()` | FLDSMDFR y consumidores futuros; nunca se persiste como verdad paralela. |
+| Medidas comerciales | Medidas originales conservadas por Quote | Representan el trabajo vendido. Las resoluciones de fabricación son derivadas reversibles y trazables; nunca reemplazan ni se mezclan con la lista principal de medidas. |
 | Entrada persistente de optimización | Quote y su configuración de material | Smart Cut consume una copia normalizada, no muta la entrada y devuelve candidatos, diagnósticos y propuestas. |
 | Entrada editable de una sesión abierta | `workingInput` canónico | Material Calculator y Cut Optimizer consumen la misma entrada. Conserva `selectedPieceIds`, `selectedCandidateId`, `strategy` y `pieceOrder`; baseline y Working State permiten detectar cambios reales sin una segunda fuente editable. |
 | Resultado activo de optimización | `material.optimization.activeSessionId` en Quote | Es la única referencia canónica que determina qué Optimization Session alimenta la cotización. Material Calculator consume sus métricas activas; una referencia inexistente u obsoleta activa el fallback Legacy. |
+| Existencias de Inventario | `public.inventory_movements` dentro del workspace | `ENTRY_PURCHASE` incrementa y `REVERSAL` compensa sin borrar. Inventory Engine, Selectors, Summary, Snapshot, Kardex, Business State e `InventorySection` derivan stock, reservado, disponible, lotes, ubicaciones y distribución; no se persisten saldos. |
 | Branding activo | Recursos de `public/branding`, manifest, favicons, tokens y capas CSS oficiales | Login, shell, encabezado, PWA, documentos y adopción incremental de superficies. Los tokens del Design System son la referencia visual oficial desde 25.2E. |
 
 Contrato de solo lectura:
@@ -171,10 +215,13 @@ Reglas oficiales:
 - Una vez creada la OT, Producción determina el estado operacional; Cotización conserva el contexto comercial.
 - Recepción debe originarse en partidas de Compras.
 - Una partida puede tener múltiples recepciones; cada evento conserva UUID, cantidades observadas, responsable, fecha, evidencia y versión propios.
-- Recepción no duplica cantidades compradas ni genera stock, movimientos de inventario o remanentes.
-- Inventario se construirá sobre movimientos, no sobre cantidades editadas únicamente en pantalla.
+- Recepción no duplica cantidades compradas ni posee stock. La reconciliación de Inventario convierte exclusivamente cantidades aceptadas en `ENTRY_PURCHASE` y compensa reversiones sin borrar historia.
+- Inventario se construye sobre movimientos, no sobre cantidades editadas en pantalla. 25.6C conecta Recepción → Inventario de forma idempotente y trazable.
+- El cumplimiento sigue la cadena `Necesario → Ordenado → Comprado → Recibido → Inventariado`: `purchasePendingQuantity = max(requiredQuantity - purchasedQuantity, 0)`, `receptionPendingQuantity = max(purchasedQuantity - acceptedQuantity, 0)` y `projectMissingQuantity = max(requiredQuantity - acceptedQuantity, 0)`.
+- Una recepción puede estar completa respecto de lo comprado y, simultáneamente, conservar compra pendiente respecto de la necesidad del proyecto.
 - Fabricación consume la orden y el plan de corte; no recalcula la optimización.
 - Smart Cut no persiste por sí mismo, no modifica Quote directamente y no aplica propuestas automáticamente.
+- Oversize Resolution divide de forma reversible una pieza físicamente incompatible; Modular Coverage transforma una superficie de duela, lambrín, tablilla, listón, deck o perfil equivalente en módulos repetitivos. Ambos conservan la medida comercial original y entregan a Smart Cut únicamente piezas físicas trazables.
 - El modo Legacy usa Shelf. El modo Smart Cut usa únicamente un candidato activo y válido; ante obsolescencia o ausencia vuelve temporalmente a Legacy.
 - Una orden con estado `Entregado` permanece consultable, pero no admite actualizaciones, nuevas compras, cambios de historial ni configuración del workspace desde el proyecto activo.
 - Los summaries y fuentes reutilizables alimentan Business State.
@@ -208,7 +255,7 @@ Optimization Session conserva durablemente la identidad de la ejecución, el Wor
 |---|---|---|---|
 | I — Fundación | Establecer aplicación, workspace, diseño, motores y pruebas base. | Completada | Base React/Vite, BR Engine, estructura por proyecto y pruebas. |
 | II — Cotizador profesional | Operar cotizaciones reales con cálculo, historial, colaboración y persistencia. | Completada con evolución continua | Cotización durable, PDF, catálogo, offline, Realtime e identidad canónica. |
-| III — ERP operativo | Conectar el flujo desde Cotización hasta Entrega. | En desarrollo | Producción y Compras tienen base durable; Recepción tiene base durable completada en código con validación remota pendiente. Brand System, Business State 2.0, Operational Center, Smart Cut Etapas 1–7 y persistencia remota de Optimization Sessions están consolidados. Faltan Inventario, remanentes, Fabricación durable, Instalación y Entrega. |
+| III — ERP operativo | Conectar el flujo desde Cotización hasta Entrega. | En desarrollo | Producción, Compras, Recepción e Inventario tienen base durable; 25.6B implementó la persistencia remota de Inventario y validó operacionalmente creación y reversión. Brand System, Business State 2.0, Operational Center, Smart Cut Etapas 1–7 y persistencia remota de Optimization Sessions están consolidados. Faltan la integración automática de Inventario con otros dominios, remanentes, Fabricación durable, Instalación y Entrega. |
 | IV — Inteligencia operativa | Convertir datos operativos en alertas, prioridades y decisiones. | Planeada | Business State 2.0 disponible; faltan consumidores dinámicos completos y trazabilidad de los dominios aún no durables. |
 | V — Optimización industrial | Optimizar materiales, capacidad, tiempos y fabricación. | En desarrollo técnico adelantado | Smart Cut Engine, UI, Proposal y Active Mode tienen cierre técnico; Optimization Sessions completó persistencia local/remota, Sync Engine manual, Realtime por workspace, integración de referencia activa con Quote y consolidación de experiencia y ciclo de vida. Faltan sincronización automática, resolución avanzada de conflictos, historial remoto consolidado, remanentes e integración definitiva con Inventario. |
 | VI — IA empresarial | Asistencia contextual basada en fuentes confiables. | Planeada | Datos durables, auditables y aislados por workspace. |
@@ -313,7 +360,7 @@ Diferencias informativas:
 - Un workspace remoto no está representado como colección local.
 - Estas diferencias se clasifican como `INFO`; no demuestran corrupción ni bloquean el hardening.
 
-Alcance durable auditado en 25.2C: `workspaces`, `quotes`, `productionOrders`, `purchases` y `purchaseItems`. Recepción se incorporó posteriormente como dominio durable en 25.5; Inventario y Fabricación siguen siendo dominios no durables. Business State quedó fuera de la auditoría por ser consumidor derivado y no fuente de verdad.
+Alcance durable auditado en 25.2C: `workspaces`, `quotes`, `productionOrders`, `purchases` y `purchaseItems`. Recepción se incorporó posteriormente como dominio durable en 25.5 e Inventario en 25.6B; Fabricación sigue siendo un dominio no durable. Business State quedó fuera de la auditoría por ser consumidor derivado y no fuente de verdad.
 
 La evidencia estructurada se conserva fuera del repositorio como reporte JSON generado en `2026-07-23T05:29:16.280Z`.
 
@@ -650,8 +697,17 @@ La fase no incluye sincronización automática, reintentos automáticos, Backgro
 | 3 | 25.5 — Recepción Durable | Completada y validada local y remotamente |
 | 3B | 25.5B — Centro Operativo de Recepción | Implementada en código y validada automáticamente |
 | 3C | 25.5C — Validación remota de Recepción | Completada e integrada en `main` mediante `751a074` |
-| 3D | 25.5D — Eliminación Segura y Transversal de Órdenes de Producción | Implementada localmente; migración, RPC y validación operacional remotas pendientes |
-| 4 | 25.6 — Inventario por Movimientos | Siguiente fase funcional después de consolidar Recepción |
+| 3D | 25.5D — Eliminación Segura y Transversal de Órdenes de Producción | Completada, validada remotamente e integrada en `main` mediante `44e54fc` |
+| 3E | 25.5E — Resolución Inteligente de Piezas Sobredimensionadas | COMPLETADA LOCALMENTE; incluye Oversize Resolution, Cobertura Modular, resolución reversible, trazabilidad, aplicación y reversión sin persistencia propia ni cambios al Smart Cut Engine |
+| 4 | 25.6 — Inventario por Movimientos | Motor local implementado; existencias, reservas y disponibilidad se derivan exclusivamente de movimientos |
+| 4A | 25.6A — Maduración del dominio de Inventario | COMPLETADA LOCALMENTE; lotes, ubicaciones, transferencias, Kardex, snapshots y selectores avanzados implementados |
+| 4B | 25.6B — Persistencia remota de Inventario | IMPLEMENTADA Y VALIDADA OPERACIONALMENTE EN CREACIÓN Y REVERSIÓN |
+| 4C | 25.6C — Integración Recepción → Inventario | COMPLETADA / CERRADA TÉCNICA Y OPERACIONALMENTE HASTA 25.6C.3.7 |
+| 4C.2 | Consistencia Compras → Recepción → Inventario → Rentabilidad | IMPLEMENTADA Y VALIDADA |
+| 4C.3 | Trazabilidad integral y enmiendas de compra | IMPLEMENTADA; validación multiusuario total pendiente |
+| 4C.3.1 | Conflictos, Realtime y depuración Owner | IMPLEMENTADA; dos ventanas y RPC Owner validadas, UI con identidades independientes pendiente |
+| 4C.3.2 | Índice de Recepción, Inventario General y recálculo de Compra | IMPLEMENTADA Y VALIDADA |
+| 4C.3.3 | Necesario → Ordenado → Comprado → Recibido | IMPLEMENTADA Y VALIDADA |
 | 5 | Optimization Sessions — nueva fase de Smart Cut | Completada |
 | 6 | Optimization Sessions Remote Persistence, Realtime y referencia activa | Completada mediante `6a61cfc`; CRUD y `activeSessionId` validados bidireccionalmente |
 | Recomendado | Consolidación de la experiencia y del ciclo de vida de Optimization Sessions | Completada y validada; no constituye una fase nueva |
@@ -667,12 +723,13 @@ Este orden es oficial. El adelanto técnico de Smart Cut no renumera Recepción 
 | Módulo | Clasificación verificable | Estado y límite actual |
 |---|---|---|
 | Cotización | Operativo y durable | Repository, offline queue, versionado, Realtime, Presence, historial e identidad canónica. Conserva únicamente `material.optimization.activeSessionId` como referencia activa canónica y la sincroniza entre ventanas mediante su propio Realtime. Sus comandos de edición, guardado, estado, eliminación e importación se bloquean cuando la OT relacionada está entregada. `useQuotes.js` y `QuoteSection.jsx` requieren reducción progresiva. |
-| Producción | Operativo y durable, con evolución pendiente | Motor, storage, repository, Supabase, sincronización, Realtime, versionado y summary. `Entregado` es terminal mediante `isProjectReadOnly()` y `canAdvanceProductionOrder()`. Falta completar evidencia operacional e historial transversal. |
-| Compras | Operativo y durable | Persistencia local/remota, partidas, offline, Realtime, versionado y relaciones UUID con Producción y Cotización. La edición, autosave, sincronización pendiente y creación se bloquean para la OT entregada. |
-| Recepción | Operativo y durable; centro transversal validado | Engine, Adapter, Repository local/remoto, versionado optimista, storage por workspace, Pending Operations, Sync Engine manual, Realtime, Hook, Section, selectors, guards y summary implementados. 25.5B aporta bandeja global independiente del proyecto activo, filtros, recepción rápida y detallada, incidencias, actividad, notificaciones derivadas e integración con Inicio, Compras, Producción, Inspector, Project Companion e Historial. 25.5C validó migración, RLS, Broadcast, Realtime, offline, reconexión, conflictos e idempotencia contra Supabase. Persiste eventos parciales por UUID, conserva conflictos sin merge automático y alimenta Business State sin crear stock. |
-| Inventario | Interfaz existente y fuente reutilizable; dominio incompleto | Summary puro disponible; la pantalla calcula sobre datos de cotización y estado React y deshabilita edición en proyectos entregados. Falta modelo por movimientos y persistencia. |
+| Producción | Operativo y durable, con evolución pendiente | Motor, storage, repository, Supabase, sincronización, Realtime, versionado y summary. `Entregado` es terminal. La eliminación segura transversal con autorización Owner, auditoría, limpieza de dependencias, tombstone y protección contra resurrección fue validada remotamente; permanecen la sincronización canónica completa, el historial transversal y las tarjetas operativas. |
+| Compras | Operativo y durable | Persistencia local/remota, partidas, offline, Sync manual, Realtime, versionado y relaciones UUID. Distingue necesidad, ordenado, comprado y recibido; soporta precio actual, `purchasedAt`, enmiendas versionadas, `expectedVersion` e historial append-only. |
+| Recepción | Operativo y durable; centro transversal validado | Engine y capas durables, índice único por proyecto, detalle completo, captura rápida/detallada, recepciones múltiples, incidencias, observaciones, historial y reversiones. Puede completar lo comprado mientras advierte faltante respecto de la necesidad; solo lo aceptado alimenta la reconciliación física con Inventario. |
+| Inventario | Dominio durable local y remoto por movimientos | Movimientos locales/remotos, Inventario General, vista y distribución informativa por proyecto, historial, Kardex, materiales libres y “Otros”. `ENTRY_PURCHASE` incorpora y `REVERSAL` compensa idempotentemente; no persiste saldos ni duplica stock por proyecto. |
 | Fabricación | Interfaz existente y fuente reutilizable; dominio incompleto | Consume el summary oficial Legacy o Smart Cut activo y válido sin recalcular geometría, candidatos ni costos. Respeta el modo de solo lectura; checklist, progreso y notas no son todavía un dominio durable. |
-| Smart Cut Engine / Cut Optimizer | Motor congelado y dominio de sesiones durable local/remoto con Realtime | Motor, Shelf, Best Fit, candidatos, evaluación, ranking, selección, recomendación, UI comparativa, Proposal y Active Mode tienen cierre técnico. Optimization Session conserva identidad de ejecución, Working Input, referencias y summary sin duplicar candidatos completos ni geometría; Quote conserva únicamente `activeSessionId`. Source, Adapter, repositories, Supabase Client Adapter, Repository Provider, versionado, storage, colas, Sync Engine manual, Realtime, Hook, Section, Summary y Selectors están implementados. CRUD, selección activa y consolidación de experiencia y ciclo de vida están implementados. Faltan sincronización automática, resolución avanzada de conflictos, historial remoto, remanentes e integración definitiva con Inventario; Smart Cut Optimizer completo no se declara finalizado. |
+| Material Calculator | Operativo | Distingue medidas originales comerciales, resolución de fabricación derivada y Smart Cut. Incluye resolución inteligente, cobertura modular, recomendaciones, propuestas reversibles y trazabilidad. La UI anidada definitiva de “Resolución de fabricación” permanece pendiente. |
+| Smart Cut Engine / Cut Optimizer | Motor congelado y dominio de sesiones durable local/remoto con Realtime | Motor, Shelf, Best Fit, candidatos, evaluación, ranking, selección, recomendación, UI comparativa, Proposal y Active Mode tienen cierre técnico. Optimization Session conserva identidad de ejecución, Working Input, referencias y summary sin duplicar candidatos completos ni geometría; Quote conserva únicamente `activeSessionId`. Source, Adapter, repositories, Supabase Client Adapter, Repository Provider, versionado, storage, colas, Sync Engine manual, Realtime, Hook, Section, Summary y Selectors están implementados. CRUD, selección activa y consolidación de experiencia y ciclo de vida están implementados. Oversize Resolution Engine y Modular Coverage Engine permanecen fuera del motor: Smart Cut no calcula coberturas, no divide piezas ni conoce reglas comerciales; únicamente optimiza las piezas físicas resultantes. Faltan sincronización automática, resolución avanzada de conflictos, historial remoto, remanentes e integración definitiva con Inventario; Smart Cut Optimizer completo no se declara finalizado. |
 | Instalación | Pendiente como dominio | Existe como etapa, permiso y estado de workflow; no existe aún un dominio durable independiente. |
 | Entrega | Estado terminal implementado; dominio de evidencia pendiente | `Entregado` existe en Producción, activa read only y se refleja como `Terminada` en Cotización. Faltan evidencia, firma y un dominio de cierre operacional independiente. |
 | Historial | Operativo parcialmente | Cuenta con motor, summary, respaldo local y fundamentos remotos. Los proyectos entregados pueden abrirse y consultarse sin permitir cancelación, cambio de estado o eliminación. No equivale todavía a un historial transversal completo de todos los dominios. |
@@ -680,7 +737,7 @@ Este orden es oficial. El adelanto técnico de Smart Cut no renumera Recepción 
 | Inspector Inteligente | Interfaz funcional parcial | Calcula riesgos y acciones desde Cotización y consume de forma mínima el progreso y las incidencias del Reception Summary recibido desde Business State. Para proyectos entregados conserva únicamente accesos de consulta. |
 | Project Companion | Interfaz funcional parcial | Consume resumen, alertas y actividad de Recepción para el proyecto contextual. Su integración transversal continúa parcial y el consumo común completo de Business State permanece pendiente. |
 | Centro del Proyecto | Estructura visual existente | La FLDSMDFR empresarial consume Business State solo con settings y orden activa, y muestra el modo editable/solo lectura. El resto continúa mayormente informativo o vacío y no sincroniza `PROJECT_MASTER.md`. |
-| Business State | Adapter central derivado implementado | Expone las vistas y summaries empresariales de 25.3 sin persistencia ni reglas de dominio. Dashboard ya consume su contrato operativo; Inspector y Companion todavía no lo consumen por completo. Objetivos, roadmap y decisiones permanecen vacíos por falta de fuente canónica. |
+| Business State | Adapter central derivado implementado | Consume summaries oficiales sin persistencia ni lógica propia. Dashboard consume exclusivamente Business State; Inspector y Companion todavía no lo consumen por completo. |
 | Identity Infrastructure | Implementada con convergencia pendiente | Normaliza, compara y preserva UUID, detecta duplicados y separa folio de identidad. Producción y Compras aún no consumen exclusivamente `createUuid.js`. |
 | Integrity Audit | Implementada y validada operacionalmente | `runIntegrityAudit()` auditó el workspace real con almacenamiento local y Supabase autenticado: `READY WITH WARNINGS`, sin errores ni deuda legacy bloqueante. Persiste una advertencia de folio comercial duplicado y tres diferencias informativas. |
 | Workspace | Operativo y durable | Bootstrap RPC idempotente, membresías, roles, permisos, settings, branding, auditoría y Realtime bajo RLS. Las mutaciones de settings se bloquean durante un proyecto entregado; `is_system_workspace` sigue pendiente. |
@@ -710,13 +767,14 @@ Las tarjetas implementadas muestran estados y conteos derivados de Business Stat
 
 ### Panel izquierdo
 
-Compras y Recepción ya tienen base durable; Recepción completó su consolidación transversal en 25.5B y su validación operacional remota en 25.5C. Inventario y Fabricación deben completar, según corresponda: modelo canónico, UUID, workspace, storage local, repository, Supabase, RLS, offline, sincronización, Realtime, versionado, summary, Business State y actualización de Inicio e Inspector. Smart Cut ya completó motor, UI, Proposal y Active Mode; su evolución durable conserva el orden específico documentado a continuación.
+Compras, Recepción e Inventario ya tienen base durable. 25.6C alcanza 25.6C.3.7 con Review Requests, colores derivados, bandejas, deep link, autorización final separada y correcciones físicas append-only por `reception_item` implementados. 25.6C.3.7 está cerrada técnicamente; permanece QA operacional complejo.
 
 ### Recepción
 
 - 25.5B convirtió la experiencia en un centro transversal del workspace sin duplicar responsabilidades de Compras ni adelantar Inventario.
 - 25.5C cerró RLS, Broadcast, Realtime, reconexión y sincronización de Recepción contra la infraestructura remota real.
-- Inventario por Movimientos permanece en 25.6 y no se adelanta durante estas consolidaciones.
+- 25.6C integró la aceptación física con movimientos de Inventario, conservando propietarios y trazabilidad.
+- Pendiente para el cierre operacional total de 25.6C: validación autenticada QA, pruebas multiusuario, cross-workspace y Realtime en dos sesiones, con Inventario, Material Fulfillment, reversión, reload, idempotencia e historial completo.
 
 ### Smart Cut
 
@@ -749,12 +807,15 @@ Integración activeSessionId con Cotización
 Consolidación de la experiencia y del ciclo de vida de las sesiones de optimización
 ✓ COMPLETADA Y VALIDADA
 ↓
+Resolución Inteligente de Piezas Sobredimensionadas y Cobertura Modular
+✓ COMPLETADA LOCALMENTE
+↓
 Remanentes reutilizables
 ↓
 Integración definitiva con Inventario
 ```
 
-Remote Adapter, Remote Repository, Supabase Client Adapter, tabla SQL, RLS, trigger de protección de workspace, conexión desde la aplicación, Sync Engine manual, Realtime por Broadcast privado, integración de `activeSessionId` con Cotización y consolidación de la experiencia y ciclo de vida están implementados y validados. El siguiente paso técnico previsto es Remanentes reutilizables, cuya propiedad durable deberá pertenecer a Inventario y depende de la evolución funcional de ese dominio. Este orden no modifica las fases funcionales ni el roadmap general del ERP.
+Remote Adapter, Remote Repository, Supabase Client Adapter, tabla SQL, RLS, trigger de protección de workspace, conexión desde la aplicación, Sync Engine manual, Realtime por Broadcast privado, integración de `activeSessionId` con Cotización, consolidación del ciclo de vida, Oversize Resolution y cobertura modular están implementados y validados en su alcance. Smart Cut continúa congelado y únicamente optimiza piezas físicas. Inventario por Movimientos tiene motor local, maduración 25.6A y persistencia remota 25.6B implementados; creación y reversión están validadas operacionalmente. Remanentes reutilizables será una integración industrial futura con Smart Cut, pero su propiedad durable pertenecerá exclusivamente a Inventario. Este orden no modifica las fases funcionales ni el roadmap general del ERP.
 
 No se mantienen como pendientes del Smart Cut capacidades ya completadas de motor, geometría, estrategias, candidatos, evaluación, selección, UI, Proposal o Active Mode.
 
@@ -801,13 +862,8 @@ Aunque su base durable existe, siguen abiertos:
 - Tarjetas operativas por estado y resumen lateral de OT.
 - Historial completo de cambios.
 - Prevención de escrituras originadas por eventos remotos.
-- Eliminación segura y transversal de órdenes.
-- Autorización exclusiva del propietario.
-- Auditoría destructiva.
-- Limpieza explícita de dependencias.
-- Protección contra resurrección por almacenamiento local, sincronización o reconexión.
 
-Ya implementado: una orden `Entregado` no puede avanzar ni actualizarse desde el hook, y la aplicación bloquea comandos relacionados de Cotización, Compras, Workspace y colas offline. No existe todavía una constraint específica de base de datos que convierta este bloqueo de aplicación en una regla durable frente a clientes externos.
+Ya implementados: eliminación segura transversal, autorización exclusiva Owner, auditoría destructiva, limpieza de dependencias y protección contra resurrección. Una orden `Entregado` no puede avanzar ni actualizarse desde el hook, y la aplicación bloquea comandos relacionados. No existe todavía una constraint específica de base de datos que convierta este bloqueo de aplicación en una regla durable frente a clientes externos.
 
 ### Bug conocido independiente
 
@@ -835,12 +891,10 @@ La sincronización bidireccional entre **Notas internas** y **Observaciones** pu
 - Diseñar una resolución explícita de operaciones `failed` y `conflict` sin merge automático.
 - Mantener el dominio desacoplado de Supabase.
 - Incorporar historial remoto consolidado manteniendo Quote como fuente de verdad de la entrada de material y de la referencia activa.
-- Aplicar y validar remotamente la migración y RPC de 25.5D.
-- Validar la eliminación real y la reconciliación Realtime en dos sesiones del mismo workspace.
-- Confirmar en Supabase el rollback, los conteos y el aislamiento cross-workspace del comando destructivo.
 - Proteger credenciales y secretos exclusivamente fuera del frontend.
 - No sustituir el análisis de relaciones por cascadas indiscriminadas.
 - Delegar la propiedad durable de remanentes a Inventario; Smart Cut solo podrá consumirlos y proponer su uso.
+- **Prioridad alta:** diseñar la UI definitiva de **Resolución de fabricación** manteniendo visibles únicamente las medidas originales y presentando las piezas derivadas en un acordeón expandible y contraíble bajo su pieza fuente. Debe conservar trazabilidad, permitir deshacer la resolución y distinguir sin ambigüedad diseño comercial y fabricación.
 
 ### Evolución pendiente de infraestructura visual
 
@@ -868,7 +922,7 @@ Las fuentes reutilizables no dependen de React, JSX, DOM ni componentes. Los cá
 | 1 | Cotizaciones | Summary implementado y consumido por Business State. |
 | 2 | Producción | Summary implementado y consumido. |
 | 3 | Compras | Summary y selectors implementados y consumidos. |
-| 4 | Inventario | Summary implementado; dominio durable pendiente. |
+| 4 | Inventario | Dominio durable local/remoto por movimientos; tabla, RLS, adapters, repositories, Sync, Realtime, reconciliación, Hook, selectors y Summary implementados. Creación y reversión validadas; offline completo, conflicto de versión y aislamiento manual específico implementados, pendientes de QA de Inventario según §16. Transferencia implementada técnicamente, con QA operacional diferida por alcance de producto; no bloquea 25.6. |
 | 5 | Clientes | Summary derivado disponible; dominio propio pendiente. |
 | 6 | Finanzas | Summary derivado disponible; dominio administrativo pendiente. |
 | 7 | Fabricación | Summary y lectura del plan Legacy o del candidato Smart Cut activo y válido disponibles; Fabricación no recalcula la optimización. Persistencia operacional propia pendiente. |
@@ -966,9 +1020,16 @@ Este cambio no forma parte de la actualización documental actual.
 | 31/07/2026 | Compras consulta el estado recibido, pero Recepción es la única autoridad para confirmar físicamente cantidades aceptadas, dañadas, rechazadas y faltantes. | Evitar duplicidad funcional y conservar una sola fuente de verdad sobre la llegada de materiales. | Implementada en 25.5B |
 | 31/07/2026 | Recepción debe operar como centro transversal del workspace y no quedar limitada al proyecto activo. | Permitir recibir materiales de cualquier compra o proyecto y convertir Recepción en un área operativa real. | Implementada en 25.5B |
 | 31/07/2026 | Los eventos y notificaciones de Recepción serán vistas derivadas del dominio propietario, no copias editables en cada módulo. | Comunicar incidencias y resultados sin escrituras cruzadas ni fuentes duplicadas. | Implementada en 25.5B |
-| 31/07/2026 | La eliminación definitiva de una Orden de Producción será un comando destructivo transaccional y transversal, no un DELETE directo desde la interfaz. | Evitar relaciones huérfanas, borrados parciales y reapariciones por almacenamiento local, sincronización o Realtime. | Implementada localmente; validación remota pendiente |
-| 31/07/2026 | Solo un propietario autenticado y con membresía activa podrá eliminar una OT; la RPC repetirá la autorización con `auth.uid()`. | El rol canónico del workspace es la autorización destructiva; no se almacenan contraseñas, secretos ni códigos adicionales en el frontend. | Implementada localmente; validación remota pendiente |
-| Pendiente de validación | Inventario se basará en movimientos. | Garantizar trazabilidad de existencias. | Pendiente |
+| 31/07/2026 | La eliminación definitiva de una Orden de Producción será un comando destructivo transaccional y transversal, no un DELETE directo desde la interfaz. | Evitar relaciones huérfanas, borrados parciales y reapariciones por almacenamiento local, sincronización o Realtime. | Implementada y validada remotamente en 25.5D |
+| 31/07/2026 | Solo un propietario autenticado y con membresía activa podrá eliminar una OT; la RPC repetirá la autorización con `auth.uid()`. | El rol canónico del workspace es la autorización destructiva; no se almacenan contraseñas, secretos ni códigos adicionales en el frontend. | Implementada y validada remotamente en 25.5D |
+| 01/08/2026 | Las medidas comerciales nunca se reemplazan por las piezas físicas. | Las dimensiones introducidas por el usuario representan el trabajo vendido al cliente. Las divisiones de fabricación, cobertura modular y piezas derivadas pertenecen exclusivamente a fabricación y deberán mostrarse anidadas bajo la pieza original mediante “Resolución de fabricación”, nunca mezcladas con la lista principal de medidas. | Vigente; integración visual anidada pendiente |
+| 02/08/2026 | Inventario se basa exclusivamente en movimientos. | Garantizar trazabilidad y derivar stock, reservas, disponibilidad, lotes, ubicaciones, Kardex y snapshots sin persistir saldos editables. | Implementada local y remotamente en 25.6, 25.6A y 25.6B; creación y reversión validadas operacionalmente |
+| 03/08/2026 | Compras y Recepción pueden iniciar correcciones, pero ejecutan un solo contrato canónico de Compras. | Evitar reglas paralelas y conservar una fuente única para cantidades y precios actuales. | Implementada en 25.6C.3 |
+| 03/08/2026 | Los valores actuales son corregibles y el pasado no se reescribe. | Cada corrección incrementa versión y agrega trazabilidad append-only con actor, rol, módulo, motivo y valores anterior/nuevo. | Implementada en 25.6C.3 |
+| 03/08/2026 | Solo Owner puede depurar historial mediante RPC auditada. | Impedir `DELETE` genérico desde frontend y conservar evidencia de la acción destructiva. | RPC validada; Owner UI real pendiente |
+| 04/08/2026 | Necesario, ordenado, comprado y recibido son cuatro cantidades distintas. | Separar requerimiento, compromiso, compra vigente y aceptación física. | Implementada en 25.6C.3.3 |
+| 04/08/2026 | Inventario reconoce únicamente cantidades aceptadas mediante movimientos. | Evitar que lo ordenado o comprado cree existencia física. | Implementada en 25.6C |
+| 04/08/2026 | Recepción puede estar completa respecto de lo comprado mientras la compra sigue pendiente respecto de la necesidad. | Representar correctamente faltantes del proyecto sin falsificar el estado de recepción. | Implementada en 25.6C.3.3 |
 | 26/07/2026 | Shelf seguirá siendo el fallback oficial. | Mantener continuidad total con cotizaciones Legacy y garantizar una optimización disponible ante candidatos ausentes u obsoletos. | Implementada |
 | 26/07/2026 | No duplicar geometría. | El motor es la única autoridad del cálculo físico; Optimization Sessions conserva referencias y summary, mientras UI, Proposal, Quote y Fabricación solo consumen sus resultados. | Vigente |
 | 26/07/2026 | No duplicar candidatos. | Active Mode y Optimization Sessions guardan referencias y estado, no copias paralelas de soluciones. | Vigente |
@@ -1004,31 +1065,235 @@ Este cambio no forma parte de la actualización documental actual.
 
 Las fechas no verificables se mantienen como **Pendiente de validación**; no se atribuyen autores sin evidencia.
 
-## 16. Próximo sprint oficial
+## 16. Estado de 25.6 y próximo sprint oficial
 
-### 25.5D — Eliminación Segura y Transversal de Órdenes de Producción
+### 25.6 — Inventario por Movimientos
 
-**Estado:** SIGUIENTE FASE OFICIAL.
+**Estado:** 25.6 COMPLETADA LOCALMENTE; 25.6A COMPLETADA LOCALMENTE; 25.6B IMPLEMENTADA Y VALIDADA OPERACIONALMENTE EN CREACIÓN Y REVERSIÓN. El cierre operacional de 25.6C no promueve automáticamente la fase general: permanecen como alcance futuro las integraciones de Fabricación durable, Instalación, Entrega y remanentes.
 
-**Propósito:** aplicar y validar de forma controlada la migración y RPC transaccional preparadas localmente, sin adelantar Inventario.
+**Propósito:** construir un inventario durable cuya fuente de verdad sean movimientos y transacciones trazables. Las existencias no se editan como cantidades libres ni se sostienen mediante acumulados manuales; se derivan de entradas, salidas, reservas, liberaciones y correcciones, sin trasladar esa propiedad a Recepción ni a Smart Cut.
 
-Prioridades:
+**Alcance actual de producto:** ALUXOR / BosqueReal opera con una sola sucursal. Las transferencias entre ubicaciones/sucursales no son requisito operacional de cierre de 25.6. Los movimientos normales y la acción `Inventario General → tarjeta de material → Movimiento` permanecen dentro del alcance actual. Este ajuste documental no cierra automáticamente 25.6.
 
-- confirmar mediante dry run que únicamente se aplicará la migración de 25.5D;
-- validar la RPC con owner activo, no-owner y aislamiento por `workspace_id`;
-- comprobar conteos, auditoría, rollback, idempotencia y conservación de Quote;
-- validar limpieza de Producción, Compras, Recepción y operaciones pendientes;
-- validar Realtime y ausencia de resurrección en dos ventanas;
-- no crear Inventario.
+**Transferencias — IMPLEMENTADA TÉCNICAMENTE / DIFERIDA POR ALCANCE DE PRODUCTO.** Se conserva la UI de transferencia en `InventorySection` y el recorrido `createInventoryTransfer → useInventory.createTransfer → Application Repository → Sync Engine → Remote Repository`. La infraestructura durable crea el par `TRANSFER_OUT` + `TRANSFER_IN` con `transferId` compartido, origen/destino, lote opcional y validación de stock; incluye persistencia/sincronización durable y Realtime de reconciliación. La acción de transferencia utiliza ese contrato, no la creación de un movimiento manual aislado. Su QA operacional completa queda diferida: no se declara fallida, eliminada ni validada manualmente.
 
-**Condición de cierre:** la implementación local no basta; la RPC debe estar aplicada y validada operacionalmente con dependencias reales y dos sesiones autenticadas.
+**Destino futuro:** la transferencia durable se conserva como base técnica reutilizable para una edición empresarial/multi-sucursal, denominada provisionalmente **BRTuNegocio Empresa** o **BRTuNegocio Mediana-Grande**, sin nombre comercial definitivo. Ese alcance futuro puede contemplar múltiples sucursales y almacenes, stock por sede, transferencias entre ubicaciones e inter-sucursal, materiales en tránsito, permisos por sucursal/almacén, trazabilidad origen → destino y conciliación de inventario entre sedes. Estas capacidades futuras no se declaran implementadas por la existencia del contrato de transferencia.
+
+**Pendientes reales para el cierre operacional de 25.6:** contraste del código y pruebas existentes con la evidencia documentada de 25.6B/25.6C; no constituye una nueva ejecución de QA.
+
+| Punto | Clasificación | Evidencia y validación restante |
+|---|---|---|
+| Offline completo de Inventario | Implementado pendiente de QA | `inventoryStorage`, Pending Operations y `inventorySyncEngine` implementan persistencia local, cola y Sync manual; `inventoryRemoteSync.test.js` contempla creación offline, compactación y sincronización. 25.6C ya acredita reload y offline/online en Recepción → Inventario. Falta acreditar el recorrido completo específico de movimientos normales de Inventario: creación/reversión offline, conservación tras reload, reconexión y Sync sin duplicados. |
+| Conflicto de versión | Implementado pendiente de QA | Versioning, Repository y Sync detectan conflictos; la cola conserva `conflict` y snapshot remoto, y el Hook expone conflictos. `inventoryInfrastructure.test.js` e `inventoryRemoteSync.test.js` contienen casos de versión obsoleta y conservación del conflicto. Falta QA autenticado con conflicto de Inventario provocado entre sesiones; el registro de conflictos 0 en 25.6C no valida ese escenario. Esta clasificación corresponde a detección y preservación, no afirma una UI de resolución implementada. |
+| Aislamiento manual específico entre workspaces | Implementado pendiente de QA | Storage y pendientes se separan por workspace; Repository y Realtime filtran el workspace, con casos en `inventoryInfrastructure.test.js`. 25.6C ya documenta aislamiento QA/BosqueReal. Falta QA específico de Inventario al alternar workspaces con movimientos propios, pendientes offline y eventos Realtime, verificando que UI y sincronización no crucen datos. |
+
+Los tres pendientes anteriores conservan el bloqueo de cierre operacional general; transferencia queda excluida de ese criterio. Se mantiene el cierre técnico y operacional ya documentado de 25.6C/25.6C.3.7.
+
+Implementado en 25.6:
+
+- Inventory Engine puro con 14 tipos oficiales de movimiento.
+- Adapter, Repository local, Versioning, Storage y Pending Operations.
+- Sync Engine y Realtime desacoplados.
+- Hook, Selectors, Summary y consumo derivado en Business State.
+- Stock, reservado y disponible calculados exclusivamente desde movimientos.
+
+25.6A — Maduración del dominio, **COMPLETADA LOCALMENTE**:
+
+- lotes y estados de calidad opcionales;
+- ubicaciones físicas opcionales;
+- transferencias vinculadas y validación de pares OUT/IN;
+- Kardex determinista con saldos corridos;
+- snapshots derivados únicamente en memoria;
+- selectores avanzados por material, lote, ubicación, proyecto y referencias;
+- compatibilidad con movimientos y summary legacy.
+
+Validación local: 116 archivos y 996 pruebas aprobadas, build correcto, warning conocido de bundle superior a 500 kB y `git diff --check` limpio.
+
+25.6B — Persistencia remota, **IMPLEMENTADA Y VALIDADA OPERACIONALMENTE EN CREACIÓN Y REVERSIÓN**:
+
+- `public.inventory_movements` es la única fuente de verdad; `material_id` es `text` hasta que exista un UUID canónico común de material;
+- conserva los 14 tipos oficiales y añade `REVERSAL` como tipo técnico; lotes y ubicaciones son opcionales, las transferencias comparten `transfer_id` y las reversiones usan `reversal_of_id`;
+- las relaciones con Cotización, Producción, Compras y Recepción se validan dentro del workspace, sin FKs destructivas que impidan eliminar una OT de forma segura;
+- RLS aplicada con `inventory_movements_select_member`, `inventory_movements_insert_manager` e `inventory_movements_update_manager`; no existe deliberadamente una política DELETE para usuarios autenticados;
+- Broadcast privado por workspace mediante `inventory_movements_realtime_member` y trigger `inventory_movements_broadcast_changes`;
+- triggers `inventory_movements_prepare_insert`, `inventory_movements_prepare_update` e `inventory_movements_validate_relations` aplicados remotamente;
+- RPC `reverse_inventory_movement` y `create_inventory_transfer` aplicadas como `SECURITY INVOKER`: la sesión autenticada y RLS continúan controlando las operaciones;
+- `authenticated` puede ejecutar ambas RPC y `private.inventory_movement_effect(text, numeric, jsonb)`; `anon` no dispone de esos permisos y `service_role` y `postgres` los conservan;
+- la reversión conserva el original y crea un movimiento `REVERSAL`; la transferencia crea `TRANSFER_OUT` y `TRANSFER_IN` en una transacción; ambas operaciones son idempotentes según sus identificadores;
+- Remote Adapter, Remote Repository, Supabase Client Adapter, Application Repository, Repository Provider, Connectivity Provider, Sync Engine concreto, Pending Operations por workspace, Realtime, reconciliación y Hook conectados;
+- `InventorySection` conserva la vista legacy y añade una sección durable separada con formulario manual, movimientos confirmados, reversión, sincronización manual y estados de conexión, Realtime, pendientes y conflictos. No constituye todavía el Centro Operativo final de Inventario.
+
+Migraciones aplicadas local y remotamente:
+
+- `20260802072750_create_inventory_movements.sql`;
+- `20260802132526_allow_inventory_movement_effect_execution.sql`;
+- `20260802132932_allow_inventory_movement_effect_execution.sql`;
+- `20260803013242_consolidate_purchase_reception_profitability.sql`;
+- `20260803013633_index_receptions_reverted_by.sql`;
+- `20260803073910_material_traceability_and_purchase_amendments.sql`;
+- `20260803181739_fix_material_trace_owner_purge_result.sql`;
+- `20260803181935_correct_material_trace_owner_purge_timestamp.sql`;
+- `20260803182726_fix_purchase_amendment_reason_validation.sql`;
+- `20260804015529_add_purchased_quantity_contract.sql`;
+- `20260804015930_backfill_purchased_quantity_from_receptions.sql`;
+- `20260804021415_fix_purchase_amendment_coalesce_contract.sql`;
+- `20260804185534_add_required_quantity_contract.sql`.
+
+Las dos migraciones de permisos son idénticas, redundantes, inocuas e idempotentes. Se conservan porque ambas forman parte del historial remoto; no corresponde eliminarlas ni usar `migration repair`.
+
+Validación operacional confirmada en la aplicación real:
+
+- creación remota, aparición inmediata en UI, actualización de Summary y movimientos confirmados con versión 1;
+- conexión online, Realtime `Subscribed`, ausencia de operaciones pendientes y ausencia de conflictos en la prueba;
+- reversión remota con creación de `REVERSAL`, conservación del original y retorno del saldo derivado a cero;
+- el error previo `permission denied for function inventory_movement_effect` quedó resuelto mediante las migraciones de permisos aplicadas.
+
+Validación del repositorio: `npm test` aprobó 123 archivos y 1162 pruebas; `npm run build` finalizó correctamente; bundle principal de 1,665.76 kB minificado y 446.54 kB gzip, con el warning conocido de chunk superior a 500 kB; `git diff --check` limpio. No hubo commit ni push y no se afirma que el working tree esté limpio.
+
+### Fase 25.6C — Integración Recepción → Inventario
+
+**Estado:** **COMPLETADA / CERRADA TÉCNICA Y OPERACIONALMENTE**. La subfase 25.6C.3.7 — Correcciones físicas reales de Recepción también queda **CERRADA TÉCNICA Y OPERACIONALMENTE**.
+
+```text
+Compras → Recepción → Inventory reconciliation → Inventory Summary → Business State → Dashboard
+```
+
+Implementado:
+
+- creación determinista e idempotente de `ENTRY_PURCHASE` desde cantidades aceptadas;
+- compensación mediante `REVERSAL`, sin eliminar movimientos ni reescribir historia;
+- historial de recepciones, observaciones, incidencias, costos reales y rentabilidad;
+- materiales “Otros” y libres derivados desde Inventory Summary;
+- enmiendas de compra versionadas, `expectedVersion`, eventos append-only y depuración auditada exclusiva de Owner;
+- índice operativo de Recepción, detalle por proyecto e Inventario General sin duplicar stock;
+- `purchasedQuantity`, `purchasedAt`, `requiredQuantity` y `materialFulfillment.js` como contrato reutilizable;
+- separación de pendientes de compra, recepción y necesidad del proyecto;
+- Realtime validado en dos ventanas y migraciones locales/remotas alineadas.
+- QA autenticado real en `ALUXOR QA`, proyecto `QA 25.6C.3.7 - Recepción Compleja`, con aislamiento QA/BosqueReal, reload, offline/online, Realtime y segundo Sync sin duplicación.
+- Estados operacionales derivados: compra incompleta → `Esperando compras`; compra completa + recepción incompleta → `Esperando recepción`; compra y recepción completas sin incidencias → `Materiales disponibles`. `getPurchaseMaterialState()` usa Material Fulfillment/cantidades y no `item.status` legacy.
+- Inventario por proyectos corregido: la cadena `Quote sourceId → Purchase Item sourceId → Purchase Item id → Inventory Movement metadata.purchaseItemId` reconoce Melamina requerida 10, disponible 20 y faltante 0; `hoja(s)` se normaliza a `hoja` y “Preparar compra” solo aparece con faltantes reales.
+
+Evidencia final: 155 archivos de pruebas y 1364 pruebas aprobadas; `npm run build` correcto; `git diff --check` correcto; migraciones local/remoto alineadas hasta `20260810162557`. Persiste el warning conocido de bundle Vite superior a 500 kB, sin regresión. Sync permanece manual. No hubo commit ni push.
+
+#### 25.6C.3.7 — Correcciones físicas reales de Recepción
+
+**Estado:** **CERRADA TÉCNICA Y OPERACIONALMENTE**.
+
+Problema resuelto: Recepción puede corregir datos físicos incorrectos sin mutar el `reception_item` original, borrar historia, modificar Compra directamente, crear recepciones artificiales, escribir Inventario desde la UI o perder trazabilidad multiusuario.
+
+Ejemplo validado: `acceptedQuantity = 20` original, corrección física efectiva `20 → 8`; la proyección conserva `original = 20` y expone `effective = 8`.
+
+Arquitectura final:
+
+```text
+Reception Item original
+        ↓
+Purchase Quantity Review
+        ↓
+Review / autorización Owner-Admin
+        ↓
+Reception Item Real Correction
+        ↓
+Proyección efectiva
+        ↓
+Recepción · Compras · Material Fulfillment · Inventario · Historial
+        ↓
+Realtime
+        ↓
+Estado operacional derivado
+```
+
+`DURABLE STATE ≠ OPERATIONAL STATE`: una Review puede conservar `correction_authorized` aunque ya no exista acción física pendiente. El pendiente se calcula exclusivamente mediante `isPurchaseQuantityReviewPhysicalActionPending()`, usando cantidades efectivas, relaciones exactas y recepción activa.
+
+Subfases cerradas técnicamente:
+
+- **25.6C.3.7A:** contrato append-only y proyección pura por `reception_item`.
+- **25.6C.3.7B:** cantidades efectivas integradas en Reception Engine, selectors, summaries y costos.
+- **25.6C.3.7C:** Material Fulfillment e Inventario integrados mediante compensaciones deterministas. Usa `CORRECTION OUTPUT` y `CORRECTION ENTRY`, nunca `REVERSAL` parcial. El delta es `desiredPhysicalQuantity - currentPhysicalQuantity` y la idempotencia es determinista.
+- **25.6C.3.7D:** persistencia Supabase con tabla append-only, Adapter, Repository, Hook, RPC create/reverse, `expectedVersion`, idempotencia, RLS, Realtime INSERT y aislamiento por workspace.
+- **25.6C.3.7E:** UI “Registrar datos reales” para cantidad aceptada real, motivo obligatorio, notas y datos físicos adicionales mediante `useReceptionItemRealCorrections.createCorrection()` y `create_reception_item_real_correction`.
+
+La autorización física permite el caso `accepted = 10`, `requested = 8` mientras exista Review aprobada, `receptionId` explícita, recepción activa, relación exacta por workspace/Compra/partida/recepción y versión vigente.
+
+Reviews: después de una corrección, `effectiveAcceptedQuantity <= requestedPurchasedQuantity` elimina la Review de las bandejas físicas, sin cambiar su estado durable ni eliminar historial. Si se revierte la corrección y vuelve a cumplirse `effectiveAcceptedQuantity > requestedPurchasedQuantity`, reaparece operacionalmente cuando su estado durable lo permite. `cancelled`, `completed`, `rejected` y recepciones revertidas nunca reaparecen.
+
+Cancelación durable mediante `cancel_purchase_quantity_review_request`: Owner/Admin, transición append-only auditada, sin `DELETE`, `expectedVersion`, idempotencia, motivo obligatorio e historial preservado. Estados cancelables: `pending`, `approved`, `requires_reception_action`, `ready_for_final_approval` y `correction_authorized`. No se cancela una Review con correction física activa no revertida.
+
+Inventario no modifica el `ENTRY_PURCHASE` original. Para `20 → 8`, conserva `ENTRY_PURCHASE 20` y produce `CORRECTION OUTPUT 12`, con existencia neta efectiva 8; repetir la reconciliación es no-op. Una recepción revertida no genera correcciones que la resuciten.
+
+Realtime reconcilia por UUID/versión y nunca origina escrituras. `Correction INSERT` y reversal actualizan la proyección; `DELETE` de Review/correction proveniente exclusivamente del purge seguro elimina estado local y evita resurrección.
+
+Purge seguro de OT: `delete_production_order_safely` elimina explícitamente, dentro de la transacción Owner-only auditada, en este orden:
+
+```text
+reception_item_real_corrections
+        ↓
+purchase quantity reviews
+        ↓
+reception_items
+        ↓
+receptions
+        ↓
+purchase_items
+        ↓
+purchases
+        ↓
+production order
+```
+
+No se añadió `ON DELETE CASCADE`.
+
+Migraciones aplicadas y alineadas local/remoto:
+
+- `20260806143018_reception_item_real_corrections.sql`
+- `20260807091952_allow_purchase_quantity_physical_correction_authorization.sql`
+- `20260808073358_cancel_purchase_quantity_review_request.sql`
+- `20260808084500_extend_production_order_safe_delete_for_reception_corrections.sql`
+- `20260810162557_create_workspace.sql`
+
+Casos validados técnica y operacionalmente: escenario autenticado `ALUXOR QA` / `QA 25.6C.3.7 - Recepción Compleja`; compras incompletas → `Esperando compras`; compras completas con recepción incompleta → `Esperando recepción`; compras y recepción completas sin incidencias → `Materiales disponibles`; corrección física `20 → 8`; preservación del original `20`; corrección append-only; Material Fulfillment con faltante 2; `ENTRY_PURCHASE 20 + CORRECTION OUTPUT 12 = existencia 8`; segundo Sync no-op; Realtime `Subscribed`; reload y offline/online conservados; pendientes 0 y conflictos 0; aislamiento por workspace, cancelación durable, historial y ausencia de duplicados.
+
+### VALIDACIÓN OPERACIONAL COMPLEJA — COMPLETADA
+
+El escenario autenticado real en `ALUXOR QA` combinó varias partidas y recepciones, Review, autorización, correction, Realtime en segunda sesión, Inventario, Material Fulfillment, reaparición del pendiente, cancelación durable, aislamiento entre partidas, persistencia tras reload, ausencia de duplicados e historial completo.
+
+Flujo oficial de revisión de reducción:
+
+```text
+Solicitud de revisión
+↓
+Owner/Admin revisa y aprueba revisión
+↓
+Recepción verifica físicamente y corrige únicamente la partida afectada
+↓
+Owner/Admin autoriza corrección final
+↓
+Compras modifica el purchasedQuantity autorizado
+↓
+Recepción queda consistente e Inventario permanece derivado
+```
+
+`approved` y `complete` no modifican Compra automáticamente. La autorización final se mantiene separada.
+
+Deep Link y resaltado: la solicitud conserva `receptionId`; Owner asigna explícitamente la recepción correcta y Recepción abre exactamente ese UUID, hace scroll y aplica resaltado temporal, sin inferir primera ni última recepción. La UI puede resaltar recepción, partida o revisión pendiente sin alterar datos.
+
+25.6C no conserva pendientes funcionales internos. Las capacidades futuras de Fabricación durable, Instalación, Entrega, remanentes, sincronización automática e historial remoto consolidado permanecen fuera de esta fase.
 
 Secuencia posterior oficial:
 
 ```text
-25.5D — Eliminación Segura y Transversal de Órdenes de Producción
+25.6 — Motor de Inventario por Movimientos
+✓ IMPLEMENTADO LOCALMENTE
 ↓
-25.6 — Inventario por Movimientos
+25.6A — Maduración del dominio
+✓ COMPLETADA LOCALMENTE
+↓
+25.6B — Persistencia remota
+✓ IMPLEMENTADA Y VALIDADA EN CREACIÓN Y REVERSIÓN
+↓
+25.6C — Integración Recepción → Inventario
+✓ COMPLETADA / CERRADA TÉCNICA Y OPERACIONALMENTE
+25.6C.3.7 ✓ CERRADA TÉCNICA Y OPERACIONALMENTE
 ```
 
 ### Fase 25.4 — Operational Center
@@ -1147,7 +1412,7 @@ Recepción registra qué llegó realmente
 ↓
 Recepción comunica resultados e incidencias
 ↓
-Inventario futuro transforma lo aceptado en movimientos de entrada
+La integración futura registra lo aceptado como movimientos de entrada en Inventario
 ```
 
 Eventos y notificaciones transversales implementados:
@@ -1217,7 +1482,7 @@ Se validaron contra Supabase `receptions` y `reception_items`, RLS, permisos, ai
 
 ### Fase 25.5D — Eliminación Segura y Transversal de Órdenes de Producción
 
-**Estado:** IMPLEMENTADA Y VALIDADA LOCALMENTE; MIGRACIÓN, RPC Y PRUEBA OPERACIONAL REMOTAS PENDIENTES.
+**Estado:** COMPLETADA, VALIDADA REMOTAMENTE E INTEGRADA EN `main`.
 
 **Objetivo:** permitir que únicamente el propietario autorizado del workspace elimine definitivamente una orden de producción y sus datos operativos dependientes, sin errores de foreign keys, borrados parciales, resurrección por sincronización ni eliminación de la cotización original.
 
@@ -1257,7 +1522,7 @@ Autorización obligatoria:
 - la service role key nunca se expondrá al frontend;
 - la RPC valida `auth.uid()`, membresía activa y rol `owner`, usa `search_path` vacío y no está disponible para `anon`.
 
-Interfaz prevista:
+Interfaz implementada:
 
 ```text
 Más opciones
@@ -1270,7 +1535,7 @@ Alcance transversal:
 
 Se inspeccionaron todas las foreign keys reales que referencian `production_orders`, comenzando por `purchases.production_order_id`, y las relaciones directas o indirectas con partidas de Compra, recepciones, partidas recibidas, historial derivado, auditoría, operaciones pendientes, cachés, selecciones y summaries.
 
-Para cada relación se decidirá explícitamente si corresponde eliminar, conservar, desvincular, archivar o auditar. No se convertirán indiscriminadamente todas las foreign keys a `ON DELETE CASCADE`.
+Para cada relación se definió explícitamente si correspondía eliminar, conservar, desvincular, archivar o auditar. No se convirtieron indiscriminadamente las foreign keys a `ON DELETE CASCADE`.
 
 Regla sobre Cotización:
 
@@ -1325,7 +1590,7 @@ Protección contra resurrección:
 
 `ProductionDeletionRegistry` registra por workspace el UUID y `deletedAt` de la OT eliminada. Production Storage excluye esas identidades al cargar, guardar, fusionar o recibir eventos tardíos. La misma limpieza retira Compras, Recepciones y operaciones pendientes relacionadas. No existe expiración porque el UUID canónico no se reutiliza.
 
-Consumidores que deberán actualizarse:
+Consumidores reconciliados por el comando:
 
 - Producción;
 - Compras;
@@ -1341,7 +1606,7 @@ Consumidores que deberán actualizarse:
 
 Business State continuará como adapter derivado: no ejecutará eliminaciones ni será fuente de verdad.
 
-Validación local implementada:
+Validación implementada:
 
 - pruebas del comando: entradas, owner, confirmación manual, rechazo offline, error remoto, idempotencia y doble ejecución;
 - pruebas estructurales de SQL: `auth.uid()`, owner activo, workspace, `FOR UPDATE`, orden de eliminación, conservación de Quote, auditoría, resultado estructurado y grants;
@@ -1352,14 +1617,7 @@ Validación local implementada:
 - `npm run build`: correcto;
 - `git diff --check`: limpio.
 
-Validación todavía pendiente en Supabase real:
-
-- autorización del backend para owner, no-owner y otro workspace;
-- conteos, rollback e idempotencia con dependencias reales;
-- conservación de Quote y ausencia de huérfanos;
-- propagación Realtime y ausencia de resurrección en dos ventanas y otro dispositivo.
-
-Condición de cierre:
+Validación remota completada:
 
 - comando seguro ejecutado en servidor;
 - propietario activo y aislamiento por workspace validados;
@@ -1368,10 +1626,118 @@ Condición de cierre:
 - eliminación visible en toda la aplicación mediante Realtime;
 - ausencia de huérfanos y operaciones pendientes;
 - protección comprobada contra resurrección;
-- validación con Supabase real y dos sesiones;
+- validación con Supabase real;
 - pruebas, build y whitespace correctos.
 
-La implementación local existe, pero 25.5D no se declara cerrada. Falta aplicar únicamente esta nueva migración, validar la RPC contra Supabase, ejecutar una eliminación real con dependencias y confirmar Realtime y ausencia de resurrección en dos sesiones. No se ha realizado `db push`.
+La migración y la RPC `delete_production_order_safely` están implementadas y validadas remotamente. La corrección específica para compras inactivas conserva los guards operativos normales y habilita exclusivamente el borrado autorizado dentro del contexto transaccional. Realtime continúa operativo y la fase quedó integrada en `main` mediante `44e54fc` (`feat(production): complete Phase 25.5D safe production order deletion`).
+
+### MICROFASE 25.5E — Resolución Inteligente de Piezas Sobredimensionadas
+
+**Estado:** COMPLETADA LOCALMENTE.
+
+**Objetivo:** resolver de forma reversible piezas físicamente incompatibles con el formato comercial y superficies de productos modulares, sin modificar el diseño original del proyecto.
+
+**Resultado:** Material Calculator transforma una pieza rectangular o superficie modular incompatible con el formato configurado en una propuesta explicable, confirmable y reversible. Quote conserva la medida original; Smart Cut recibe únicamente piezas físicas ya resueltas.
+
+El motor contempla dos escenarios diferentes:
+
+**A. Piezas sobredimensionadas**
+
+- división reversible;
+- evaluación de formatos comerciales mayores;
+- fabricación especial;
+- unión controlada.
+
+**B. Cobertura modular**
+
+Para duela, lambrín, tablilla, listón, deck y perfiles modulares equivalentes, el sistema no divide conceptualmente una pieza. Transforma una superficie comercial en múltiples piezas físicas repetitivas necesarias para cubrirla. La superficie permanece como fuente de verdad y las tiras pertenecen únicamente a fabricación; no reemplazan el diseño original.
+
+Implementado:
+
+- Motor Oversize Resolution puro y determinista.
+- Ranking determinista y explicable.
+- División equilibrada.
+- División por aprovechamiento evaluada mediante la fachada pública `optimizeCuts()`.
+- Cobertura modular vertical u horizontal para materiales repetitivos.
+- Fabricación especial cuando no existe una solución automática válida.
+- Integración con Material Calculator y Quote.
+- Integración con Smart Cut únicamente mediante piezas físicas cortables.
+- Aplicación explícita de propuestas y reversión sin duplicados.
+- Trazabilidad completa y detección de obsolescencia por cambios en pieza, formato o configuración.
+
+Contrato general:
+
+`resolveOversizePiece()` recibe una pieza, el formato comercial, formatos alternativos y configuración física. Devuelve la clasificación del problema, alternativas deterministas, recomendación y diagnóstico, sin persistir ni modificar la entrada.
+
+#### Material Calculator — niveles oficiales
+
+1. **Medidas originales:** fuente comercial que representa el trabajo vendido.
+2. **Resolución de fabricación:** piezas derivadas, reversibles y trazables que permanecen vinculadas a la medida original.
+3. **Smart Cut:** consume únicamente las piezas físicas resultantes y nunca modifica el diseño original.
+
+```text
+Material Calculator
+↓
+resolveOversizePiece()
+↓
+Clasificación + alternativas + recomendación + diagnóstico
+↓
+Propuesta temporal confirmada por el usuario
+↓
+Quote conserva original y piezas derivadas trazables
+↓
+Smart Cut evalúa únicamente piezas físicas
+```
+
+#### Cobertura Modular
+
+Lambrín, duela, tablilla, listón, deck y perfiles modulares equivalentes ya no se interpretan únicamente como tableros completos. Cuando el usuario confirma `MODULAR_PLANK`, una superficie puede resolverse mediante tiras o módulos repetitivos que cubren físicamente el ancho y largo requeridos. El cálculo determina cantidad de tiras, longitud de corte, cobertura bruta, recorte lateral, sobrante longitudinal, orientación y advertencias, sin modificar geometría ni estrategias de Smart Cut.
+
+El caso validado de una superficie de 67 × 263 cm sobre lambrín comercial de 16 × 290 cm produce cinco tiras físicas de 16 × 263 cm, cobertura bruta de 80 cm, recorte lateral total de 13 cm y sobrante longitudinal de 27 cm por tira.
+
+#### Trazabilidad
+
+Las piezas generadas conservan `sourcePieceId`, `resolutionProposalId`, `resolutionAlternativeId`, `sectionIndex`, `sectionCount`, `optimizationExcluded` y metadata equivalente de tira, cobertura, ancho bruto, ancho terminado, recorte y orientación. La medida original permanece como referencia y queda excluida del acomodo automático después de aplicar una propuesta; la reversión elimina las derivadas y restaura el original.
+
+#### Smart Cut
+
+- Oversize Resolution Engine: implementado fuera de Smart Cut.
+- Modular Coverage Engine: implementado fuera de Smart Cut.
+- Smart Cut Engine: sin modificaciones.
+- Shelf: sin cambios.
+- Best Fit: sin cambios.
+- Geometría: sin cambios.
+- Motor: sin cambios.
+- Optimization Sessions: sin modificaciones.
+
+Smart Cut continúa congelado. No calcula coberturas modulares, no divide piezas y no conoce reglas comerciales. Recibe únicamente piezas físicas ya resueltas. Oversize Resolution y Modular Coverage consumen su fachada pública cuando necesitan evaluar una alternativa, pero no alteran candidatos, evaluación, ranking, selección, Proposal ni Active Mode.
+
+#### UX
+
+- Panel de propuestas ampliado solo mientras una resolución está abierta.
+- Tarjetas responsivas y alternativas legibles, con métricas organizadas y acciones completas.
+- Dos o tres tarjetas por fila cuando el ancho lo permite y una columna en móvil.
+- Eliminación del formulario resumen redundante de Materiales de Cotización.
+- El botón **Abrir BR Material Studio** queda seguido directamente por las tarjetas individuales de materiales.
+
+Decisión oficial relacionada: las medidas originales del trabajo permanecen como fuente de verdad. Las piezas derivadas de fabricación deberán visualizarse anidadas bajo la pieza original mediante un desplegable **Resolución de fabricación**. Esta decisión es vigente; la integración visual anidada permanece pendiente y no se presenta como implementada en este cierre.
+
+Límites conservados:
+
+- No incluye cálculos estructurales, herrajes de unión, múltiples uniones arbitrarias, geometría irregular, IA, proveedores, Inventario, remanentes ni Fabricación Durable.
+- Quote continúa como fuente de verdad; Oversize Resolution no crea Repository, Storage, Supabase, Realtime ni persistencia propia.
+- No se modificaron Smart Cut Engine, Shelf, Best Fit, geometría, Optimization Sessions ni sus contratos.
+
+Validación local de cierre:
+
+- `npm test`: 112 archivos y 873 pruebas aprobadas.
+- `npm run build`: correcto.
+- Warning conocido: bundle principal superior a 500 kB.
+- `git diff --check`: limpio.
+- Sin commit.
+- Sin push.
+
+Fase ejecutada a continuación: 25.6 — Inventario por Movimientos. Estado actual: 25.6C completada y cerrada técnica y operacionalmente hasta 25.6C.3.7; 25.6 general conserva su estado propio y no se promueve automáticamente por este cierre.
 
 ## Infraestructura visual y Brand System
 
@@ -1432,8 +1798,8 @@ Ambos contratos son independientes:
 | Inspector Inteligente | Media | Bajo | Componentes |
 | Project Companion | Media | Bajo | Componentes |
 | Centro del Proyecto | Media | Bajo | Componentes |
-| Recepción | Baja | Media | 25.5, 25.5B y 25.5C completadas; 25.5D implementada localmente y pendiente de validación remota |
-| Inventario | Baja | Media | Fase 25.6 |
+| Recepción | Baja | Media | 25.5, 25.5B y 25.5C completadas; 25.5D completó la eliminación segura transversal y su validación remota |
+| Inventario | Baja | Media | Dominio durable local/remoto e integración 25.6C implementada hasta 25.6C.3.3. Pendientes el cierre multiusuario específico, Centro Operativo definitivo, almacenes durables y remanentes |
 | Smart Cut | Baja | Bajo | Persistencia remota, Realtime, referencia activa y consolidación de experiencia y ciclo de vida completados; remanentes e integración con Inventario siguen pendientes |
 | Fabricación | Baja | Media | Hito 8 — Fabricación Durable |
 | Instalación | Baja | Media | Hito 9 — Instalación y Entrega |
@@ -1494,11 +1860,17 @@ El congelamiento aplica únicamente a la infraestructura visual. No limita la ev
 | 30/07/2026 | 25.5 — Recepción Durable | Dominio durable implementado en código con eventos parciales, relaciones UUID, adapters, repositories, versionado, storage/offline, Sync Engine manual, Realtime, Hook, Section, Summary y Business State. La migración SQL, RLS y Broadcast están preparados localmente, no aplicados ni validados contra Supabase. Validación automática: 99 archivos, 793 pruebas, build correcto y `git diff --check` limpio; sin commit ni push. |
 | 31/07/2026 | 25.5B — Centro Operativo de Recepción | Implementada en código con bandeja global por workspace, recepción rápida y detallada, filtros, incidencias, eventos, notificaciones derivadas e integración con Inicio, Compras, Producción, Inspector, Project Companion, Historial y Business State. La migración durable fue endurecida localmente. Validación automática: 101 archivos, 807 pruebas, build correcto y `git diff --check` limpio; validación remota pendiente. |
 | 31/07/2026 | 25.5C — Validación remota de Recepción | Migración, RLS, Broadcast, Realtime, offline, reconexión, conflictos e idempotencia validados e integrados en `main` mediante `751a074`. |
-| 31/07/2026 | 25.5D — Eliminación Segura y Transversal de Órdenes de Producción | Implementación local preparada con RPC transaccional exclusiva para owner activo, auditoría mínima, orden explícito de dependencias, Application Command, confirmación por folio, limpieza local y de colas, tombstone y reconciliación Realtime. Validación local: 106 archivos y 829 pruebas, build correcto; aplicación y validación remotas pendientes. |
+| 31/07/2026 | 25.5D — Eliminación Segura y Transversal de Órdenes de Producción | Comando, RPC `delete_production_order_safely`, auditoría, limpieza local y de colas, tombstone, reconciliación Realtime y corrección de compras inactivas completados y validados remotamente. Integrada en `main` mediante `44e54fc`. |
+| 01/08/2026 | 25.5E — Resolución Inteligente de Piezas Sobredimensionadas y Cobertura Modular | Oversize Resolution y Modular Coverage implementados fuera de Smart Cut, con aplicación reversible, trazabilidad completa y separación definitiva entre diseño comercial y fabricación. Las medidas originales permanecen como fuente de verdad; Smart Cut recibe únicamente piezas físicas. El panel de propuestas fue ampliado y se retiró el formulario resumen redundante de Materiales de Cotización. Validación local: 112 archivos y 873 pruebas, build correcto, warning conocido de bundle superior a 500 kB y `git diff --check` limpio; sin commit ni push. |
+| 02/08/2026 | 25.6 — Inventario por Movimientos | Dominio local implementado con 14 tipos oficiales de movimiento, Engine puro, Adapter, Repository local, Versioning, Storage, Pending Operations, capas desacopladas de Sync y Realtime, Hook, Selectors, Summary y consumo en Business State. Existencias, reservas y disponibilidad se derivan exclusivamente del historial. |
+| 02/08/2026 | 25.6A — Maduración del dominio de Inventario | Lotes, ubicaciones, transferencias, Kardex determinista, snapshots derivados en memoria y selectores avanzados implementados sin persistir saldos ni agregar Supabase. Validación acumulada: 116 archivos y 996 pruebas aprobadas, build correcto y `git diff --check` limpio; sin commit ni push. |
+| 02/08/2026 | 25.6B — Persistencia remota de Inventario | `public.inventory_movements`, RLS, validación relacional, permisos, triggers, RPC, adapters, repositories, Sync Engine, Pending Operations, Realtime privado, reconciliación, Hook y UI mínima implementados. Creación y reversión validadas operacionalmente; 123 archivos y 1162 pruebas aprobadas, build correcto y `git diff --check` limpio; sin commit ni push. |
+| 03/08/2026 | 25.6C–25.6C.3.1 | Integración idempotente Recepción → Inventario, consistencia Compras → Recepción → Inventario → Rentabilidad, trazabilidad append-only, enmiendas versionadas, conflictos, Realtime y RPC Owner implementados. Dos ventanas y RPC validadas; identidades UI independientes pendientes. |
+| 04/08/2026 | 25.6C.3.2 | Índice operativo de Recepción, detalle por proyecto, Inventario General, distribución informativa y recálculo de compra implementados y validados. |
+| 04/08/2026 | 25.6C.3.3 | Contrato Necesario → Ordenado → Comprado → Recibido consolidado mediante `requiredQuantity`, `purchasedQuantity` y `materialFulfillment.js`. Validación acumulada: 130 archivos y 1266 pruebas, build correcto, warning conocido de chunk y `git diff --check` limpio; sin commit ni push. |
 | Consolidación funcional | 25.5B | Centro Operativo de Recepción implementado y validado automáticamente. |
-| Próximo sprint oficial | 25.5D | Aplicación controlada de la migración, validación real de RPC, rollback, auditoría, aislamiento, Realtime y ausencia de resurrección. |
-| Fase activa | 25.5D | Implementada localmente; no cerrada ni aplicada remotamente. |
-| Próxima fase funcional posterior | 25.6 | Inventario por Movimientos, sin adelantarlo antes de consolidar Recepción. |
+| Fase cerrada localmente | 25.5E | Resolución inteligente y cobertura modular completadas sin persistencia propia ni cambios al Smart Cut Engine. |
+| Estado vigente | 25.6C | COMPLETADA / CERRADA TÉCNICA Y OPERACIONALMENTE hasta 25.6C.3.7. |
 
 ## Estado del núcleo del ERP
 
@@ -1513,9 +1885,10 @@ Reception Realtime .... Implementado y validado remotamente
 Reception Migration ... Aplicada en Supabase
 Reception RLS ......... Aplicada y validada
 Reception Summary ..... Integrado con Business State
-OT Delete Command ..... Implementado localmente; validación remota pendiente
-OT Delete RPC ......... Migración preparada; no aplicada
+OT Delete Command ..... Implementado y validado remotamente
+OT Delete RPC ......... Implementada y validada remotamente
 OT Tombstone .......... Implementada localmente
+Inactive Purchases .... Corrección implementada
 Read-only ............. Estable
 Integrity Audit ....... Certificada
 Hardening ............. Completado
@@ -1525,6 +1898,16 @@ Smart Cut Engine ...... Técnicamente completo y congelado
 Smart Cut UI .......... Completa
 Smart Cut Proposal .... Completa
 Smart Cut Active Mode . Completo
+Oversize Resolution ... Completado localmente con cobertura modular
+Material Calculator ... Operativo con resolución reversible y trazable
+Inventory Engine ...... Implementado localmente por movimientos
+Inventory 25.6A ....... Lotes, ubicaciones, transferencias, Kardex y snapshots implementados
+Inventory Remote ...... 25.6C integrada; ENTRY_PURCHASE y REVERSAL idempotentes
+Inventory Table ....... `public.inventory_movements` como única fuente de verdad
+Inventory RLS ......... Aplicada; sin DELETE para `authenticated`
+Inventory Sync ........ Concreto y conectado
+Inventory Realtime .... Privado por workspace; `Subscribed` validado
+Inventory UI .......... Inventario General + vista/distribución informativa por proyecto
 Optimization Sessions . Durable local + remoto, integrado con Cotización
 Experiencia Sessions .. Ciclo de vida consolidado y validado
 Working Input ......... Fuente editable canónica

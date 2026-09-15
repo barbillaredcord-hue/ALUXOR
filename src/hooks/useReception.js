@@ -5,6 +5,7 @@ import {
 } from '../lib/receptions/receptionRepositoryProvider.js';
 import {
   createReception as createReceptionEntity,
+  updateReception as updateReceptionEntity,
 } from '../lib/receptions/receptionEngine.js';
 import { canMutateReception } from '../lib/receptions/receptionGuards.js';
 import {
@@ -67,6 +68,12 @@ export function buildReceptionInput({
           damagedQuantity: damaged,
           rejectedQuantity: rejected,
           missingQuantity: missing,
+          excessDecision: row.excessDecision || 'none',
+          shortageClosed: row.shortageClosed === true,
+          shortageReason: row.shortageReason || '',
+          actualUnitCost: row.actualUnitCost,
+          additionalCharges: Number(row.additionalCharges || 0),
+          discounts: Number(row.discounts || 0),
           observations: row.observations || '',
           evidence: Array.isArray(row.evidence) ? row.evidence : [],
           createdAt: now,
@@ -86,6 +93,7 @@ export default function useReception({
   purchases = [],
   productionOrders = [],
   quotes = [],
+  corrections = [],
   selectedPurchaseId = null,
   repository = ReceptionApplicationRepository,
 } = {}) {
@@ -94,6 +102,7 @@ export default function useReception({
   const [receptionError, setReceptionError] = useState('');
   const [receptionSyncStatus, setReceptionSyncStatus] = useState('Recepción local');
   const [receptionConflicts, setReceptionConflicts] = useState([]);
+  const [receptionHydratedWorkspaceId, setReceptionHydratedWorkspaceId] = useState(null);
   const contextRef = useRef({ workspaceId: null, userId: null });
   const workspaceId = activeWorkspace?.id || null;
   const userId = authSession?.user?.id || null;
@@ -102,6 +111,7 @@ export default function useReception({
   const refreshReceptions = useCallback(async () => {
     if (!workspaceId || !userId) {
       setReceptions([]);
+      setReceptionHydratedWorkspaceId(null);
       return { data: [], error: null };
     }
     setReceptionLoading(true);
@@ -119,6 +129,7 @@ export default function useReception({
       return result;
     }
     setReceptions(result.data || []);
+    setReceptionHydratedWorkspaceId(workspaceId);
     setReceptionError('');
     setReceptionSyncStatus(
       result.syncStatus === 'synced'
@@ -131,6 +142,7 @@ export default function useReception({
   useEffect(() => {
     if (['suspended', 'revoked'].includes(workspaceAccessStatus)) {
       setReceptions([]);
+      setReceptionHydratedWorkspaceId(null);
       return undefined;
     }
     void refreshReceptions();
@@ -176,17 +188,18 @@ export default function useReception({
 
   const activePurchaseView = useMemo(() => (
     activePurchase
-      ? getPurchaseReceptionView(activePurchase, receptions)
+      ? getPurchaseReceptionView(activePurchase, receptions, corrections)
       : null
-  ), [activePurchase, receptions]);
+  ), [activePurchase, corrections, receptions]);
 
   const receptionInbox = useMemo(() => selectReceptionInbox({
     workspaceId,
     receptions,
+    corrections,
     purchases,
     productionOrders,
     quotes,
-  }), [productionOrders, purchases, quotes, receptions, workspaceId]);
+  }), [corrections, productionOrders, purchases, quotes, receptions, workspaceId]);
 
   const receptionEvents = useMemo(() => getReceptionOperationalEvents({
     receptions,
@@ -200,10 +213,11 @@ export default function useReception({
   const receptionSummary = useMemo(() => getReceptionSummary({
     workspaceId,
     receptions,
+    corrections,
     purchases,
     productionOrders,
     quotes,
-  }), [productionOrders, purchases, quotes, receptions, workspaceId]);
+  }), [corrections, productionOrders, purchases, quotes, receptions, workspaceId]);
 
   const pendingOperations = useMemo(() => (
     workspaceId
@@ -275,14 +289,28 @@ export default function useReception({
         },
       };
     }
-    const result = await repository.deleteReception(
+    const version = Number.isInteger(expectedVersion) ? expectedVersion : current.version;
+    const changedAt = new Date().toISOString();
+    const reversed = updateReceptionEntity(current, {
+      revertedAt: changedAt,
+      revertedBy: userId,
+      reversalReason: 'Reversión desde el flujo oficial de Recepción.',
+    }, {
+      expectedVersion: version,
+      changedAt,
+      changedBy: userId,
+      purchase: purchases.find((purchase) => purchase.id === current.purchaseId),
+      existingReceptions: receptions,
+    });
+    if (reversed.error) return reversed;
+    const result = await repository.updateReception(
       workspaceId,
-      receptionId,
-      expectedVersion,
+      reversed.data,
+      version,
     );
     if (!result.error) {
-      setReceptions((current) => current.filter((item) => (
-        item.id !== receptionId
+      setReceptions((records) => records.map((item) => (
+        item.id === receptionId ? result.data : item
       )));
     }
     return result;
@@ -301,6 +329,7 @@ export default function useReception({
     receptionError,
     receptionSyncStatus,
     receptionConflicts,
+    receptionReady: receptionHydratedWorkspaceId === workspaceId,
     receptionSummary,
     receptionInbox,
     receptionEvents,

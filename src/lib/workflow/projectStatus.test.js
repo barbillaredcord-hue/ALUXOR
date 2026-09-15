@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   PURCHASE_MATERIAL_STATES,
   PRODUCTION_OPERATIONAL_STATES,
+  getProductionOperationalLabel,
   getProductionOperationalState,
   getProjectStatusSummary,
   getPurchaseMaterialState,
@@ -66,6 +67,46 @@ describe('estado canónico del proyecto', () => {
     expect({ quote, productionOrder, inputPurchase }).toEqual(snapshot);
     expect(quote.status).toBe('Aceptada');
     expect(productionOrder.estado).toBe('Pendiente');
+  });
+
+  it('deriva Materiales disponibles solo con compra y recepción completas', () => {
+    const productionOrder = order();
+    const purchaseState = getPurchaseMaterialState([purchase(['recibido'])], productionOrder);
+
+    expect(getProductionOperationalState(productionOrder, purchaseState, {
+      status: 'complete',
+      incidents: 0,
+    })).toBe(PRODUCTION_OPERATIONAL_STATES.MATERIAL_AVAILABLE);
+    expect(getProductionOperationalState(productionOrder, purchaseState, {
+      status: 'partial',
+      incidents: 0,
+    })).toBe(PRODUCTION_OPERATIONAL_STATES.WAITING_RECEPTION);
+    expect(getProductionOperationalState(productionOrder, purchaseState, {
+      status: 'complete',
+      incidents: 1,
+    })).not.toBe(PRODUCTION_OPERATIONAL_STATES.MATERIAL_AVAILABLE);
+  });
+
+  it('corrige la etiqueta visible aunque la OT durable conserve Esperando compras', () => {
+    const productionOrder = order('Esperando compras');
+    const purchases = [purchase(['comprado'], {
+      items: [{
+        id: 'i-0', status: 'comprado', requiredQuantity: 10, purchasedQuantity: 10,
+      }],
+    })];
+    const purchaseState = getPurchaseMaterialState(purchases, productionOrder);
+    expect(purchaseState).toBe(PURCHASE_MATERIAL_STATES.RECEIVED);
+    const operationalState = getProductionOperationalState(productionOrder, purchaseState, {
+      status: 'complete',
+      incidents: 0,
+    });
+
+    expect(productionOrder.estado).toBe('Esperando compras');
+    expect(getProductionOperationalLabel(operationalState)).toBe('Materiales disponibles');
+    expect(getProductionOperationalState(productionOrder, purchaseState, {
+      status: 'partial',
+      incidents: 0,
+    })).toBe(PRODUCTION_OPERATIONAL_STATES.WAITING_RECEPTION);
   });
 
   it.each([

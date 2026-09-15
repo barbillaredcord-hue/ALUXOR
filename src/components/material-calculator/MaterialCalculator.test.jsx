@@ -95,6 +95,55 @@ describe('MaterialCalculator', () => {
     expect(markup).toContain('Selecciona al menos una pieza');
   });
 
+  it('integra la alerta útil para una pieza sobredimensionada sin aplicarla', () => {
+    const markup = renderToStaticMarkup(
+      <MaterialCalculator
+        context={context}
+        pieces={[{
+          id: 'oversize', nombre: 'Panel largo', ancho: 67, alto: 263, cantidad: 1,
+        }]}
+        materials={[{ id: 'm1', nombre: 'Melamina' }]}
+        initialSelectedPieceIds={['oversize']}
+        onApplyOversizeProposal={() => ({ applied: false })}
+      />,
+    );
+    expect(markup).toContain('Pieza sobredimensionada detectada');
+    expect(markup).toContain('Panel largo');
+    expect(markup).toContain('19 cm largo');
+    expect(markup).toContain('Resolver pieza');
+    expect(markup).toContain('aria-expanded="false"');
+    expect(markup).toContain('Formatos comerciales compatibles');
+    expect(markup).toContain('Permitir propuestas de una división');
+    expect(markup).toContain('Comportamiento del material');
+    expect(markup).toContain('Cobertura modular');
+  });
+
+  it('muestra configuración modular únicamente para hoja o tablero', () => {
+    const modularInput = {
+      type: 'sheet',
+      materialId: 'm1',
+      selectedPieceIds: ['p1'],
+      unit: 'cm',
+      formatWidth: 16,
+      formatHeight: 290,
+      materialLayoutType: 'MODULAR_PLANK',
+      installationOrientation: 'vertical',
+      jointGap: 0.5,
+      allowSideTrim: true,
+    };
+    const markup = renderToStaticMarkup(
+      <MaterialCalculator
+        context={context}
+        pieces={pieces}
+        materials={[{ id: 'm1', nombre: 'Lambrín nogal' }]}
+        legacyOptimizationInput={modularInput}
+      />,
+    );
+    expect(markup).toContain('Comportamiento del material');
+    expect(markup).toContain('Hoja completa');
+    expect(markup).toContain('Cobertura modular');
+  });
+
   it('aplica las métricas del candidato visualmente seleccionado y no las de Shelf', () => {
     const shelf = {
       id: 'shelf-id',

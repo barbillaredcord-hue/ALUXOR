@@ -161,6 +161,22 @@ export function normalizeMeasureItem(item, index = 0, data = {}, helpers = {}) {
   const { clean, positiveNumber } = withHelpers(helpers);
   const groupId = clean(item?.groupId);
   const materialAssignments = normalizeMaterialAssignments(item?.materialAssignments, helpers);
+  const sourcePieceId = clean(item?.sourcePieceId);
+  const resolutionProposalId = clean(item?.resolutionProposalId);
+  const resolutionAlternativeId = clean(item?.resolutionAlternativeId);
+  const resolutionAlternativeType = clean(item?.resolutionAlternativeType);
+  const resolutionInputSignature = clean(item?.resolutionInputSignature);
+  const oversizeResolutionStatus = clean(item?.oversizeResolutionStatus);
+  const sectionIndex = positiveNumber(item?.sectionIndex);
+  const sectionCount = positiveNumber(item?.sectionCount);
+  const stripIndex = positiveNumber(item?.stripIndex);
+  const stripCount = positiveNumber(item?.stripCount);
+  const finishedCoverageWidth = positiveNumber(item?.finishedCoverageWidth);
+  const grossCutWidth = positiveNumber(item?.grossCutWidth);
+  const trimWidth = positiveNumber(item?.trimWidth);
+  const installationOrientation = clean(item?.installationOrientation);
+  const resolutionOriginalSheetWidth = positiveNumber(item?.resolutionOriginalSheetWidth);
+  const resolutionOriginalSheetHeight = positiveNumber(item?.resolutionOriginalSheetHeight);
   return {
     id: item?.id || `med-${Date.now()}-${index}`,
     nombre: clean(item?.nombre, index === 0 ? 'Medida principal' : `Medida ${index + 1}`),
@@ -172,6 +188,25 @@ export function normalizeMeasureItem(item, index = 0, data = {}, helpers = {}) {
     nota: clean(item?.nota),
     ...(groupId ? { groupId } : {}),
     ...(materialAssignments.length ? { materialAssignments } : {}),
+    ...(sourcePieceId ? { sourcePieceId } : {}),
+    ...(resolutionProposalId ? { resolutionProposalId } : {}),
+    ...(resolutionAlternativeId ? { resolutionAlternativeId } : {}),
+    ...(resolutionAlternativeType ? { resolutionAlternativeType } : {}),
+    ...(resolutionInputSignature ? { resolutionInputSignature } : {}),
+    ...(resolutionOriginalSheetWidth ? { resolutionOriginalSheetWidth } : {}),
+    ...(resolutionOriginalSheetHeight ? { resolutionOriginalSheetHeight } : {}),
+    ...(oversizeResolutionStatus ? { oversizeResolutionStatus } : {}),
+    ...(sectionIndex ? { sectionIndex } : {}),
+    ...(sectionCount ? { sectionCount } : {}),
+    ...(stripIndex ? { stripIndex } : {}),
+    ...(stripCount ? { stripCount } : {}),
+    ...(item?.modularCoverage === true ? { modularCoverage: true } : {}),
+    ...(finishedCoverageWidth ? { finishedCoverageWidth } : {}),
+    ...(grossCutWidth ? { grossCutWidth } : {}),
+    ...(item?.trimRequired === true ? { trimRequired: true } : {}),
+    ...(trimWidth ? { trimWidth } : {}),
+    ...(installationOrientation ? { installationOrientation } : {}),
+    ...(item?.optimizationExcluded === true ? { optimizationExcluded: true } : {}),
   };
 }
 

@@ -10,9 +10,18 @@ import PurchasesSection, {
   purchaseDraftFieldPending,
   purchaseEditorValuesEqual,
   reconcilePurchaseEditorDirtyFields,
+  resolvePurchaseProductionOrderId,
 } from '../PurchasesSection.jsx';
 
 const formatNumber = (value) => Number(value || 0).toFixed(0);
+
+describe('navegación Compras → Producción', () => {
+  it('resuelve la OT por UUID canónico', () => {
+    expect(resolvePurchaseProductionOrderId({ productionOrderId: 'ot-uuid' })).toBe('ot-uuid');
+    expect(resolvePurchaseProductionOrderId({ production_order_id: 'ot-snake' })).toBe('ot-snake');
+    expect(resolvePurchaseProductionOrderId({ projectName: 'No usar nombre' })).toBeNull();
+  });
+});
 
 describe('PurchasesSection durable', () => {
   it('bloquea la compra relacionada con una orden entregada', () => {
@@ -70,6 +79,46 @@ describe('PurchasesSection durable', () => {
     expect(markup).toContain('Proveedor Uno');
     expect(markup).toContain('MDF');
     expect(markup).toContain('Compra generada desde Orden de Producción');
+  });
+
+  it('muestra historial derivado, costos y movimientos dentro de la partida', () => {
+    const purchase = {
+      id: 'purchase-1', quoteId: 'quote-1', folio: 'OC-1', status: 'pendiente',
+      orderedAt: '', expectedAt: '', receivedAt: '', notes: '',
+      items: [{
+        id: 'item-1', group: 'Otros', name: 'Alfombra', unit: 'pieza',
+        quantity: 10, estimatedUnitCost: 8, estimatedTotalCost: 80,
+        unitCost: 10, totalCost: 100, status: 'comprado',
+      }],
+    };
+    const reception = {
+      id: 'reception-1', purchaseId: purchase.id, receivedBy: 'user-123456789',
+      receivedAt: '2026-08-03T01:00:00.000Z', observations: 'Entrega norte',
+      items: [{
+        id: 'reception-item-1', purchaseItemId: 'item-1', receivedQuantity: 4,
+        acceptedQuantity: 4, rejectedQuantity: 0, damagedQuantity: 0,
+        missingQuantity: 0, actualUnitCost: 9, additionalCharges: 2,
+        discounts: 1, observations: 'Lote correcto', version: 1,
+      }],
+    };
+    const markup = renderToStaticMarkup(<PurchasesSection
+      purchases={[purchase]}
+      activePurchase={purchase}
+      selectedPurchaseId={purchase.id}
+      receptions={[reception]}
+      inventoryMovements={[{
+        id: 'movement-123456789', receptionId: reception.id,
+        movementType: 'ENTRY_PURCHASE',
+        metadata: { receptionItemId: reception.items[0].id },
+      }]}
+      money={formatNumber}
+      decimal={formatNumber}
+    />);
+    expect(markup).toContain('Historial de recepción · 1');
+    expect(markup).toContain('Solicitado 10 · recibido 4 · aceptado 4');
+    expect(markup).toContain('Costo estimado original 80 · necesidad actual 80 · gasto real comprado 100 · costo recibido 37');
+    expect(markup).toContain('Lote correcto');
+    expect(markup).toContain('movement…');
   });
 
   it('muestra el índice vacío sin crear una compra automáticamente', () => {
@@ -289,5 +338,16 @@ describe('PurchasesSection durable', () => {
     />);
     expect(markup).toContain('Filtrar historial por proveedor');
     expect(markup).toContain('No hay compras que coincidan con los filtros.');
+  });
+
+  it('usa la diferencia física efectiva para mostrar la autorización de Owner', () => {
+    const ids = { workspace: '00000000-0000-4000-8000-000000000001', purchase: '00000000-0000-4000-8000-000000000002', item: '00000000-0000-4000-8000-000000000003', reception: '00000000-0000-4000-8000-000000000004', receptionItem: '00000000-0000-4000-8000-000000000005', review: '00000000-0000-4000-8000-000000000006', correction: '00000000-0000-4000-8000-000000000007', actor: '00000000-0000-4000-8000-000000000008', key: '00000000-0000-4000-8000-000000000009' };
+    const purchase = { id: ids.purchase, workspaceId: ids.workspace, folio: 'OC-1', status: 'pendiente', items: [{ id: ids.item, name: 'Corredera', unit: 'pieza', quantity: 10, purchasedQuantity: 10, version: 1 }] };
+    const reception = { id: ids.reception, workspaceId: ids.workspace, purchaseId: ids.purchase, items: [{ id: ids.receptionItem, workspaceId: ids.workspace, receptionId: ids.reception, purchaseId: ids.purchase, purchaseItemId: ids.item, receivedQuantity: 10, acceptedQuantity: 10, version: 1 }] };
+    const review = { id: ids.review, workspaceId: ids.workspace, purchaseId: ids.purchase, purchaseItemId: ids.item, receptionId: ids.reception, status: 'requires_reception_action', requestedPurchasedQuantity: 5, currentAcceptedQuantity: 10, version: 1, updatedAt: '2026-08-08T00:00:00.000Z' };
+    const props = { purchases: [purchase], activePurchase: purchase, selectedPurchaseId: ids.purchase, workspaceId: ids.workspace, actorRole: 'owner', receptions: [reception], receptionInbox: [{ purchaseItemId: ids.item, acceptedQuantity: 10 }], purchaseQuantityReviewRequests: [review], money: formatNumber, decimal: formatNumber };
+    expect(renderToStaticMarkup(<PurchasesSection {...props} />)).toContain('Autorizar corrección física');
+    const correction = { id: ids.correction, workspaceId: ids.workspace, receptionId: ids.reception, receptionItemId: ids.receptionItem, purchaseId: ids.purchase, purchaseItemId: ids.item, correctionType: 'REAL_DATA_CORRECTION', status: 'active', version: 2, previousValues: { receivedQuantity: 10, acceptedQuantity: 10 }, newValues: { receivedQuantity: 10, acceptedQuantity: 5 }, reason: 'Conteo', notes: '', occurredAt: '2026-08-08T01:00:00.000Z', createdBy: ids.actor, createdAt: '2026-08-08T01:00:00.000Z', updatedAt: '2026-08-08T01:00:00.000Z', idempotencyKey: ids.key, reversalOfId: null };
+    expect(renderToStaticMarkup(<PurchasesSection {...props} corrections={[correction]} />)).not.toContain('Autorizar corrección física');
   });
 });

@@ -4,6 +4,7 @@ import {
 } from './receptionEngine.js';
 import {
   getLatestReception,
+  getEffectivePurchasedQuantity,
   getPurchaseReceptionView,
   getReceptionNotifications,
   getReceptionOperationalEvents,
@@ -20,6 +21,7 @@ export function getReceptionSummary({
   productionOrders = [],
   quotes = [],
   workspaceId = null,
+  corrections = [],
 } = {}) {
   const scopedReceptions = values(receptions).filter((item) => (
     !workspaceId || item?.workspaceId === workspaceId
@@ -50,6 +52,18 @@ export function getReceptionSummary({
     completeItems: 0,
     rejectedItems: 0,
     incidentItems: 0,
+    purchasePendingItems: 0,
+    receptionPendingItems: 0,
+    materialsReadyItems: 0,
+    receptionCompleteButPurchaseMissingItems: 0,
+    requiredQuantity: 0,
+    orderedQuantity: 0,
+    purchasedQuantity: 0,
+    purchasePendingQuantity: 0,
+    receptionPendingQuantity: 0,
+    projectMissingQuantity: 0,
+    surplusPurchasedQuantity: 0,
+    surplusReceivedQuantity: 0,
     pendingByUnit: [],
     recentReceptions: 0,
     activity: [],
@@ -58,16 +72,16 @@ export function getReceptionSummary({
   let purchasedQuantity = 0;
   let acceptedForProgress = 0;
   scopedPurchases.forEach((purchase) => {
-    const view = getPurchaseReceptionView(purchase, scopedReceptions);
+    const view = getPurchaseReceptionView(purchase, scopedReceptions, corrections);
     summary.purchases += 1;
     summary[view.status] += 1;
     view.items.forEach(({ purchaseItem, accumulated }) => {
-      const purchased = Math.max(0, Number(purchaseItem.quantity) || 0);
+      const purchased = getEffectivePurchasedQuantity(purchaseItem);
       purchasedQuantity += purchased;
       acceptedForProgress += Math.min(purchased, accumulated.accepted);
     });
   });
-  const totals = getReceptionAccumulatedQuantities(scopedReceptions);
+  const totals = getReceptionAccumulatedQuantities(scopedReceptions, null, corrections);
   summary.receivedQuantity = totals.received;
   summary.acceptedQuantity = totals.accepted;
   summary.damagedQuantity = totals.damaged;
@@ -111,6 +125,7 @@ export function getReceptionSummary({
     workspaceId,
     purchases: scopedPurchases,
     receptions: scopedReceptions,
+    corrections,
     productionOrders,
     quotes,
   });
@@ -119,10 +134,26 @@ export function getReceptionSummary({
     summary.items += 1;
     summary[`${item.status}Items`] += 1;
     if (item.hasOpenIncidents) summary.incidentItems += 1;
-    if (item.pendingQuantity > 0) {
+    summary.requiredQuantity += item.requiredQuantity;
+    summary.orderedQuantity += item.orderedQuantity;
+    summary.purchasedQuantity += item.purchasedQuantity;
+    summary.purchasePendingQuantity += item.purchasePendingQuantity;
+    summary.receptionPendingQuantity += item.receptionPendingQuantity;
+    summary.projectMissingQuantity += item.projectMissingQuantity;
+    summary.surplusPurchasedQuantity += item.surplusPurchasedQuantity;
+    summary.surplusReceivedQuantity += item.surplusReceivedQuantity;
+    if (item.purchasePendingQuantity > 0) summary.purchasePendingItems += 1;
+    if (item.receptionPendingQuantity > 0) summary.receptionPendingItems += 1;
+    if (item.globalMaterialStatus === 'READY' || item.globalMaterialStatus === 'SURPLUS') {
+      summary.materialsReadyItems += 1;
+    }
+    if (item.receptionPendingQuantity === 0 && item.purchasePendingQuantity > 0) {
+      summary.receptionCompleteButPurchaseMissingItems += 1;
+    }
+    if (item.receptionPendingQuantity > 0) {
       pendingByUnit.set(
         item.unit,
-        (pendingByUnit.get(item.unit) || 0) + item.pendingQuantity,
+        (pendingByUnit.get(item.unit) || 0) + item.receptionPendingQuantity,
       );
     }
   });

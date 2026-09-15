@@ -30,7 +30,7 @@ function normalizeResult(row) {
   return { workspace, membership };
 }
 
-export async function getCurrentWorkspace(userId) {
+export async function getCurrentWorkspace(userId, preferredWorkspaceId = '') {
   if (!userId) {
     return { workspace: null, membership: null, error: new Error('No se pudo identificar al usuario.') };
   }
@@ -47,12 +47,40 @@ export async function getCurrentWorkspace(userId) {
     const workspace = Array.isArray(row.workspace) ? row.workspace[0] : row.workspace;
     return workspace && !workspace.deleted_at;
   }) ?? [];
-  const activeRow = activeRows.find((row) => {
+  const preferredRow = activeRows.find((row) => {
+    const workspace = Array.isArray(row.workspace) ? row.workspace[0] : row.workspace;
+    return workspace?.id === preferredWorkspaceId;
+  });
+  const activeRow = preferredRow || activeRows.find((row) => {
     const workspace = Array.isArray(row.workspace) ? row.workspace[0] : row.workspace;
     return workspace?.is_shared;
-  }) ?? activeRows[0];
+  }) || activeRows[0];
 
   return { ...normalizeResult(activeRow), error: null };
+}
+
+export async function listWorkspaces(userId) {
+  if (!userId) return { data: [], error: new Error('No se pudo identificar al usuario.') };
+  const { data, error } = await supabase
+    .from('workspace_members')
+    .select(membershipSelection)
+    .eq('user_id', userId)
+    .eq('membership_status', 'active')
+    .order('created_at', { ascending: true });
+  const rows = (data || []).map(normalizeResult).filter((entry) => entry.workspace && !entry.workspace.deleted_at);
+  return { data: rows, error };
+}
+
+export async function createWorkspace(name) {
+  const { data, error } = await supabase.rpc('create_workspace', {
+    p_workspace_name: String(name || '').trim(),
+  });
+  if (error) return { workspace: null, membership: null, error };
+  return {
+    workspace: data?.workspace || null,
+    membership: data?.membership || null,
+    error: null,
+  };
 }
 
 export async function createInitialWorkspace({ name }) {
@@ -207,6 +235,8 @@ export const subscribeWorkspaceSettings = (workspaceId, onChange) => subscribeTo
 
 export const WorkspaceService = {
   getCurrentWorkspace,
+  listWorkspaces,
+  createWorkspace,
   createInitialWorkspace,
   getWorkspaceMembership,
   loadAccessRequests,

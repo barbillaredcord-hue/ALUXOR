@@ -338,11 +338,20 @@
 }
 
 .operational-dashboard-card.is-expanded .operational-dashboard-card__expansion {
-  max-height: 220px;
+  max-height: min(320px, 48vh);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   opacity: 1;
   pointer-events: auto;
   visibility: visible;
   transition-delay: 0s;
+}
+
+@media (max-width: 760px) {
+  .operational-dashboard-card.is-expanded .operational-dashboard-card__expansion {
+    max-height: min(280px, 52vh);
+  }
 }
 
 .operational-dashboard-card__content {

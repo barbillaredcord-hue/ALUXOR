@@ -31,6 +31,9 @@ export function receptionToRemoteRow(reception) {
     updated_at: value.updatedAt,
     created_by: value.createdBy,
     last_modified_by: value.lastModifiedBy,
+    reverted_at: value.revertedAt,
+    reverted_by: value.revertedBy || null,
+    reversal_reason: value.reversalReason || null,
   };
 }
 
@@ -47,6 +50,12 @@ export function receptionItemToRemoteRow(item) {
     damaged_quantity: value.damagedQuantity,
     rejected_quantity: value.rejectedQuantity,
     missing_quantity: value.missingQuantity,
+    excess_decision: value.excessDecision,
+    shortage_closed: value.shortageClosed,
+    shortage_reason: value.shortageReason || null,
+    actual_unit_cost: value.actualUnitCost,
+    additional_charges: value.additionalCharges,
+    discounts: value.discounts,
     observations: value.observations || null,
     evidence: [...value.evidence],
     version: value.version,
@@ -69,6 +78,12 @@ export function receptionItemFromRemoteRow(row = {}) {
     damagedQuantity: row.damaged_quantity,
     rejectedQuantity: row.rejected_quantity,
     missingQuantity: row.missing_quantity,
+    excessDecision: row.excess_decision,
+    shortageClosed: row.shortage_closed,
+    shortageReason: row.shortage_reason,
+    actualUnitCost: row.actual_unit_cost,
+    additionalCharges: row.additional_charges,
+    discounts: row.discounts,
     observations: row.observations,
     evidence: row.evidence,
     version: row.version,
@@ -95,6 +110,9 @@ export function receptionFromRemoteRow(row = {}, itemRows = []) {
     updatedAt: row.updated_at,
     createdBy: row.created_by,
     lastModifiedBy: row.last_modified_by,
+    revertedAt: row.reverted_at,
+    revertedBy: row.reverted_by,
+    reversalReason: row.reversal_reason,
     items: itemRows.map(receptionItemFromRemoteRow),
   });
 }

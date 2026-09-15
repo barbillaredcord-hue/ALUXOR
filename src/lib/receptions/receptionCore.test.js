@@ -119,7 +119,7 @@ describe('núcleo durable de Recepción', () => {
   it('deriva selectors y summary sin escribir acumulados', () => {
     const view = getPurchaseReceptionView(purchase, [value]);
     expect(view.items[0]).toMatchObject({
-      pendingQuantity: 6,
+      receptionPendingQuantity: 6,
       status: 'partial',
     });
     expect(getReceptionProgress(purchase, [value])).toBe(40);

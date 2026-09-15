@@ -355,13 +355,6 @@ export default function QuoteSection({
                       Abrir BR Material Studio
                     </button>
                   </div>
-                  <div className="form-grid material-base-grid">
-                    <Field id="materialCotizacion" label="Material cotización" {...guideFor('materialCotizacion')}>{input('materialCotizacion')}</Field>
-                    <Field id="precioM2" label="Precio m²" {...guideFor('precioM2')}>{input('precioM2', 'number')}</Field>
-                    <Field id="costoMaterialM2" label="Costo m²" {...guideFor('costoMaterialM2')}>{input('costoMaterialM2', 'number')}</Field>
-                    <Field id="merma" label="Merma %" {...guideFor('merma')}>{input('merma', 'number')}</Field>
-                    <Field id="margenMaterial" label="Margen %" {...guideFor('margenMaterial')}>{input('margenMaterial', 'number')}</Field>
-                  </div>
                   <div className="quote-table quote-materials-table">
                     <div className="quote-table-header">Material</div>
                     <div className="quote-table-header">Categoría</div>

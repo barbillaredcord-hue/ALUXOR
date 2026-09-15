@@ -15,8 +15,18 @@ import {
 import { PurchaseRepository } from '../lib/purchases/purchaseRepository.js';
 import { PurchaseStorage } from '../lib/purchases/purchaseStorage.js';
 import { PurchaseOfflineQueue } from '../lib/purchases/purchaseOfflineQueue.js';
+import { buildPurchaseItemAmendment } from '../lib/purchases/purchaseAmendment.js';
 
 const AUTOSAVE_DELAY_MS = 700;
+
+function isDeterministicAmendmentError(error) {
+  const code = String(error?.code || '').toUpperCase();
+  const message = String(error?.message || '').toUpperCase();
+  return code === 'P0001'
+    || message.includes('INVALID_ACTOR')
+    || message.includes('PURCHASE_PERMISSION_DENIED')
+    || message.includes('WORKSPACE_ACCESS_DENIED');
+}
 
 export function isPendingPurchaseCreate(queue, purchaseId) {
   return String(purchaseId || '').startsWith('purchase-')
@@ -88,6 +98,19 @@ export function mergePendingPurchaseItem(remoteItem, localItem) {
   ) return localItem;
   const remote = normalizePurchaseItem(remoteItem);
   const local = normalizePurchaseItem(localItem);
+  if (local.pendingAmendment) {
+    if (remote.version !== local.pendingExpectedVersion) {
+      return normalizePurchaseItem({ ...local, amendmentConflict: true,
+        amendmentConflictDetails: {
+          operation: 'amendPurchaseItem', localVersion: local.pendingExpectedVersion,
+          remoteVersion: remote.version, localValue: local.pendingAmendment.requestedChanges,
+          remoteValue: Object.fromEntries(Object.keys(local.pendingAmendment.requestedChanges || {})
+            .map((field) => [field, remote[field]])), remoteSnapshot: remote,
+        },
+      });
+    }
+    return local;
+  }
   const pendingFields = Array.isArray(local.pendingFields) ? local.pendingFields : [];
   if (!local.pendingSync || !pendingFields.length) return remote;
   const unresolved = pendingFields.filter((field) => !fieldValuesEqual(
@@ -588,6 +611,7 @@ export default function usePurchases({
           purchaseId: remoteCandidate.id,
           itemId: item.id,
           expectedVersion: item.pendingExpectedVersion || item.version,
+          payload: item,
         });
       });
       if (remoteCandidate.pendingSync) {
@@ -632,12 +656,25 @@ export default function usePurchases({
     if (!workspaceId || !itemSnapshot?.id) return false;
     const purchase = purchasesRef.current.find((entry) => entry.id === purchaseId);
     if (purchaseIsReadOnly(purchase)) return false;
-    let result = await PurchaseRepository.updatePurchaseItemRemote(
-      workspaceId,
-      itemSnapshot,
-      itemSnapshot.pendingExpectedVersion || itemSnapshot.version,
-    );
-    if (result.error?.code === 'PURCHASE_VERSION_CONFLICT') {
+    const amendment = itemSnapshot.pendingAmendment;
+    if (amendment && !contextRef.current.userId) {
+      return false;
+    }
+    let result = amendment
+      ? await PurchaseRepository.amendPurchaseItemRemote({
+        ...amendment,
+        workspaceId,
+        purchaseId,
+        purchaseItemId: itemSnapshot.id,
+        expectedVersion: itemSnapshot.pendingExpectedVersion || itemSnapshot.version,
+        actorId: contextRef.current.userId,
+      })
+      : await PurchaseRepository.updatePurchaseItemRemote(
+        workspaceId,
+        itemSnapshot,
+        itemSnapshot.pendingExpectedVersion || itemSnapshot.version,
+      );
+    if (result.error?.code === 'PURCHASE_VERSION_CONFLICT' && !amendment) {
       const remote = await PurchaseRepository.getPurchaseItem(workspaceId, itemSnapshot.id);
       if (remote.data && !remote.error) {
         const rebased = mergePendingPurchaseItem(remote.data, itemSnapshot);
@@ -650,10 +687,46 @@ export default function usePurchases({
           : { data: remote.data, error: null };
       }
     }
-    if (result.error || !result.data) return false;
+    let conflictRemote = null;
+    if (amendment && result.error?.code === 'PURCHASE_VERSION_CONFLICT') {
+      const remote = await PurchaseRepository.getPurchaseItem(workspaceId, itemSnapshot.id);
+      if (!remote.error && remote.data) conflictRemote = remote.data;
+    }
+    if (result.error || !result.data) {
+      const rpcError = result.error;
+      if (amendment && isDeterministicAmendmentError(rpcError)) {
+        PurchaseOfflineQueue.block(workspaceId, purchaseId, itemSnapshot.id, rpcError?.message || rpcError?.code);
+      }
+      setPurchasesError([
+        rpcError?.code,
+        rpcError?.message,
+        rpcError?.details,
+        rpcError?.hint,
+      ].filter(Boolean).join(' · ') || 'La RPC amend_purchase_item no devolvió una partida.');
+      if (amendment) setPurchaseItems(purchaseId, (items) => items.map((item) => (
+        item.id === itemSnapshot.id ? normalizePurchaseItem({ ...item,
+          amendmentConflict: result.error?.code === 'PURCHASE_VERSION_CONFLICT',
+          amendmentConflictDetails: {
+            operation: 'amendPurchaseItem', localVersion: itemSnapshot.pendingExpectedVersion,
+            errorCode: result.error?.code, message: result.error?.message,
+            localValue: amendment.requestedChanges,
+            remoteVersion: conflictRemote?.version,
+            remoteValue: conflictRemote ? Object.fromEntries(
+              Object.keys(amendment.requestedChanges || {}).map((field) => (
+                [field, conflictRemote[field]]
+              )),
+            ) : null,
+            remoteSnapshot: conflictRemote,
+          },
+        }) : item
+      )));
+      return false;
+    }
     const latestPurchase = purchasesRef.current.find((purchase) => purchase.id === purchaseId);
     const latestItem = latestPurchase?.items.find((item) => item.id === itemSnapshot.id);
-    const savedItem = latestItem?.pendingSync
+    const savedItem = amendment
+      ? result.data
+      : latestItem?.pendingSync
       ? mergePendingPurchaseItem(result.data, latestItem)
       : result.data;
     setPurchaseItems(purchaseId, (items) => items.map((item) => (
@@ -665,6 +738,7 @@ export default function usePurchases({
         purchaseId,
         itemId: savedItem.id,
         expectedVersion: savedItem.pendingExpectedVersion || savedItem.version,
+        payload: savedItem,
       });
     } else {
       PurchaseOfflineQueue.remove(workspaceId, purchaseId, savedItem.id);
@@ -686,6 +760,13 @@ export default function usePurchases({
     }
     const purchase = purchasesRef.current.find((entry) => entry.id === purchaseId);
     const item = purchase?.items.find((entry) => entry.id === itemId);
+    const queuedOperation = PurchaseOfflineQueue.load(purchase?.workspaceId)
+      .find((operation) => operation.type === 'updateItem'
+        && operation.purchaseId === purchaseId && operation.itemId === itemId);
+    if (queuedOperation?.blockedReason) {
+      setPurchasesError(`Sincronización bloqueada: ${queuedOperation.blockedReason}`);
+      return false;
+    }
     if (purchaseIsReadOnly(purchase)) return false;
     if (!item?.pendingSync) return true;
     if (!navigator.onLine || isPendingPurchaseCreate(
@@ -739,16 +820,18 @@ export default function usePurchases({
 
   async function syncPendingPurchases() {
     const { userId, workspaceId } = contextRef.current;
-    if (!userId || !workspaceId || syncRef.current || !navigator.onLine) return;
+    if (!userId || !workspaceId || syncRef.current || !navigator.onLine) return { synced: false, reason: 'unavailable' };
     const queue = PurchaseOfflineQueue.load(workspaceId);
-    if (!queue.length) return;
+    if (!queue.length) return { synced: true, pending: 0 };
     syncRef.current = true;
     let failed = false;
     try {
       for (const operation of queue) {
         if (contextRef.current.workspaceId !== workspaceId) return;
-        const purchase = PurchaseStorage.loadPurchases(workspaceId)
-          .find((item) => item.id === operation.purchaseId);
+        if (operation.blockedReason) continue;
+        const purchase = purchasesRef.current.find((item) => item.id === operation.purchaseId)
+          || PurchaseStorage.loadPurchases(workspaceId)
+            .find((item) => item.id === operation.purchaseId);
         if (!purchase) {
           failed = true;
           continue;
@@ -758,12 +841,14 @@ export default function usePurchases({
           continue;
         }
         if (operation.type === 'updateItem') {
-          const item = purchase.items.find((entry) => entry.id === operation.itemId);
+          const item = operation.payload
+            || purchase.items.find((entry) => entry.id === operation.itemId);
           if (!item || !(await savePendingPurchaseItem(purchase.id, item))) failed = true;
         } else if (!(await savePendingPurchase(purchase))) failed = true;
       }
-      setPurchasesError(failed ? 'Cambios de Compras pendientes de sincronizar.' : '');
+      if (!failed) setPurchasesError('');
       setPurchasesSyncStatus(failed ? 'Compras pendientes de sincronizar' : 'Compras sincronizadas');
+      return { synced: !failed, pending: failed ? PurchaseOfflineQueue.load(workspaceId).length : 0 };
     } finally {
       syncRef.current = false;
     }
@@ -904,6 +989,7 @@ export default function usePurchases({
       purchaseId,
       itemId,
       expectedVersion,
+      payload: nextItem,
     });
     const key = `${purchaseId}:${itemId}`;
     const control = itemSaveControlsRef.current.get(key) || {
@@ -916,6 +1002,50 @@ export default function usePurchases({
     if (!isPendingPurchaseCreate(
       PurchaseOfflineQueue.load(current.workspaceId), purchaseId,
     )) schedulePurchaseItemSave(purchaseId, itemId);
+    return true;
+  }
+
+  function amendPurchaseItem(purchaseId, itemId, input = {}) {
+    const purchase = purchasesRef.current.find((entry) => entry.id === purchaseId);
+    const item = purchase?.items.find((entry) => entry.id === itemId);
+    if (!purchase || !item || purchaseIsReadOnly(purchase)) return false;
+    try {
+      const command = buildPurchaseItemAmendment({
+        ...input,
+        workspaceId: purchase.workspaceId,
+        purchase,
+        purchaseItem: item,
+        expectedVersion: item.version,
+        actorId: contextRef.current.userId,
+      });
+      setPurchaseItems(purchaseId, (items) => items.map((entry) => (
+        entry.id === itemId ? command.optimisticItem : entry
+      )));
+      PurchaseOfflineQueue.enqueue(purchase.workspaceId, {
+        type: 'updateItem', purchaseId, itemId, expectedVersion: item.version,
+        payload: command.optimisticItem,
+      });
+      setPurchasesSyncStatus('Corrección guardada localmente · sincronización manual pendiente');
+      return true;
+    } catch (caught) {
+      setPurchasesError(caught?.message || 'No se pudo preparar la corrección.');
+      return false;
+    }
+  }
+
+  async function updatePurchaseItemFromRemote(purchaseId, itemId) {
+    const workspaceId = contextRef.current.workspaceId;
+    const result = await PurchaseRepository.getPurchaseItem(workspaceId, itemId);
+    if (result.error || !result.data) {
+      setPurchasesError(result.error?.message || 'No se pudo cargar la versión remota.');
+      return false;
+    }
+    setPurchaseItems(purchaseId, (items) => items.map((item) => (
+      item.id === itemId ? result.data : item
+    )));
+    PurchaseOfflineQueue.remove(workspaceId, purchaseId, itemId);
+    setPurchasesError('');
+    setPurchasesSyncStatus('Versión remota aplicada');
     return true;
   }
 
@@ -1001,6 +1131,7 @@ export default function usePurchases({
           purchaseId: remoteSaved.id,
           itemId: item.id,
           expectedVersion: item.pendingExpectedVersion || item.version,
+          payload: item,
         });
       });
       if (contextRef.current.workspaceId !== workspaceId) return remoteSaved;
@@ -1041,21 +1172,18 @@ export default function usePurchases({
     setSelectedPurchaseId(resolvePurchaseSelection(cached, null, persistedSelection));
     const refresh = async () => {
       if (!navigator.onLine) return;
-      await syncPendingPurchases();
       await loadRemotePurchases();
     };
     const visibility = () => {
       if (document.visibilityState === 'visible') void refresh();
     };
     void refresh();
-    window.addEventListener('online', refresh);
     window.addEventListener('focus', refresh);
     document.addEventListener('visibilitychange', visibility);
     return () => {
       requestRef.current = { id: requestRef.current.id + 1, inFlight: false, pending: false };
       clearPurchaseAutosaves();
       clearItemAutosaves();
-      window.removeEventListener('online', refresh);
       window.removeEventListener('focus', refresh);
       document.removeEventListener('visibilitychange', visibility);
     };
@@ -1095,6 +1223,9 @@ export default function usePurchases({
     createPurchase,
     updatePurchase,
     updatePurchaseItem,
+    amendPurchaseItem,
+    updatePurchaseItemFromRemote,
+    syncPendingPurchases,
     flushPurchaseSave,
     refreshPurchases: loadRemotePurchases,
     purchaseStatusForOrder: (orderId) => purchaseStatusForProductionOrder(purchases, orderId),
