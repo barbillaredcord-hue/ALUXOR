@@ -257,10 +257,11 @@ textarea {
   .workspace-layout-content,
   .content {
     padding: 10px;
+    padding-bottom: calc(96px + env(safe-area-inset-bottom));
   }
 
   .workspace-layout-inspector {
-    padding: 0 10px 10px;
+    padding: 0 10px calc(96px + env(safe-area-inset-bottom));
   }
 
   .sidebar,
@@ -397,5 +398,46 @@ textarea {
   .quote-operational-layout .quote-accordion {
     width: 100%;
     max-width: 100%;
+  }
+
+  /* Resumen del cotizador: cabecera y acciones compactas, sin partir etiquetas. */
+  .summary-panel-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .summary-panel-head strong {
+    min-width: 0;
+    font-size: 1.05rem;
+    line-height: 1.15;
+  }
+
+  .summary-panel-head .actions,
+  .summary-panel-head .summary-panel-actions {
+    display: flex;
+    width: auto;
+    gap: 6px;
+    flex-wrap: nowrap;
+  }
+
+  .summary-panel-head button,
+  .summary-panel-head .actions > button,
+  .summary-panel-head .summary-panel-actions > button {
+    width: auto;
+    min-width: 0;
+    min-height: 38px;
+    padding: 7px 10px;
+    font-size: 0.82rem;
+    line-height: 1;
+    white-space: nowrap;
+    overflow-wrap: normal;
+  }
+
+  .summary-panel .mini-row,
+  .summary-panel .professional-row,
+  .summary-panel .breakdown-line {
+    padding-block: 7px;
   }
 }
