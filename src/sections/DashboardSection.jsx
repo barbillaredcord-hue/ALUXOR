@@ -6,6 +6,7 @@ import {
   FileClock,
   PackageCheck,
   PackageOpen,
+  ReceiptText,
   ShoppingCart,
 } from 'lucide-react';
 import BusinessIndicators from '../components/operational-center/BusinessIndicators.jsx';
@@ -61,6 +62,23 @@ export default function DashboardSection({
   );
 
   const cards = [
+    {
+      id: 'cotizador-aluxor',
+      title: 'Cotizador ALUXOR',
+      icon: ReceiptText,
+      tone: 'glass',
+      value: 'Nuevo',
+      detail: 'Cotización rápida · interpreta imágenes · genera PDF',
+      content: (
+        <>
+          {metric('Flujo', 'Rápido')}
+          {metric('Imagen a cotización', 'Disponible')}
+          {metric('PDF', 'Incluido')}
+          {metric('Catálogo', 'Editable')}
+        </>
+      ),
+      label: 'Abrir Cotizador ALUXOR',
+    },
     {
       id: 'cotizador',
       title: 'Cotizaciones',
