@@ -9118,3 +9118,15 @@ body,
     min-width: 0;
   }
 }
+
+
+/* Embedded ALUXOR quick quote app */
+.aluxor-quote-app-section { min-height: 78vh; }
+.aluxor-quote-app-frame-shell { margin-top: 16px; border: 1px solid var(--border, #d8d8d8); border-radius: 18px; overflow: hidden; background: #fff; }
+.aluxor-quote-app-frame { display: block; width: 100%; height: 78vh; min-height: 720px; border: 0; background: #fff; }
+.button-link { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; }
+@media (max-width: 760px) {
+  .aluxor-quote-app-section { padding: 10px; }
+  .aluxor-quote-app-frame-shell { margin-left: -6px; margin-right: -6px; border-radius: 12px; }
+  .aluxor-quote-app-frame { height: 82vh; min-height: 680px; }
+}
