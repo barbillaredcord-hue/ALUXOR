@@ -64,11 +64,11 @@ const ROLE_SECTIONS = Object.freeze({
   owner: '*',
   admin: '*',
   editor: [
-    'inicio', 'anuncio', 'cotizador-rellenado', 'cotizador', 'produccion',
+    'inicio', 'anuncio', 'cotizador-rellenado', 'cotizador', 'cotizador-aluxor', 'produccion',
     'compras', 'recepcion', 'inventario', 'fabricacion', 'corte', 'catalogo',
     'historial', 'textos', 'plano',
   ],
-  sales: ['inicio', 'anuncio', 'cotizador-rellenado', 'cotizador', 'historial', 'textos', 'plano'],
+  sales: ['inicio', 'anuncio', 'cotizador-rellenado', 'cotizador', 'cotizador-aluxor', 'historial', 'textos', 'plano'],
   production: ['inicio', 'produccion', 'fabricacion', 'corte', 'catalogo', 'plano'],
   purchasing: ['inicio', 'compras', 'recepcion', 'catalogo'],
   warehouse: ['inicio', 'recepcion', 'inventario', 'catalogo'],
