@@ -22,6 +22,7 @@ import ProjectFlow from '../components/ProjectFlow.jsx';
 import SummaryPanel from '../components/SummaryPanel.jsx';
 import WorkspaceLayout from '../layouts/WorkspaceLayout.jsx';
 import AnnouncementSection from '../sections/AnnouncementSection.jsx';
+import AluxorQuoteAppSection from '../sections/AluxorQuoteAppSection.jsx';
 import CatalogSection from '../sections/CatalogSection.jsx';
 import CutOptimizerSection from '../sections/CutOptimizerSection.jsx';
 import QuoteSection from '../sections/QuoteSection.jsx';
@@ -1169,6 +1170,8 @@ function App() {
             readOnly={projectReadOnly}
           />
         )}
+
+        {activeSection === 'cotizador-aluxor' && <AluxorQuoteAppSection />}
 
         {['cotizador', 'cotizador-rellenado'].includes(activeSection) && (
           <QuoteSection
