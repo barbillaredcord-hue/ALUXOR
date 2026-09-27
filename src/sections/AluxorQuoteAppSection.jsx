@@ -1,4 +1,4 @@
-const ALUXOR_QUOTE_APP_URL = 'https://cotizador-aluxor-fabian-br-ed-s-projects.vercel.app/';
+const ALUXOR_QUOTE_APP_URL = './cotizador-aluxor/';
 
 export default function AluxorQuoteAppSection() {
   return (
