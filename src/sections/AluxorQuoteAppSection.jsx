@@ -1,5 +1,3 @@
-import { ExternalLink } from 'lucide-react';
-
 const ALUXOR_QUOTE_APP_URL = 'https://cotizador-aluxor-fabian-br-ed-s-projects.vercel.app/';
 
 export default function AluxorQuoteAppSection() {
@@ -14,15 +12,6 @@ export default function AluxorQuoteAppSection() {
             desde BRTuNegocio.
           </p>
         </div>
-        <a
-          className="ghost button-link"
-          href={ALUXOR_QUOTE_APP_URL}
-          target="_blank"
-          rel="noreferrer"
-        >
-          <ExternalLink size={16} />
-          Abrir aparte
-        </a>
       </div>
 
       <div className="aluxor-quote-app-frame-shell">
