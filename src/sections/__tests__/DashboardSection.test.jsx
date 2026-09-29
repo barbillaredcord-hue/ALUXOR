@@ -113,7 +113,7 @@ describe('DashboardSection', () => {
       'Fabricación',
       'Historial',
     ].forEach((title) => expect(markup).toContain(title));
-    expect(markup.match(/aria-expanded="false"/g)).toHaveLength(8);
+    expect(markup.match(/aria-expanded="false"/g)).toHaveLength(9);
     expect(markup).not.toContain('role="dialog"');
   });
 
