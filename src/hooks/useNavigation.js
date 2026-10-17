@@ -30,7 +30,6 @@ const menuItems = useMemo(() => {
   const items = [
     { id: 'inicio', label: 'Inicio', icon: LayoutDashboard },
     { id: 'anuncio', label: 'Anuncio', icon: Package },
-    { id: 'cotizador-rellenado', label: 'Cotizador rellenado', icon: FileText },
     { id: 'cotizador', label: 'Cotizador', icon: Calculator },
     { id: 'cotizador-aluxor', label: 'Cotizador ALUXOR', icon: ReceiptText },
     { id: 'produccion', label: 'Producción', icon: ClipboardList },
