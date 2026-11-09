@@ -1,6 +1,6 @@
 const ALUXOR_QUOTE_APP_URL = './cotizador-aluxor/';
 
-export default function AluxorQuoteAppSection() {
+export default function AluxorQuoteAppSection({ userId, workspaceId }) {
   return (
     <section className="panel aluxor-quote-app-section">
       <div className="section-head">
@@ -17,7 +17,8 @@ export default function AluxorQuoteAppSection() {
       <div className="aluxor-quote-app-frame-shell">
         <iframe
           className="aluxor-quote-app-frame"
-          src={ALUXOR_QUOTE_APP_URL}
+          key={`${userId || ''}:${workspaceId || ''}`}
+          src={`${ALUXOR_QUOTE_APP_URL}#${new URLSearchParams({ user: userId || '', workspace: workspaceId || '' })}`}
           title="Cotizador ALUXOR"
           loading="lazy"
           allow="clipboard-read; clipboard-write"

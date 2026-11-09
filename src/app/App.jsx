@@ -1171,7 +1171,7 @@ function App() {
           />
         )}
 
-        {activeSection === 'cotizador-aluxor' && <AluxorQuoteAppSection />}
+        {activeSection === 'cotizador-aluxor' && <AluxorQuoteAppSection userId={authSession?.user?.id} workspaceId={activeWorkspace?.id} />}
 
         {['cotizador', 'cotizador-rellenado'].includes(activeSection) && (
           <QuoteSection
